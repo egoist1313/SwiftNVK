@@ -1,0 +1,651 @@
+# Changelog
+
+## 0.170 — 2026-10-14
+
+### Исправлено
+- На сечениях L0 (проектное покрытие) рисуется без разрыва в котловане.
+  Разрыв остаётся только у L6 до засыпки.
+- Таблица координат колодцев: без диаметра/радиуса, ширина колонок от
+  высоты текста и длины строк, заголовок
+  «Таблица координат характерных точек».
+
+### Добавлено
+- Таблица точек отбора проб (Т1, Т2…, X, Y) на четырёх листах,
+  на «Труба» не ставится.
+
+### Затронутые файлы
+- `CsDrawer.cs`, `VolDrawer.cs`, `CadTable.cs`, `PlanDrawer.cs`,
+  `PlanPoints.cs`, `TableLayout.cs`
+- версии 0.170
+
+## 0.169 — 2026-10-14
+
+### Исправлено
+- Сечения берут те же отметки L1…L6, что продольник (после рандома),
+  а не каталожные 0.10 / 0.30. Песок 0.08 на профиле рисуется и
+  подписывается 0.08 на поперечнике. Размеры и площади тоже.
+- Режим проект+факт: на защите факт песка брался из каталога — теперь
+  из FactSand.
+
+### Затронутые файлы
+- `StationElevations.cs`, `SectionGeom.cs`, `DomainService.cs`, `CsAnnot.cs`
+- версии 0.169
+
+## 0.168 — 2026-10-14
+
+### Исправлено
+- Видовой экран берёт реальные границы модели (лево/право/низ/верх) по
+  геометрическим экстентам слоя и соседней таблицы/размеров/штриховки.
+- Размер VP на бумаге = окно × масштаб (профиль 1:500, сечения 1:200),
+  без обрезки под остаток листа. Существующие наши VP тоже
+  пересчитываются (чужие не трогаем).
+
+### Добавлено
+- На каждом из пяти листов свой VP расчёта объёмов этого уровня.
+- Отбор проб (план) на четырёх листах; на «Труба» не ставится.
+
+### Затронутые файлы
+- `NvkSheets.cs`, `VolDrawer.cs`, `PlanDrawer.cs`, `NvkSession.cs`
+- версии 0.168
+
+## 0.167 — 2026-10-14
+
+### Исправлено
+- Легенда масштаба на продольнике берёт **Лист профиль 1:** (по умолчанию
+  1:500), а не CANNOSCALE чертежа. Вертикаль = лист / H профиля
+  (при H=10 → 1:50). На сечениях — **Лист сечения 1:** (1:200).
+
+### Затронутые файлы
+- `ProfileSheet.cs`, `PoperDrawer.cs`, `CsDrawer.cs`, `TableLayout.cs`
+- версии 0.167
+
+## 0.166 — 2026-10-14
+
+### Добавлено
+- Ширина дна траншеи **лево / право** задаётся отдельно (0 = каталог).
+- Откос m **лево / право** задаётся отдельно (0 = вертикаль с этой стороны).
+- Поперечники, площади, объёмы и план считают стороны независимо.
+- Старый NOD `SLOPE` заполняет обе стороны.
+
+### Затронутые файлы
+- `SectionGeom.cs`, `TrenchGeom.cs`, `SectionArea.cs`, `VolumeCalc.cs`,
+  `CsAnnot.cs`, `PlanGeom.cs`, `CsDrawer.cs`, `PlanDrawer.cs`,
+  `NvkPanel.cs`, `NvkUiState.cs`
+- версии 0.166
+
+## 0.165 — 2026-10-14
+
+### Исправлено
+- **L4 дырка = нарисованный круг (внутренний D).** 0.164 вычитал оболочку
+  со стенкой — S на сечении не сходилась со штриховкой. Частичное
+  покрытие трубы по-прежнему сегмент, не весь цилиндр.
+- Штриховка L4: дырку режем только если круг целиком в слое; трубу
+  рисуем поверх, чтобы не пряталась под заливкой.
+- Строку объёма защиты с нулевым/отрицательным итогом не пишем.
+- В лог пишем m откоса и текст расчёта объёмов.
+
+### Затронутые файлы
+- `SectionArea.cs`, `VolumeCalc.cs`, `CsDrawer.cs`, `VolDrawer.cs`, `SectionGeom.cs`
+- версии 0.165
+
+## 0.164 — 2026-10-13
+
+### Исправлено
+- **Защитный слой вычитал весь цилиндр трубы**, даже если L4 закрывает
+  трубу частично. Теперь вычитается пересечение круга с полосой [L2, L4]
+  (круговой сегмент). Полное покрытие — формула `π·r²·L` как раньше.
+
+### Затронутые файлы
+- `SectionArea.cs`, `VolumeCalc.cs`, `SectionAreaTests.cs`, `VolumeCalcTests.cs`
+- версии 0.164
+
+## 0.163 — 2026-10-13
+
+### Исправлено
+- **Отрицательный объём защиты.** `V=0.00*0.85-π·r²·L=-0.23`: при нулевой
+  площади слоя трубу не вычитаем и строку не пишем. Нулевые члены
+  `(0+0)/2·ΔL` в расчёте по сечениям тоже пропускаем.
+
+### Затронутые файлы
+- `VolumeCalc.cs`, `VolumeCalcTests.cs`
+- версии 0.163
+
+## 0.162 — 2026-10-13
+
+### Исправлено
+- **Ошибка [unlock]: no function definition: C:НВК-ПАНЕЛЬ-ПРОГОН.**
+  0.161 слал с палитры Lisp `(C:…)`, а команда живёт в DLL как
+  CommandMethod. Снова шлём имя команды с пробелом:
+  `НВК-ПАНЕЛЬ-ПРОГОН `.
+
+### Затронутые файлы
+- `NvkPipeline.cs` (NvkSend)
+- версии 0.162
+
+## 0.161 — 2026-10-13
+
+### Исправлено
+- **Обновить «ничего не делает».** Прогон 0.160 отрабатывал (в логе «готово»),
+  но REGENMODE=0 и экран не перерисовывался. После прогона вызываем
+  REGEN, палитра пишет «Готово», команды с панели идут как `(C:…)`.
+
+### Затронутые файлы
+- `NvkPipeline.cs`, `NvkPanel.cs`, `NvkPalette.cs`, `RowGridPanel.cs`
+- версии 0.161
+
+## 0.160 — 2026-10-13
+
+### Исправлено
+- **Обновить зависает.** Прогон доходил до PLAN, потом Civil регенерировал
+  аннотативные размеры во всех видовых на открытой вкладке. Теперь
+  «Построить/Обновить» сразу уходит в Модель и на время прогона глушит
+  REGENMODE / ANNOAUTOSCALE / превью вкладок. В логе есть «готово» и «NOD ок».
+
+### Затронутые файлы
+- `NvkPipeline.cs`, `NvkSheets.cs`
+- версии 0.160
+
+## 0.159 — 2026-10-13
+
+### Исправлено
+- **Civil зависал на листах.** 0.158 открывал каждую вкладку и включал
+  экраны с CustomScale — regen аннотативных размеров по 10 VP. Теперь
+  вкладки не переключаем, камеру (центр, высота вида 1:500/1:200)
+  пишем из Модели, без CustomScale.
+
+### Затронутые файлы
+- `NvkSheets.cs`
+- версии 0.159
+
+## 0.158 — 2026-10-09
+
+### Исправлено
+- **Чужие видовые не удаляются.** Экраны без метки NVK больше не стираем.
+  Свои докладываем, если их ещё нет.
+- **В наших экранах пусто.** Вид (центр, 1:500 / 1:200) ставится после
+  включения экрана на открытой вкладке. Уже стоящие наши экраны не
+  пересоздаются — только наводится камера на профиль и сечения.
+
+### Затронутые файлы
+- `NvkSheets.cs`
+- версии 0.158
+
+## 0.157 — 2026-10-08
+
+### Исправлено
+- **Фатал Civil при листах.** 0.156 стирал активные экраны на открытой
+  вкладке и в одной транзакции ставил 10 включённых locked VP с
+  CustomScale — Civil падал после «Разработка». Теперь: стираем из
+  Модели (бумажный экран — Number=1 или минимальный handle), создаём
+  выключенными, ViewHeight без CustomScale/Locked, включаем отдельно,
+  сразу возвращаемся в Модель. REGENMODE/ANNOAUTOSCALE/UPDATETHUMBNAIL
+  выключены на время сборки.
+
+### Затронутые файлы
+- `NvkSheets.cs`
+- версии 0.157
+
+## 0.156 — 2026-10-08
+
+### Исправлено
+- **Экраны на существующих листах не ставились.** На вкладках оставались
+  старые видовые без метки `VP=` (0.152–0.153, штатный AutoCAD). 0.155
+  считал их чужими и выходил. Теперь если наших меток нет — старые
+  экраны снимаются и ставятся профиль 1:500 + по экрану на сечение 1:200.
+
+### Затронутые файлы
+- `NvkSheets.cs`
+- версии 0.156
+
+## 0.155 — 2026-10-08
+
+### Исправлено
+- **Лист есть, экранов нет — экраны не ставились.** При входе на вкладку
+  AutoCAD даёт штатный видовой; мы считали лист занятым и выходили.
+  Теперь пустой лист (или только этот штатный экран) заполняется:
+  профиль 1:500 и по экрану на каждое сечение 1:200. Готовые наши
+  экраны по-прежнему не пересоздаются.
+
+### Затронутые файлы
+- `NvkSheets.cs`
+- версии 0.155
+
+## 0.154 — 2026-10-08
+
+### Изменено
+- На листе уровня: один экран **профиля 1:500** и **отдельный экран на каждое
+  сечение 1:200**. Масштаб задаётся на вкладке Параметры («Лист профиль 1:»
+  / «Лист сечения 1:») и ставится в CustomScale (мм бумаги / м модели).
+  Уже стоящие экраны не пересоздаются; новые сечения докладываются.
+
+### Затронутые файлы
+- `NvkSheets.cs`, `NvkSession.cs`, `CsDrawer.cs`, `NvkTag.cs`,
+  `NvkUiState.cs`, `NvkPanel.cs`
+- версии 0.154
+
+## 0.153 — 2026-10-07
+
+### Изменено
+- **Листы и видовые экраны не пересоздаются.** Если вкладка уровня уже есть
+  (и на ней есть экраны) — пропуск. Новая вкладка и экраны только когда
+  листа ещё нет. `НВК-ОЧИСТИТЬ` по-прежнему снимает наши вкладки.
+
+### Затронутые файлы
+- `NvkSheets.cs`
+- версии 0.153
+
+## 0.152 — 2026-10-07
+
+### Исправлено
+- **Фатал Civil при листах.** 0.151 переключал плоттер на PDF pc3 и делал
+  8 вкладок. Плоттер больше не трогаем. Лишние вкладки убраны.
+
+### Изменено
+- **Пять листов по уровням**, без сечений/объёмов/плана отдельно:
+  `Разработка`, `Песок 10см`, `Труба`, `Защитный слой 300мм`,
+  `Обратная засыпка` (цифры из постели и толщины защиты).
+- На каждом листе два видовых экрана: сверху продольник этого уровня,
+  снизу сечения того же уровня.
+
+### Затронутые файлы
+- `NvkSheets.cs`, `NvkSession.cs`, `CsDrawer.cs`, `ProfileSheet.cs`,
+  `VolDrawer.cs`, `PlanDrawer.cs`
+- версии 0.152
+
+## 0.151 — 2026-10-07
+
+### Добавлено
+- **Листы AutoCAD с видовыми экранами.** После построения (галка «Листы +
+  видовые экраны») или командой `НВК-ЛИСТЫ` создаются вкладки:
+  `НВК-L1 Разработка` … `НВК-L5 Засыпка`, `НВК-Сечения`, `НВК-Объёмы`,
+  `НВК-План`. На каждом листе — один locked VP, вписанный в окно модели
+  (профиль+таблица / сетка сечений / объёмы / план). Бумага A1 альбом
+  841×594 мм, если плоттер PDF отдаёт ISO A1. `НВК-ОЧИСТИТЬ` снимает
+  вкладки `НВК-*`.
+
+### Затронутые файлы
+- `NvkSheets.cs`, `NvkSession.cs`, `ProfileSheet.cs`, `CsDrawer.cs`,
+  `VolDrawer.cs`, `PlanDrawer.cs`, `NvkPipeline.cs`, `NvkCommands.cs`,
+  `NvkPanel.cs`, `NvkUiState.cs`, `NvkLayers.cs`
+- версии 0.151
+
+## 0.150 — 2026-10-07
+
+### Изменено
+- **Продольники больше не блоки.** Лист всегда россыпью в модели: обычные
+  полилинии, ручки вершин, выбор и команды как у любой графики. Галка
+  «Продольники блоками» убрана с панели. Старые INSERT/группы `NVK-EP-*`
+  стираются при обновлении. Перетаскивание вершины линии отметки по-прежнему
+  пишет scatter и таблицу.
+
+## 0.149 — 2026-10-07
+
+### Исправлено
+- **Продольники снова блок (INSERT `NVK-EP-*`)**, не группа. Группа блокировала
+  выбор и команды. На INSERT — ручки вставки и ручки вершин линий отметок
+  (GripOverrule). Перетаскивание вершины по Y пишет scatter и обновляет таблицу.
+  Старые группы `NVK-EP-*` снимаются при перерисовке.
+
+## 0.148 — 2026-10-07
+
+### Исправлено
+- **Продольники блоками** больше не прячут ручки вершин. Лист — именованная
+  группа AutoCAD (двигается целиком), линии отметок остаются LWPOLYLINE
+  в модели. Перетаскивание вершины (GRIP/STRETCH) пишет scatter и
+  перерисовывает таблицу отметок.
+
+### Затронутые файлы
+- `ProfileSheet.cs` — группа вместо INSERT, XData EP= на линиях
+- `NvkEpLive.cs`, `NvkGroup.cs`, `NvkTag.cs`
+- `EpDrawer.cs` — стирает NVK-TBL участка
+- `Scatter.FromOffsets`, `ProfileRows.ZAtCh`
+- версии 0.148
+
+## 0.147 — 2026-10-07
+
+### Исправлено
+- **Стрелка выноски на плане прыгала при обновлении.** 0.146 сохранял только
+  посадку текста и поворот. Остриё каждый раз ставилось заново: пробы —
+  `hit + N·lat`, колодцы — центр. Теперь `LeaderPose` пишет `ax|ay`,
+  `NvkLeader.Collect` читает вершину MLeader (и старого Leader), а
+  `PlaceLeader` восстанавливает остриё вместе с текстом.
+
+### Затронутые файлы
+- `src/csharp/Nvk.Core/LeaderPoses.cs` — поля Ax/Ay/HasArrow, 6 полей в NOD
+- `src/csharp/Nvk.Cad.2025/NvkLeader.cs` — TryArrow / Collect Leader
+- `src/csharp/Nvk.Cad.2025/PlanDrawer.cs` — PlaceLeader восстанавливает стрелку
+- `src/csharp/Nvk.Core.Tests/LeaderPosesTests.cs`
+- версии 0.147 (csproj, PingOk, nvk-load, nvk-dll, nvk-config)
+
+## 0.103 — 2026-09-25
+
+### Исправлено
+- **Таблица POPER не обновлялась** — логический тупик в `PoperDrawer.Draw`: ранняя
+  проверка `LastEp.Kinds.Count > 0` делала ранний возврат ещё до вызова `EraseOld`,
+  поэтому старые объекты слоя `NVK-POPER` никогда не стирались и новые не рисовались.
+  Теперь `EnsureLayer` + `EraseOld` всегда выполняются при наличии домена, а ранний
+  возврат убран.
+
+### Добавлено
+- **Индивидуальная подпись строки для L2-L5** — каждый профиль может иметь свой
+  текст в строке отметок таблицы. Новые поля `TblL2Label`..`TblL5Label` в
+  `NvkUiState`; соответствующие текстовые поля «Подпись строки в таблице профиля»
+  на вкладках L2 Песок, L3 Труба, L4 Защита, L5 Засыпка панели.
+  `NvkSession.Tbl(ProfileKind)` возвращает клон глобального `TableCfg`
+  с подменённым `LabelHeight` для конкретного профиля.
+  Таблицы ProfileSheet и PoperDrawer используют `Tbl(kind)` вместо `Tbl()`.
+
+- **Строки «проект / факт» в таблице профиля** — при включённом переключателе
+  «Проект / факт» таблицы `ProfileSheet` и `PoperDrawer` теперь добавляют строку
+  «…факт» непосредственно под строкой «…проект» для основной линии каждого
+  профиля (L1/L2: дно траншеи, L3: лоток, L4: верх защиты, L5: засыпка).
+  Факт-значение = проект + `Scatter.Meters(ch, total, ScatterVals, amp)`.
+  Если scatter не задан или `ScatterVals` пусто — строка факта не появляется.
+
+### Затронутые файлы
+- `src/csharp/Nvk.Cad.2025/PoperDrawer.cs` — убран логический тупик, `EraseOld` перед проверкой EP; `Tbl(kind)`; поддержка строки факта
+- `src/csharp/Nvk.Cad.2025/NvkUiState.cs` — поля `TblL2Label`..`TblL5Label`, `ToRb`, `Apply`
+- `src/csharp/Nvk.Cad.2025/NvkSession.cs` — перегрузка `Tbl(ProfileKind kind)`
+- `src/csharp/Nvk.Cad.2025/ProfileSheet.cs` — `DrawTable` использует `Tbl(kind)`; `InjectFactRows`; scatter в Height-строках
+- `src/csharp/Nvk.Core/ProfileRows.cs` — поле `IsFact` в `SheetRow`
+- `src/csharp/Nvk.Cad.2025/NvkPanel.cs` — поля `_labTblL2..L5`, `LoadFromState`, `SaveToState`
+- `src/csharp/Nvk.Core/TableLayout.cs` — метод `Clone()` в `TableCfg`
+- `src/csharp/Nvk.Cad.2025/LispBridge.cs` — PingOk → "NVK ok 0.103"
+- `src/csharp/Nvk.Cad.2025/Nvk.Cad.2025.csproj` — Version 0.103.0, copy target v103
+- `src/csharp/Nvk.Core/Nvk.Core.csproj` — Version 0.103.0
+- `src/lisp/nvk-config.lsp` — `*nvk-versija*` → "0.103"
+- `src/lisp/nvk-dll.lsp` — v103 первым в списке поиска
+
+## 0.102 — 2026-09-24
+
+### Исправлено
+- **ZonePicker не сохранял зоны в NOD** — после задания зон на плане (`НВК-ЗОНЫ`)
+  данные хранились только в C#/панели; если пользователь сохранял чертёж без
+  нажатия «Обновить», после перезапуска AutoCAD зоны терялись.
+  Теперь `ZonePicker` сразу патчит XRECORD STATE через новый метод
+  `NvkNod.PatchEntry(db, "ZONES", value)` и сохраняет профиль.
+- **Профиль не загружался при пустом NOD** — `LoadFromDatabase` возвращал `true`
+  даже для пустого NOD, из-за чего условие загрузки профиля
+  `(!loaded && !HasPush)` никогда не срабатывало. Исправлено: метод теперь
+  возвращает `false` когда map пуст (нет данных в чертеже).
+- **Profile.Load в Initialize** — `Plugin.Initialize` теперь загружает профиль
+  при пустом NOD (новый чертёж / ещё не сохранялось).
+
+### Добавлено
+- `NvkNod.PatchEntry(Database, string key, string value)` — обновляет один ключ
+  в существующем STATE XRECORD без затирания остальных записей; поддерживает
+  чанкинг длинных строк (KEY#2, KEY#3...).
+
+### Затронутые файлы
+- `src/csharp/Nvk.Cad.2025/NvkNod.cs` — добавлен `PatchEntry` + вспом. `BuildChunks`
+- `src/csharp/Nvk.Cad.2025/ZonePicker.cs` — вызов `NvkNod.PatchEntry` + `NvkProfile.Save` после установки зон
+- `src/csharp/Nvk.Cad.2025/NvkUiState.cs` — `LoadFromDatabase` возвращает `false` при пустом NOD
+- `src/csharp/Nvk.Cad.2025/Plugin.cs` — `NvkProfile.Load()` при пустом NOD в `Initialize`
+- `src/csharp/Nvk.Cad.2025/LispBridge.cs` — PingOk → "NVK ok 0.102"
+- `src/csharp/Nvk.Cad.2025/Nvk.Cad.2025.csproj` — Version 0.102.0, copy target v102
+- `src/csharp/Nvk.Core/Nvk.Core.csproj` — Version 0.102.0
+- `src/lisp/nvk-config.lsp` — версия 0.102
+- `src/lisp/nvk-dll.lsp` — добавлен путь `bin/v102`
+
+## 0.101 — 2026-09-24
+
+### Добавлено
+- **Профиль между сеансами** (`NvkProfile.cs`): настройки сохраняются в
+  `%APPDATA%\NvkPoperechnik\settings.txt` перед каждым построением (`GetLisp`)
+  и подгружаются при открытии панели, если чертёж ещё не содержит NOD-записи.
+  Формат файла — те же пары `KEY=value`, что и в NOD чертежа; читается через
+  `NodPairs.Parse` → `NvkUiState.FromMap`.
+
+### Затронутые файлы
+- `src/csharp/Nvk.Cad.2025/NvkProfile.cs` — новый файл, `Save()` + `Load()`
+- `src/csharp/Nvk.Cad.2025/NvkUiState.cs` — добавлен `Serialize()` → `Dictionary<string,string>`
+- `src/csharp/Nvk.Cad.2025/NvkPalette.cs` — `GetLisp` сохраняет профиль; `Show`/`SyncFromDoc` подгружают профиль когда чертёж без NOD
+- `src/csharp/Nvk.Cad.2025/LispBridge.cs` — PingOk → "NVK ok 0.101"
+- `src/csharp/Nvk.Cad.2025/Nvk.Cad.2025.csproj` — Version 0.101.0, copy target v101
+- `src/csharp/Nvk.Core/Nvk.Core.csproj` — Version 0.101.0
+
+## 0.100 — 2026-09-24
+
+### Исправлено
+- **ProfileSheet.cs** `BuildDrawnBand(Zashita)` — рандом теперь применяется до обрезки,
+  а не после. Ранее: `top = zash` (результат `BuildZashChZ`) уже содержал
+  вставленные `ClipChZ` точки на границах [SandTop, Earth]; `ScatterChZ` сдвигал их,
+  и повторная обрезка возвращала эти точки точно на границу без рандома. Итог: в местах
+  обрезки линия ZashTop лежала точно на Earth/SandTop без какого-либо отклонения.
+  Исправление: вместо предобрезанного `zash` берём сырые данные
+  `BuildPipeChZ(ZashTop)` → применяем scatter → затем единственная обрезка
+  `ClipChZ(top, [sand, earth])`. Это зеркалит логику `DomainService` на уровне сечений:
+  `fz = ZashTop + Scatter → LineClamp.AfterScatterZash(fz, SandTop, Surface)`.
+
+### Затронутые файлы
+- `src/csharp/Nvk.Cad.2025/ProfileSheet.cs` — `BuildDrawnBand(Zashita)`: `top = zash` → `top = BuildPipeChZ(ZashTop)`; `DrawBody(Zashita)`: `src` для scatter берётся из `PipePts(ZashTop)` до clip
+- `src/csharp/Nvk.Cad.2025/LispBridge.cs` — PingOk → "NVK ok 0.100"
+- `src/csharp/Nvk.Cad.2025/Nvk.Cad.2025.csproj` — Version 0.100.0, copy target v100
+- `src/csharp/Nvk.Core/Nvk.Core.csproj` — Version 0.100.0
+- `src/lisp/nvk-config.lsp` — *nvk-versija* "0.100"
+- `src/lisp/nvk-dll.lsp` — v100 добавлен первым в список кандидатов
+
+### Бэкап
+- `bin/v099/` — DLL предыдущей версии сохранена без изменений
+
+---
+
+## 0.99 — 2026-09-24
+
+### Исправлено
+- **nvk-nod.lsp** `nvk-nod-sohranit` — не перезаписывать `*nvk-scatter-vals*` (и аналогичные
+  переменные LATOFF, PLAN_TGT, PLAN_LAT) пустой строкой, если C# вернул пустой кэш.
+  Ранее: при пустом `CacheScatter` `nvk-cache-get` возвращал `""`, что безусловно
+  записывалось в `*nvk-scatter-vals*`. Следующий `nvk-cache-put(SCATTER="")` сбрасывал
+  `CacheScatter` в пустой список → `ReuseOrGen` регенерировал значения по StableSeed.
+  Итог: после «Пересчитать рандом» нажатие «Обновить» сбрасывало рандом к стабильным значениям.
+  Исправление: обновлять переменную только если значение из кэша непустое.
+- **LispBridge.cs** `CachePut` — аналогичная защита на стороне C#: не заменять
+  `CacheScatter`/`CacheLatOff` пустым списком. SCATTER/LATOFF обновляется только если
+  разобранный список содержит ≥ 2 элементов; PLAN_TGT/PLAN_LAT — если ≥ 1 элемент.
+  Существующий непустой кэш сохраняется при любом вызове `nvk-cache-put` с пустой строкой.
+
+### Затронутые файлы
+- `src/lisp/nvk-nod.lsp` — `nvk-nod-sohranit`: условное обновление scatter/latoff/plan vars
+- `src/csharp/Nvk.Cad.2025/LispBridge.cs` — `CachePut`: не обнулять кэш пустым списком; PingOk → "NVK ok 0.99"
+- `src/csharp/Nvk.Cad.2025/Nvk.Cad.2025.csproj` — Version 0.99.0, copy target v099
+- `src/csharp/Nvk.Core/Nvk.Core.csproj` — Version 0.99.0
+- `src/lisp/nvk-config.lsp` — *nvk-versija* "0.99"
+- `src/lisp/nvk-dll.lsp` — v099 добавлен первым в список кандидатов
+
+### Бэкап
+- `bin/v098/` — DLL предыдущей версии сохранена без изменений
+
+---
+
+## 0.98 — 2026-09-24
+
+### Исправлено
+- **DomainService.cs** `RunFull` — «Пересчитать рандом» не давал новых значений.
+  `StableSeed(segs)` всегда возвращает одинаковый хеш от handle-ов труб →
+  `new Random(seed)` всегда давал ту же последовательность даже при `FreshRandom=true`.
+  Исправление: `seed = FreshRandom ? Environment.TickCount : StableSeed(segs)`.
+  При «Обновить» — стабильный seed (те же числа), при «Пересчитать» — время → новые.
+
+### Затронутые файлы
+- `src/csharp/Nvk.Cad.2025/DomainService.cs` — seed по TickCount при FreshRandom
+- `src/csharp/Nvk.Cad.2025/LispBridge.cs` — PingOk → "NVK ok 0.98"
+- `src/csharp/Nvk.Cad.2025/Nvk.Cad.2025.csproj` — Version 0.98.0, copy target v098
+- `src/csharp/Nvk.Core/Nvk.Core.csproj` — Version 0.98.0
+- `src/lisp/nvk-config.lsp` — *nvk-versija* "0.98"
+- `src/lisp/nvk-dll.lsp` — v098 добавлен первым в список кандидатов
+
+### Бэкап
+- `bin/v097/` — DLL предыдущей версии сохранена без изменений
+
+---
+
+## 0.97 — 2026-09-24
+
+### Исправлено
+- **ProfileSheet.cs** `PtsFor(ZashTop)` — добавлен `SimplifyLine(pipe, 0.001)` после клипирования.
+  Убирает почти коллинеарные промежуточные точки: оставляет вершину только если расстояние
+  от неё до прямой между соседями > 1 мм. При мелком заложении (ZashTop зажата к земле)
+  плавный рельеф TIN с шагом 2 м даёт десятки почти совпадающих точек — они отбрасываются.
+  Реальные перегибы (> 1 мм отклонения) сохраняются — геометрия L4 ≤ L6 корректна.
+
+### Затронутые файлы
+- `src/csharp/Nvk.Cad.2025/ProfileSheet.cs` — `SimplifyLine` helper + вызов в `PtsFor`
+- `src/csharp/Nvk.Cad.2025/LispBridge.cs` — PingOk → "NVK ok 0.97"
+- `src/csharp/Nvk.Cad.2025/Nvk.Cad.2025.csproj` — Version 0.97.0, copy target v097
+- `src/csharp/Nvk.Core/Nvk.Core.csproj` — Version 0.97.0
+- `src/lisp/nvk-config.lsp` — *nvk-versija* "0.97"
+- `src/lisp/nvk-dll.lsp` — v097 добавлен первым в список кандидатов
+
+### Бэкап
+- `bin/v096/` — DLL предыдущей версии сохранена без изменений
+
+---
+
+## 0.96 — 2026-09-24
+
+### Исправлено
+- **ProfileSheet.cs** `PtsFor(ZashTop)` — откат `insertBound=false` → `insertBound=true`
+  (убран параметр `false` в вызове `ClipPtsBelow(pipe, earth)`).
+  С `false` между двумя точками пересечения ZashTop−Earth рисовалась прямая линия
+  выше рельефа: условие L2 ≤ L4 ≤ L6 нарушалось на участках мелкого заложения без рандома.
+  Инфраструктура `insertBound` в `PolylineClip`/`ClipPtsBound` оставлена для будущего.
+
+### Затронутые файлы
+- `src/csharp/Nvk.Cad.2025/ProfileSheet.cs` — `ClipPtsBelow(pipe, earth)` без `false`
+- `src/csharp/Nvk.Cad.2025/LispBridge.cs` — PingOk → "NVK ok 0.96"
+- `src/csharp/Nvk.Cad.2025/Nvk.Cad.2025.csproj` — Version 0.96.0, copy target v096
+- `src/csharp/Nvk.Core/Nvk.Core.csproj` — Version 0.96.0
+- `src/lisp/nvk-config.lsp` — *nvk-versija* "0.96"
+- `src/lisp/nvk-dll.lsp` — v096 добавлен первым в список кандидатов
+
+### Бэкап
+- `bin/v095/` — DLL предыдущей версии сохранена без изменений
+
+---
+
+## 0.95 — 2026-09-24
+
+### Исправлено
+- **LineClamp.cs** `Apply` — формула верха трубы: `pipe = inv + diam + wall` → `pipe = inv + diam − wall`.
+  `diam` = OD (внешний диаметр из Civil 3D), поэтому наружный верх = `inv + OD − wall`.
+  Ранее DomainDump/StationElevations/VolumeCalc показывали ZashTop(L4) завышенным на 2 стенки:
+  высота L4−L2 была `d + 2·wall + thk` (например 0.659 для Ду315) вместо `d + thk` (0.615).
+- **PolylineClip.cs** `KeepBelow` / `Clip` — параметр `insertBound = false`:
+  при `false` не вставляет промежуточные вершины bound-линии в местах без пересечения.
+- **ProfileSheet.cs** `PtsFor(ZashTop)` — `ClipPtsBelow(pipe, earth, false)`:
+  в зоне мелкого заложения ZashTop зажимается к земле только точками пересечения,
+  без вставки всех ~N/2 вершин TIN-линии. На участках без пересечения L4 остаётся прямой.
+
+### Затронутые файлы
+- `src/csharp/Nvk.Core/LineClamp.cs` — `+wall` → `-wall` в формуле `pipe`
+- `src/csharp/Nvk.Core/PolylineClip.cs` — `KeepBelow` + `Clip`: параметр `insertBound`
+- `src/csharp/Nvk.Cad.2025/ProfileSheet.cs` — `ClipPtsBelow` перегрузка + `PtsFor` вызов с `false`
+- `src/csharp/Nvk.Cad.2025/LispBridge.cs` — PingOk → "NVK ok 0.95"
+- `src/csharp/Nvk.Cad.2025/Nvk.Cad.2025.csproj` — Version 0.95.0, copy target v095
+- `src/csharp/Nvk.Core/Nvk.Core.csproj` — Version 0.95.0
+- `src/lisp/nvk-config.lsp` — *nvk-versija* "0.95"
+- `src/lisp/nvk-dll.lsp` — v095 добавлен первым в список кандидатов
+
+### Бэкап
+- `bin/v094/` — DLL предыдущей версии сохранена без изменений
+
+---
+
+## 0.94 — 2026-09-23
+
+### Исправлено
+- **ProfileSheet.cs** `PipeEndZ` — учёт толщины стенки и правка формулы ZashTop.
+  `d` = OD (внешний диаметр из Civil 3D), поэтому:
+  `SandTop = inv − wall` (наружный низ), `TrenchBottom = inv − wall − bed`,
+  `PipeTop = inv + d` (без изменений), `ZashTop = inv + d − wall + thk` (= L2 + d + thk).
+  Ранее `ZashTop = inv + d + thk` не учитывал стенку — L4 был выше на 2 стенки.
+  При мелкой трубе ZashTop превышал поверхность земли и захватывал все вершины TIN — отсюда ломаная линия L4.
+- **ProfileSheet.cs** `TrenchBottomPts` и `BuildBotChZ` — аналогично учитывают стенку
+  на каждом сегменте (разные трубы могут иметь разный диаметр и стенку).
+- **ProfileSheet.cs** `PtsFor(ZashTop)` — `ClipPtsBelow(zashTop, earth)` теперь
+  вызывается только когда ZashTop действительно превышает земную поверхность (`AnyAbove`).
+  Раньше `PolylineClip` всегда вставлял все ~N/2 вершин earth-линии даже при глубокой
+  трубе, где ZashTop ни разу не достигает поверхности. По умолчанию — только вершины
+  у колодцев.
+
+### Затронутые файлы
+- `src/csharp/Nvk.Cad.2025/ProfileSheet.cs` — `PipeEndZ`, `TrenchBottomPts`,
+  `BuildBotChZ`, `PtsFor` + новый helper `AnyAbove`
+- `src/csharp/Nvk.Cad.2025/LispBridge.cs` — PingOk → "NVK ok 0.94"
+- `src/csharp/Nvk.Cad.2025/Nvk.Cad.2025.csproj` — Version 0.94.0, copy target v094
+- `src/csharp/Nvk.Core/Nvk.Core.csproj` — Version 0.94.0
+- `src/lisp/nvk-config.lsp` — *nvk-versija* "0.94"
+- `src/lisp/nvk-dll.lsp` — v094 добавлен первым в список кандидатов
+
+### Бэкап
+- `bin/v093/` — DLL предыдущей версии сохранена без изменений
+
+---
+
+## 0.93 — 2026-09-23
+
+### Исправлено
+- **ProfileSheet.cs** `DrawBody` — удалён повторный блок клипирования ZashTop для L4 (Zashita).
+  `PtsFor(ZashTop)` уже делает `ClipPtsAbove(SandTop)` и `ClipPtsBelow(Earth)`;
+  второй проход в DrawBody взрывал количество вершин (~N²) и давал другое множество точек
+  чем L5, поэтому верх L4 и низ L5 не совпадали визуально.
+
+### Затронутые файлы
+- `src/csharp/Nvk.Cad.2025/ProfileSheet.cs` — удалён блок if (kind == ProfileKind.Zashita), строки 469-476
+- `src/csharp/Nvk.Cad.2025/LispBridge.cs` — PingOk → "NVK ok 0.93"
+- `src/csharp/Nvk.Cad.2025/Nvk.Cad.2025.csproj` — Version 0.93.0, copy target v093
+- `src/csharp/Nvk.Core/Nvk.Core.csproj` — Version 0.93.0
+- `src/lisp/nvk-config.lsp` — *nvk-versija* "0.93"
+- `src/lisp/nvk-dll.lsp` — v093 добавлен первым в список кандидатов
+
+### Бэкап
+- `bin/v092/` — DLL предыдущей версии сохранена без изменений
+
+---
+
+## 0.92 — 2026-09-23
+
+### Исправлено
+- **NvkPanel.cs** — в `SendLisp()` заменён `fboundp` (не существует в AutoLISP)
+  на `(car (atoms-family 1 '("NVK-UI-PRIMENIT")))` — стандартный AutoLISP-способ
+  проверки наличия функции. Ошибка: `no function definition: FBOUNDP`.
+
+### Затронутые файлы
+- `src/csharp/Nvk.Cad.2025/NvkPanel.cs` — `fboundp` → `atoms-family`
+- `src/csharp/Nvk.Cad.2025/LispBridge.cs` — PingOk → "NVK ok 0.92"
+- `src/csharp/Nvk.Cad.2025/Nvk.Cad.2025.csproj` — Version 0.92.0, copy target v092
+- `src/csharp/Nvk.Core/Nvk.Core.csproj` — Version 0.92.0
+- `src/lisp/nvk-config.lsp` — *nvk-versija* "0.92"
+- `src/lisp/nvk-dll.lsp` — v092 добавлен первым в список кандидатов
+
+### Бэкап
+- `bin/v091/` — DLL предыдущей версии сохранена без изменений
+
+---
+
+## 0.91 — 2026-09-23
+
+### Исправлено
+- **NvkPanel.cs** — кнопки «Построить», «Обновить», «Дамп», «Очистить», «Рандом»:
+  ошибка `Ошибка [unlock]: no function definition: NVK-UI-PRIMENIT` при нажатии кнопки
+  без предварительной загрузки LISP. Добавлена проверка `(fboundp 'nvk-ui-primenit)`:
+  если LISP не загружен — в командную строку пишется подсказка
+  `[НВК] LISP не загружен — сначала: (load nvk-load.lsp)` вместо крипто-ошибки.
+
+### Затронутые файлы
+- `src/csharp/Nvk.Cad.2025/NvkPanel.cs` — добавлен `SendLisp()` с `fboundp`-guard
+- `src/csharp/Nvk.Cad.2025/LispBridge.cs` — PingOk → "NVK ok 0.91"
+- `src/csharp/Nvk.Cad.2025/Nvk.Cad.2025.csproj` — Version 0.91.0, copy target v091
+- `src/csharp/Nvk.Core/Nvk.Core.csproj` — Version 0.91.0
+- `src/lisp/nvk-config.lsp` — *nvk-versija* "0.91"
+- `src/lisp/nvk-dll.lsp` — v091 добавлен первым в список кандидатов
+
+### Бэкап
+- `bin/v090/` — DLL предыдущей версии сохранена без изменений
+
+---
+
+## 0.90 и ранее
+
+История до введения CHANGELOG не записана.

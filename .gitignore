@@ -1,0 +1,42 @@
+# Build
+bin/
+obj/
+out_build/
+[Dd]ebug/
+[Rr]elease/
+*.dll
+*.pdb
+*.exe
+
+# Logs
+nvk-log.txt
+*.log
+
+# Visual Studio / Rider / local agents
+.vs/
+.claude/
+.grok/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.idea/
+
+# AutoCAD lock / backup
+*.dwg
+*.bak
+*.sv$
+*.dwl
+*.dwl2
+*.ac$
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Tests / NuGet
+TestResults/
+*.trx
+*.nupkg
+packages/
