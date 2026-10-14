@@ -203,8 +203,9 @@ namespace Nvk.Core
         }
 
         /// <summary>
-        /// Однострочный scatter: сечение рисует те же L1…L6, что продольник,
-        /// а не каталожные Bedding/ThkZash.
+        /// Однострочный scatter: L1…L4 как на продольнике (после рандома).
+        /// L6 остаётся TIN−одежда и не поднимается к L1/L4 — иначе песок
+        /// на L2 и котлован на L1 рисуются на разных отметках.
         /// </summary>
         public void ApplyDrawnScatter(bool singleScatter)
         {
@@ -215,11 +216,9 @@ namespace Nvk.Core
             double wall = Math.Max(0.0, Elev.Invert - Elev.SandTop);
             double pipe = inv + Elev.Diam + wall;
             double zash = FactZash ?? Elev.ZashTop;
-            double earth = FactSurf ?? Elev.Surface;
+            double earth = Elev.Surface;
             trench = LineClamp.AfterScatterTrench(trench, sand);
             zash = LineClamp.AfterScatterZash(zash, sand, earth);
-            earth = LineClamp.AfterScatterEarth(earth, trench);
-            earth = LineClamp.AfterScatterBackfill(earth, zash);
             Elev.SetDrawn(trench, sand, inv, pipe, zash, earth);
         }
 

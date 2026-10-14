@@ -176,7 +176,7 @@ namespace Nvk.Cad
             double xTopR = TrenchGeom.XTopRight(g, mR);
             double zL = Math.Max(e.TrenchBottom, TrenchGeom.SurfZAt(g, -xTopL));
             double zR = Math.Max(e.TrenchBottom, TrenchGeom.SurfZAt(g, xTopR));
-            bool pitUp = e.Surface > e.TrenchBottom + 1e-6;
+            bool pitUp = zL > e.TrenchBottom + 1e-6 || zR > e.TrenchBottom + 1e-6;
 
             if (g.InManhole)
             {

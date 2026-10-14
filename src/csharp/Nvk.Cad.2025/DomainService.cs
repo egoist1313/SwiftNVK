@@ -90,8 +90,10 @@ namespace Nvk.Cad
                     AddZoneStepPair(tr, axis, chain, z.Ch0, surfId, earthId, cfg);
                     AddZoneStepPair(tr, axis, chain, z.Ch1, surfId, earthId, cfg);
                 }
-                axis.Sort((a, b) => a.Ch.CompareTo(b.Ch));
             }
+            foreach (double s in stations)
+                AddEdge(tr, axis, chain, s, surfId, earthId, cfg);
+            axis.Sort((a, b) => a.Ch.CompareTo(b.Ch));
 
             int seed = NvkSession.FreshRandom ? Environment.TickCount : StableSeed(chain.Segs);
             int nSc = Scatter.DenseCount(chain.Total);
@@ -116,12 +118,12 @@ namespace Nvk.Cad
             {
                 double s = stations[si];
                 var hit = chain.Locate(s);
-                double lat = si < latOffs.Count ? latOffs[si] : 0.0;
+                // Сечение режется по оси трубы, как продольник. Смещение lat — только точки отбора.
                 double pav = cfg.UseBlackEarth ? 0.0 : cfg.PavementAt(s);
                 string zt = cfg.ZoneAt(s);
                 double z = 0.0;
                 bool hasZ = false;
-                double sx0 = hit.X + hit.Nx * lat, sy0 = hit.Y + hit.Ny * lat;
+                double sx0 = hit.X, sy0 = hit.Y;
                 if (cfg.UseBlackEarth && !earthId.IsNull)
                 {
                     var bz = SurfaceSampler.ElevationAt(tr, earthId, sx0, sy0);
@@ -136,7 +138,7 @@ namespace Nvk.Cad
                     z = hit.Invert + hit.Diam + cfg.ThkZash + 1.5;
                 var g = SectionGeom.From(hit, cfg, z, pav);
                 g.ZoneType = zt;
-                g.LatOff = lat;
+                g.LatOff = 0.0;
                 g.InManhole = showMh && chain.InManhole(s);
                 g.ManholeHalfW = chain.ManholeRAt(s, false);
                 if (g.InManhole) continue;
@@ -150,15 +152,13 @@ namespace Nvk.Cad
                 g.FactPesokBot = g.FactBottom;
                 g.FactInvert = fi;
                 g.FactZash = LineClamp.AfterScatterZash(fz, g.FactSand ?? g.Elev.SandTop, g.Elev.Surface);
-                g.FactSurf = LineClamp.AfterScatterBackfill(
-                    LineClamp.AfterScatterEarth(fs, g.FactBottom ?? g.Elev.TrenchBottom),
-                    g.FactZash ?? g.Elev.ZashTop);
+                g.FactSurf = LineClamp.AfterScatterBackfill(fs, g.FactZash ?? g.Elev.ZashTop);
                 g.ApplyDrawnScatter(cfg.SingleScatter);
                 var samples = new List<SurfPt>();
                 for (double t = -hw; t <= hw + 1e-9; t += step)
                 {
-                    double sx = hit.X + hit.Nx * (t + lat);
-                    double sy = hit.Y + hit.Ny * (t + lat);
+                    double sx = hit.X + hit.Nx * t;
+                    double sy = hit.Y + hit.Ny * t;
                     double ztZ = z;
                     if (cfg.UseBlackEarth && !earthId.IsNull)
                     {

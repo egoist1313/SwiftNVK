@@ -191,6 +191,40 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void SingleScatterKeepsTinWhenEarthBelowTrench()
+        {
+            var hit = new StationHit { Station = 0.5, Invert = 202.668, Diam = 0.25 };
+            var g = SectionGeom.From(hit, new SectionConfig { Bedding = 0.10, ThkZash = 0.30 }, 202.480, pav: 1.02);
+            double tin = g.Elev.Surface;
+            Assert.True(tin < g.Elev.TrenchBottom);
+            g.FactSand = g.Elev.SandTop + 0.01;
+            g.FactBottom = g.Elev.TrenchBottom - 0.03;
+            g.FactZash = g.Elev.ZashTop + 0.04;
+            g.FactSurf = tin + 0.20;
+            g.ApplyDrawnScatter(true);
+            Assert.Equal(tin, g.Elev.Surface, 6);
+            Assert.Equal(g.Elev.SandTop, g.Elev.ZashTop, 6);
+            Assert.True(g.Elev.TrenchBottom <= g.Elev.SandTop + 1e-9);
+            Assert.False(g.Elev.HasBackfill);
+            Assert.Equal(0.0, SectionArea.For(g, ProfileKind.Razrabotka, 0.5).Value, 6);
+        }
+
+        [Fact]
+        public void L1AndL2ShareTrenchBottomAfterScatter()
+        {
+            var g = G();
+            g.FactSand = g.Elev.SandTop - 0.02;
+            g.FactBottom = g.Elev.TrenchBottom + 0.03;
+            g.ApplyDrawnScatter(true);
+            var l1 = CsAnnot.Rows(g, ProfileKind.Razrabotka, 3.0, 0.0);
+            var l2 = CsAnnot.Rows(g, ProfileKind.Pesok, 3.0, 0.0);
+            double z1 = l1.Find(r => r.C2.HasValue && r.Label != null && r.Label.IndexOf("дна") >= 0).C2.Value;
+            double z2 = l2.Find(r => r.C2.HasValue && r.Label != null && r.Label.IndexOf("дна") >= 0).C2.Value;
+            Assert.Equal(z1, z2, 6);
+            Assert.Equal(g.Elev.TrenchBottom, z1, 6);
+        }
+
+        [Fact]
         public void ProjFactKeepsCatalogSandOnSection()
         {
             var g = G();
