@@ -100,6 +100,7 @@ namespace Nvk.Cad
                 }
             }
 
+            bool coordDone = false;
             foreach (var kind in Kinds)
             {
                 double yTop = y;
@@ -143,18 +144,18 @@ namespace Nvk.Cad
                     }
                 }
 
-                double tx = origin.X + wrapW + th * 4;
-                double ty = yTop;
-                var mhId = DrawNamedXy(ms, tr, new Point3d(tx, ty, 0.0), th,
-                    "Таблица координат характерных точек", mhAll);
-                if (!mhId.IsNull)
+                if (!coordDone)
                 {
-                    nMh = mhAll.Count;
-                    AccEntity(tr, win, mhId);
-                    ty -= (mhAll.Count + 2) * th * 2.2 + th * 3.0;
-                }
-                if (kind != ProfileKind.Truba)
-                {
+                    double tx = origin.X + wrapW + th * 4;
+                    double ty = yTop;
+                    var mhId = DrawNamedXy(ms, tr, new Point3d(tx, ty, 0.0), th,
+                        "Таблица координат характерных точек", mhAll);
+                    if (!mhId.IsNull)
+                    {
+                        nMh = mhAll.Count;
+                        AccEntity(tr, win, mhId);
+                        ty -= (mhAll.Count + 2) * th * 2.2 + th * 3.0;
+                    }
                     var sampId = DrawNamedXy(ms, tr, new Point3d(tx, ty, 0.0), th,
                         "Таблица точек отбора проб", sampAll);
                     if (!sampId.IsNull)
@@ -162,6 +163,7 @@ namespace Nvk.Cad
                         nSamp = sampAll.Count;
                         AccEntity(tr, win, sampId);
                     }
+                    coordDone = true;
                 }
 
                 if (win.Any)
@@ -265,8 +267,8 @@ namespace Nvk.Cad
                 body.Add(new[]
                 {
                     p.Name ?? "—",
-                    p.X.ToString("0.00"),
-                    p.Y.ToString("0.00")
+                    TableLayout.XyText(p.X),
+                    TableLayout.XyText(p.Y)
                 });
             }
             var table = CadTable.Coord(ms, tr, origin, Layer, title, body, th);

@@ -40,11 +40,19 @@ namespace Nvk.Core.Tests
         [Fact]
         public void TextColWFollowsTextHeightAndLongest()
         {
-            double w = TableLayout.TextColW(2.5, new List<string> { "Обозначение", "К1" });
-            Assert.Equal(2.5 * (11 * 0.7 + 1.6), w, 6);
-            double xw = TableLayout.TextColW(2.5, new List<string> { "X", "2338936.15" });
+            double w = TableLayout.TextColW(2.5, new List<string> { TableLayout.CoordNo, "К1" });
+            Assert.Equal(2.5 * (2 * 0.7 + 1.6), w, 6);
+            double xw = TableLayout.TextColW(2.5, new List<string> { "X", "2338936.150" });
             Assert.True(xw < 2.5 * 14);
-            Assert.Equal(2.5 * (10 * 0.7 + 1.6), xw, 6);
+            Assert.Equal(2.5 * (11 * 0.7 + 1.6), xw, 6);
+        }
+
+        [Fact]
+        public void XyTextThreeDecimals()
+        {
+            Assert.Equal("2338936.150", TableLayout.XyText(2338936.15));
+            Assert.Equal("477499.000", TableLayout.XyText(477499));
+            Assert.Equal("№", TableLayout.CoordNo);
         }
 
         [Fact]

@@ -1262,8 +1262,6 @@ namespace Nvk.Cad
                 : (NvkSession.Sheet(kind) == null || NvkSession.Sheet(kind).ShowManholes);
             var sb = new System.Text.StringBuilder();
             sb.Append("\\pql;");
-            sb.Append(CsAnnot.KindShort(kind));
-            sb.Append("\\P");
             if (kind == ProfileKind.Truba)
             {
                 if (last.Chain != null)

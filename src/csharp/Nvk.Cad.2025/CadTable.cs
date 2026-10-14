@@ -48,7 +48,7 @@ namespace Nvk.Cad
         }
 
         /// <summary>
-        /// Координатная таблица: строка-заголовок на всю ширину, затем Обозначение / X / Y.
+        /// Координатная таблица: заголовок на всю ширину, затем № / X / Y.
         /// Ширина колонок от высоты текста и длины строк.
         /// </summary>
         public static Table Coord(BlockTableRecord ms, Transaction tr, Point3d origin,
@@ -59,10 +59,10 @@ namespace Nvk.Cad
             try { tbl.MergeCells(CellRange.Create(tbl, 0, 0, 0, 2)); } catch (Exc) { }
             Cell(tbl, 0, 0, title ?? "", textH, true);
             try { tbl.Cells[0, 0].Alignment = CellAlignment.MiddleCenter; } catch (Exc) { }
-            Cell(tbl, 1, 0, "Обозначение", textH, true);
+            Cell(tbl, 1, 0, TableLayout.CoordNo, textH, true);
             Cell(tbl, 1, 1, "X", textH, true);
             Cell(tbl, 1, 2, "Y", textH, true);
-            var c0 = new List<string> { "Обозначение" };
+            var c0 = new List<string> { TableLayout.CoordNo };
             var c1 = new List<string> { "X" };
             var c2 = new List<string> { "Y" };
             for (int i = 0; i < n; i++)
@@ -77,9 +77,15 @@ namespace Nvk.Cad
                 c1.Add(b);
                 c2.Add(c);
             }
-            ColW(tbl, 0, TableLayout.TextColW(textH, c0));
-            ColW(tbl, 1, TableLayout.TextColW(textH, c1));
-            ColW(tbl, 2, TableLayout.TextColW(textH, c2));
+            double w0 = TableLayout.TextColW(textH, c0);
+            double w1 = TableLayout.TextColW(textH, c1);
+            double w2 = TableLayout.TextColW(textH, c2);
+            double titleW = TableLayout.TextColW(textH, new List<string> { title ?? "" });
+            double extra = titleW - (w0 + w1 + w2);
+            if (extra > 0.0) w0 += extra;
+            ColW(tbl, 0, w0);
+            ColW(tbl, 1, w1);
+            ColW(tbl, 2, w2);
             try { tbl.Rows[0].Height = textH * 4.0; } catch (Exc) { }
             Finish(tbl);
             return tbl;

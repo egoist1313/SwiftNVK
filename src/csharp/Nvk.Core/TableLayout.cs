@@ -186,6 +186,14 @@ namespace Nvk.Core
             return Math.Max(textH * 10.0, textH * maxLen * 0.9);
         }
 
+        public const string CoordNo = "№";
+
+        /// <summary>X/Y в таблице координат — три знака.</summary>
+        public static string XyText(double v)
+        {
+            return v.ToString("0.000", CultureInfo.InvariantCulture);
+        }
+
         /// <summary>Ширина колонки координатной таблицы: высота текста × (знаки + поле).</summary>
         public static double TextColW(double textH, IList<string> cells)
         {
