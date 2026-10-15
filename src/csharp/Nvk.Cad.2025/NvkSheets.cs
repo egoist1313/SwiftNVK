@@ -50,7 +50,8 @@ namespace Nvk.Cad
 
     /// <summary>
     /// Пять вкладок уровней. На каждом: VP продольника, VP сечений,
-    /// VP расчёта объёмов; на четырёх (кроме Трубы) — VP отбора проб.
+    /// VP расчёта объёмов; отдельные VP таблиц координат и отбора проб;
+    /// на четырёх (кроме Трубы) — VP плана.
     /// </summary>
     static class NvkSheets
     {
@@ -157,9 +158,12 @@ namespace Nvk.Cad
                     bool hasEp = ep != null && ep.Valid;
                     bool hasCs = cells != null && cells.Count > 0;
                     bool hasVol = vol != null && vol.Valid;
+                    bool hasCoord = NvkUiState.DoVol && NvkSession.CoordWin != null && NvkSession.CoordWin.Valid;
+                    bool hasSamp = NvkUiState.DoVol && kind != ProfileKind.Truba
+                        && NvkSession.SampWin != null && NvkSession.SampWin.Valid;
                     bool hasPlan = NvkUiState.DoPlan && kind != ProfileKind.Truba
                         && NvkSession.PlanWin != null && NvkSession.PlanWin.Valid;
-                    if (!hasEp && !hasCs && !hasVol && !hasPlan)
+                    if (!hasEp && !hasCs && !hasVol && !hasCoord && !hasSamp && !hasPlan)
                     {
                         nSkip++;
                         continue;
@@ -323,6 +327,10 @@ namespace Nvk.Cad
                         UnionNearby(db, tr, kv.Value, new[] { "NVK-VOL" });
                 }
             }
+            if (NvkSession.CoordWin != null && NvkSession.CoordWin.Valid)
+                UnionNearby(db, tr, NvkSession.CoordWin, new[] { "NVK-VOL-MH" });
+            if (NvkSession.SampWin != null && NvkSession.SampWin.Valid)
+                UnionNearby(db, tr, NvkSession.SampWin, new[] { "NVK-VOL-SAMP" });
 
             double px0, py0, px1, py1;
             if (TryLayerExtents(db, tr, "NVK-PLAN", out px0, out py0, out px1, out py1))
@@ -462,7 +470,9 @@ namespace Nvk.Cad
             double margin = 12.0, gap = 6.0, titleBand = 10.0;
             double usableW = paperW - 2.0 * margin;
             if (usableW < 40.0) usableW = 40.0;
-            var specs = PackSpecs(kind, ep, vol, plan, cells, nEp, nCs,
+            SheetWin coord = NvkUiState.DoVol ? NvkSession.CoordWin : null;
+            SheetWin samp = (NvkUiState.DoVol && kind != ProfileKind.Truba) ? NvkSession.SampWin : null;
+            var specs = PackSpecs(kind, ep, vol, plan, coord, samp, cells, nEp, nCs,
                 margin, gap, titleBand, usableW, paperH);
 
             int nAdd = 0;
@@ -493,7 +503,9 @@ namespace Nvk.Cad
                     + "    профиль 1:" + nEp.ToString()
                     + "    сечения 1:" + nCs.ToString();
                 if (vol != null && vol.Valid) titleTxt += "    объёмы";
-                if (plan != null && plan.Valid) titleTxt += "    отбор проб";
+                if (coord != null && coord.Valid) titleTxt += "    характерные точки";
+                if (samp != null && samp.Valid) titleTxt += "    отбор проб";
+                if (plan != null && plan.Valid) titleTxt += "    план";
                 MText titleEnt = null;
                 foreach (ObjectId id in ps)
                 {
@@ -545,7 +557,9 @@ namespace Nvk.Cad
                     try { vp.Height = s.H; } catch { }
                     try { vp.CenterPoint = new Point3d(s.Cx, s.Cy, 0.0); } catch { }
                     try { vp.On = true; } catch { }
-                    AimVp(vp, s.Win, s.ScaleN, s.Key);
+                    AimVp(vp, s.Win, s.ScaleN, s.Key, s.TwistDeg);
+                    if (s.Key != null && s.Key.StartsWith("PLAN:", StringComparison.Ordinal))
+                        ApplyPlanLayers(tr, vp);
                 }
                 tr.Commit();
             }
@@ -562,7 +576,7 @@ namespace Nvk.Cad
         }
 
         static List<VpSpec> PackSpecs(ProfileKind kind, SheetWin ep, SheetWin vol, SheetWin plan,
-            List<CsCell> cells, int nEp, int nCs,
+            SheetWin coord, SheetWin samp, List<CsCell> cells, int nEp, int nCs,
             double margin, double gap, double titleBand, double usableW, double paperH)
         {
             var specs = new List<VpSpec>();
@@ -571,33 +585,37 @@ namespace Nvk.Cad
             double cursorY = paperH - margin - titleBand;
             double rowH = 0.0;
 
-            Action<SheetWin, int, string> place = (win, scaleN, key) =>
+            Action<SheetWin, int, string, double> place = (win, scaleN, key, twist) =>
             {
                 if (win == null || !win.Valid) return;
                 double w, h;
-                SizeVp(win, MmPerM(scaleN), out w, out h);
+                SizeVp(win, MmPerM(scaleN), twist, out w, out h);
                 if (cursorX > xLeft + 0.1 && cursorX + w > xLeft + usableW)
                 {
                     cursorX = xLeft;
                     cursorY -= rowH + gap;
                     rowH = 0.0;
                 }
-                specs.Add(new VpSpec(cursorX + w * 0.5, cursorY - h * 0.5, w, h, win, scaleN, key));
+                specs.Add(new VpSpec(cursorX + w * 0.5, cursorY - h * 0.5, w, h, win, scaleN, key, twist));
                 NvkLog.Write("[НВК] VP пак " + key
                     + "  модель L=" + win.MinX.ToString("0.0")
                     + " R=" + win.MaxX.ToString("0.0")
                     + " B=" + win.MinY.ToString("0.0")
                     + " T=" + win.MaxY.ToString("0.0")
                     + "  бумага " + w.ToString("0.0") + "x" + h.ToString("0.0")
-                    + "  1:" + scaleN.ToString());
+                    + "  1:" + scaleN.ToString()
+                    + (Math.Abs(twist) > 1e-9 ? "  пск " + twist.ToString("0.##") : ""));
                 cursorX += w + gap;
                 if (h > rowH) rowH = h;
             };
 
-            place(ep, nEp, "EP:" + ((int)kind).ToString());
-            place(vol, nEp, "VOL:" + ((int)kind).ToString());
+            place(ep, nEp, "EP:" + ((int)kind).ToString(), 0.0);
+            place(vol, nEp, "VOL:" + ((int)kind).ToString(), 0.0);
+            place(coord, nEp, "COORD", 0.0);
+            place(samp, nEp, "SAMP", 0.0);
+            double planTwist = kind != ProfileKind.Truba ? NvkUiState.PlanRotDeg : 0.0;
             if (kind != ProfileKind.Truba)
-                place(plan, nEp, "PLAN:" + ((int)kind).ToString());
+                place(plan, nEp, "PLAN:" + ((int)kind).ToString(), planTwist);
 
             if (cells != null && cells.Count > 0)
             {
@@ -613,30 +631,75 @@ namespace Nvk.Cad
                 {
                     if (cell == null || cell.Win == null || !cell.Win.Valid) continue;
                     string csKey = "CS:" + ((int)kind).ToString() + ":" + cell.Index.ToString();
-                    place(cell.Win, nCs, csKey);
+                    place(cell.Win, nCs, csKey, 0.0);
                 }
             }
             return specs;
         }
 
-        static void AimVp(Viewport vp, SheetWin win, int scaleN, string key)
+        static void AimVp(Viewport vp, SheetWin win, int scaleN, string key, double twistDeg)
         {
             if (vp == null || win == null || !win.Valid) return;
             double mm = MmPerM(scaleN);
             double cx = (win.MinX + win.MaxX) * 0.5;
             double cy = (win.MinY + win.MaxY) * 0.5;
+            double twist = twistDeg * Math.PI / 180.0;
             try { vp.PerspectiveOn = false; } catch { }
-            try { vp.TwistAngle = 0.0; } catch { }
             try { vp.ViewDirection = new Vector3d(0.0, 0.0, 1.0); } catch { }
-            try { vp.ViewTarget = new Point3d(0.0, 0.0, 0.0); } catch { }
+            try { vp.TwistAngle = twist; } catch { }
+            if (Math.Abs(twist) > 1e-9)
+            {
+                try { vp.ViewTarget = new Point3d(cx, cy, 0.0); } catch { }
+                try { vp.ViewCenter = new Point2d(0.0, 0.0); } catch { }
+            }
+            else
+            {
+                try { vp.ViewTarget = new Point3d(0.0, 0.0, 0.0); } catch { }
+                try { vp.ViewCenter = new Point2d(cx, cy); } catch { }
+            }
             try { vp.ViewHeight = vp.Height / mm; } catch { }
-            try { vp.ViewCenter = new Point2d(cx, cy); } catch { }
             NvkLog.Write("[НВК] VP вид " + key
                 + "  1:" + scaleN.ToString()
                 + "  центр " + cx.ToString("0.0") + "," + cy.ToString("0.0")
                 + "  модель " + win.Width.ToString("0.00") + "x" + win.Height.ToString("0.00")
                 + "  бумага " + vp.Width.ToString("0.0") + "x" + vp.Height.ToString("0.0")
-                + "  H=" + vp.ViewHeight.ToString("0.00"));
+                + "  H=" + vp.ViewHeight.ToString("0.00")
+                + (Math.Abs(twistDeg) > 1e-9 ? "  пск " + twistDeg.ToString("0.##") : ""));
+        }
+
+        static void ApplyPlanLayers(Transaction tr, Viewport vp)
+        {
+            if (vp == null || tr == null) return;
+            var on = PlanView.SplitLayers(NvkUiState.PlanVpOn);
+            if (on.Count == 0) return;
+            try
+            {
+                var db = vp.Database;
+                var lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+                var freeze = new ObjectIdCollection();
+                var thaw = new ObjectIdCollection();
+                foreach (ObjectId id in lt)
+                {
+                    var rec = (LayerTableRecord)tr.GetObject(id, OpenMode.ForRead);
+                    if (rec.IsDependent) continue;
+                    if (PlanView.IsOn(rec.Name, on)) thaw.Add(id);
+                    else freeze.Add(id);
+                }
+                if (thaw.Count > 0)
+                {
+                    try { vp.ThawLayersInViewport(thaw.GetEnumerator()); } catch { }
+                }
+                if (freeze.Count > 0)
+                {
+                    try { vp.FreezeLayersInViewport(freeze.GetEnumerator()); } catch { }
+                }
+                NvkLog.Write("[НВК] PLAN слои вкл " + on.Count.ToString()
+                    + "  заморозка VP " + freeze.Count.ToString());
+            }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] PLAN слои: " + ex.Message);
+            }
         }
 
         struct VpSpec
@@ -645,9 +708,10 @@ namespace Nvk.Cad
             public SheetWin Win;
             public int ScaleN;
             public string Key;
-            public VpSpec(double cx, double cy, double w, double h, SheetWin win, int scaleN, string key)
+            public double TwistDeg;
+            public VpSpec(double cx, double cy, double w, double h, SheetWin win, int scaleN, string key, double twistDeg)
             {
-                Cx = cx; Cy = cy; W = w; H = h; Win = win; ScaleN = scaleN; Key = key;
+                Cx = cx; Cy = cy; W = w; H = h; Win = win; ScaleN = scaleN; Key = key; TwistDeg = twistDeg;
             }
         }
 
@@ -678,8 +742,21 @@ namespace Nvk.Cad
 
         static void SizeVp(SheetWin win, double mmPerM, out double w, out double h)
         {
-            double modelW = win.Width * 1.08;
-            double modelH = win.Height * 1.08;
+            SizeVp(win, mmPerM, 0.0, out w, out h);
+        }
+
+        static void SizeVp(SheetWin win, double mmPerM, double twistDeg, out double w, out double h)
+        {
+            double modelW, modelH;
+            if (Math.Abs(twistDeg) > 1e-9)
+                PlanView.RotatedSize(win.MinX, win.MinY, win.MaxX, win.MaxY, twistDeg, out modelW, out modelH);
+            else
+            {
+                modelW = win.Width;
+                modelH = win.Height;
+            }
+            modelW *= 1.08;
+            modelH *= 1.08;
             if (modelW < 1e-6) modelW = 1.0;
             if (modelH < 1e-6) modelH = 1.0;
             w = modelW * mmPerM;

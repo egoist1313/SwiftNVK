@@ -96,6 +96,10 @@ namespace Nvk.Cad
         public static bool PlanEn = true;
         public static double PlanInt = 50.0;
         public static double PlanMin = 15.0;
+        /// <summary>Поворот ПСК плана, градусы, против часовой от мировой X.</summary>
+        public static double PlanRotDeg;
+        /// <summary>Слои, включённые в видовом плана. Пусто = все.</summary>
+        public static string PlanVpOn = "";
         public static bool DrawProjections = true;
         public static int ProjectionColor = 256;
         public static bool UseTextHeight = true;
@@ -375,6 +379,8 @@ namespace Nvk.Cad
             Pair(rb, "PLAN_EN", PlanEn ? "1" : "0");
             Pair(rb, "PLAN_INT", F(PlanInt, 1));
             Pair(rb, "PLAN_MIN", F(PlanMin, 1));
+            Pair(rb, "PLAN_ROT", F(PlanRotDeg, 3));
+            Pair(rb, "PLAN_VP_ON", PlanVpOn ?? "");
             Pair(rb, "DRAW_PROJ", DrawProjections ? "1" : "0");
             Pair(rb, "PROJ_COL", ProjectionColor.ToString(Inv));
             Pair(rb, "USE_TH", UseTextHeight ? "1" : "0");
@@ -559,6 +565,8 @@ namespace Nvk.Cad
                 case "PLAN_EN": PlanEn = v != "0"; break;
                 case "PLAN_INT": PlanInt = D(v, PlanInt); break;
                 case "PLAN_MIN": PlanMin = D(v, PlanMin); break;
+                case "PLAN_ROT": PlanRotDeg = D(v, PlanRotDeg); break;
+                case "PLAN_VP_ON": PlanVpOn = v ?? ""; break;
                 case "DRAW_PROJ": DrawProjections = v != "0"; break;
                 case "PROJ_COL": ProjectionColor = (int)D(v, ProjectionColor); break;
                 case "USE_TH": UseTextHeight = v != "0"; break;

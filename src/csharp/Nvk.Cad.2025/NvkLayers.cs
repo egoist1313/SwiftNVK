@@ -19,6 +19,8 @@ namespace Nvk.Cad
             ("NVK-TBL",      7, false, false),
             ("NVK-PLAN",     1, false, false),
             ("NVK-VOL",      7, false, false),
+            ("NVK-VOL-MH",   7, false, false),
+            ("NVK-VOL-SAMP", 7, false, false),
             ("NVK-MARK",     1, false, false),
             ("NVK-HATCH",    8, false, false),
             ("NVK-HATCHBND", 8, true,  true),

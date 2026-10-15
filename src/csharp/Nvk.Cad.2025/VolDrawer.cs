@@ -11,6 +11,8 @@ namespace Nvk.Cad
     static class VolDrawer
     {
         const string Layer = "NVK-VOL";
+        const string LayerMh = "NVK-VOL-MH";
+        const string LayerSamp = "NVK-VOL-SAMP";
 
         static readonly ProfileKind[] Kinds =
         {
@@ -34,7 +36,11 @@ namespace Nvk.Cad
             double th = tblCfg.TextH > 0.0 ? tblCfg.TextH : 2.5;
 
             EnsureLayer(db, tr, Layer, 7);
+            EnsureLayer(db, tr, LayerMh, 7);
+            EnsureLayer(db, tr, LayerSamp, 7);
             EraseLayer(db, tr, Layer);
+            EraseLayer(db, tr, LayerMh);
+            EraseLayer(db, tr, LayerSamp);
 
             var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
             var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
@@ -148,20 +154,22 @@ namespace Nvk.Cad
                 {
                     double tx = origin.X + wrapW + th * 4;
                     double ty = yTop;
-                    var mhId = DrawNamedXy(ms, tr, new Point3d(tx, ty, 0.0), th,
+                    var mhId = DrawNamedXy(ms, tr, new Point3d(tx, ty, 0.0), th, LayerMh,
                         "Таблица координат характерных точек", mhAll);
                     if (!mhId.IsNull)
                     {
                         nMh = mhAll.Count;
-                        AccEntity(tr, win, mhId);
-                        ty -= (mhAll.Count + 2) * th * 2.2 + th * 3.0;
+                        if (NvkSession.CoordWin == null) NvkSession.CoordWin = new SheetWin();
+                        AccEntity(tr, NvkSession.CoordWin, mhId);
                     }
-                    var sampId = DrawNamedXy(ms, tr, new Point3d(tx, ty, 0.0), th,
+                    double sampY = ty - (mhAll.Count + 2) * th * 2.2 - th * 8.0;
+                    var sampId = DrawNamedXy(ms, tr, new Point3d(tx, sampY, 0.0), th, LayerSamp,
                         "Таблица точек отбора проб", sampAll);
                     if (!sampId.IsNull)
                     {
                         nSamp = sampAll.Count;
-                        AccEntity(tr, win, sampId);
+                        if (NvkSession.SampWin == null) NvkSession.SampWin = new SheetWin();
+                        AccEntity(tr, NvkSession.SampWin, sampId);
                     }
                     coordDone = true;
                 }
@@ -179,7 +187,9 @@ namespace Nvk.Cad
             }
             return "[НВК] VOL: текстов " + count + "  колодцев " + nMh
                  + "  проб " + nSamp + "  участков " + nRun
-                 + "  окон " + (NvkSession.VolWins != null ? NvkSession.VolWins.Count.ToString() : "0");
+                 + "  окон " + (NvkSession.VolWins != null ? NvkSession.VolWins.Count.ToString() : "0")
+                 + "  табл.хар " + (NvkSession.CoordWin != null && NvkSession.CoordWin.Valid ? "1" : "0")
+                 + "  табл.проб " + (NvkSession.SampWin != null && NvkSession.SampWin.Valid ? "1" : "0");
         }
 
         sealed class RunVol
@@ -258,7 +268,7 @@ namespace Nvk.Cad
         }
 
         static ObjectId DrawNamedXy(BlockTableRecord ms, Transaction tr, Point3d origin, double th,
-            string title, List<NamedXy> pts)
+            string layer, string title, List<NamedXy> pts)
         {
             if (pts == null || pts.Count == 0) return ObjectId.Null;
             var body = new List<string[]>();
@@ -271,7 +281,7 @@ namespace Nvk.Cad
                     TableLayout.XyText(p.Y)
                 });
             }
-            var table = CadTable.Coord(ms, tr, origin, Layer, title, body, th);
+            var table = CadTable.Coord(ms, tr, origin, layer, title, body, th);
             return table != null ? table.ObjectId : ObjectId.Null;
         }
 

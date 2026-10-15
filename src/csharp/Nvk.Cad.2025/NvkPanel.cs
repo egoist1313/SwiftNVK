@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -30,7 +31,7 @@ namespace Nvk.Cad
         readonly CheckBox _blockCs, _showTags, _doCs, _doEp, _doPoper, _doVol, _doPlan, _doSheets;
         readonly CheckBox _showPerm;
         readonly CheckBox _projFact, _singleSc;
-        readonly TextBox _annGap, _zones, _planInt, _planMin;
+        readonly TextBox _annGap, _zones, _planInt, _planMin, _planRot, _planLayers;
         readonly CheckBox _annot, _pavAll, _pickZones, _planEn, _drawProj;
         readonly TextBox _other, _tblOff, _labRoad, _labEarth, _labBot;
         readonly TextBox _labTblL2, _labTblL3, _labTblL4, _labTblL5;
@@ -156,6 +157,9 @@ namespace Nvk.Cad
             _planEn  = Chk(pFact, "Ось и контур траншеи", true);
             _planInt = Num(pFact, "Интервал выносок, м", "50");
             _planMin = Num(pFact, "Мин. расстояние, м", "15");
+            _planRot = Num(pFact, "Поворот ПСК, град", "0");
+            _planLayers = Num(pFact, "Слои видового (пусто = все)", "");
+            pFact.Controls.Add(Btn("Выбрать слои плана…", PickPlanLayers, 240));
 
             pCov.Controls.Add(Head("Толщины покрытий, м"));
             _asph = Num(pCov, "Асфальт, м", "1.02");
@@ -285,6 +289,8 @@ namespace Nvk.Cad
             _planEn.Checked    = NvkUiState.PlanEn;
             _planInt.Text      = NvkUiState.PlanInt.ToString("0.#");
             _planMin.Text      = NvkUiState.PlanMin.ToString("0.#");
+            _planRot.Text      = NvkUiState.PlanRotDeg.ToString("0.###");
+            _planLayers.Text   = NvkUiState.PlanVpOn ?? "";
             _other.Text        = NvkUiState.ThkOther.ToString("0.###");
             SetFill(_fillA, NvkUiState.FillAsph);
             SetFill(_fillT, NvkUiState.FillTrot);
@@ -394,6 +400,8 @@ namespace Nvk.Cad
             NvkUiState.PlanEn         = _planEn.Checked;
             NvkUiState.PlanInt        = Parse(_planInt, 50);
             NvkUiState.PlanMin        = Parse(_planMin, 15);
+            NvkUiState.PlanRotDeg     = Parse(_planRot, 0);
+            NvkUiState.PlanVpOn       = _planLayers.Text ?? "";
             NvkUiState.DrawProjections = _drawProj.Checked;
             NvkUiState.UseTextHeight   = true;
             NvkUiState.DeltaH          = true;
@@ -767,6 +775,80 @@ namespace Nvk.Cad
             SaveToState();
             _status.Text = "Зоны: кликай пары точек на плане. Enter — следующий тип.";
             Send("НВК-ЗОНЫ ");
+        }
+
+        void PickPlanLayers()
+        {
+            SaveToState();
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+            {
+                _status.Text = "Нет чертежа";
+                return;
+            }
+            var names = new List<string>();
+            try
+            {
+                using (doc.LockDocument())
+                using (var tr = doc.TransactionManager.StartTransaction())
+                {
+                    var lt = (Autodesk.AutoCAD.DatabaseServices.LayerTable)tr.GetObject(doc.Database.LayerTableId, Autodesk.AutoCAD.DatabaseServices.OpenMode.ForRead);
+                    foreach (Autodesk.AutoCAD.DatabaseServices.ObjectId id in lt)
+                    {
+                        var rec = (Autodesk.AutoCAD.DatabaseServices.LayerTableRecord)tr.GetObject(id, Autodesk.AutoCAD.DatabaseServices.OpenMode.ForRead);
+                        if (rec.IsDependent) continue;
+                        names.Add(rec.Name);
+                    }
+                    tr.Commit();
+                }
+            }
+            catch (Exception ex)
+            {
+                _status.Text = "Слои: " + ex.Message;
+                return;
+            }
+            names.Sort(StringComparer.OrdinalIgnoreCase);
+            var on = PlanView.SplitLayers(NvkUiState.PlanVpOn);
+            bool allOn = on.Count == 0;
+            using (var f = new Form())
+            {
+                f.Text = "Слои видового плана";
+                f.Width = 380;
+                f.Height = 540;
+                f.StartPosition = FormStartPosition.CenterParent;
+                f.BackColor = C_BG;
+                f.ForeColor = C_TEXT;
+                var list = new CheckedListBox
+                {
+                    Dock = DockStyle.Fill,
+                    CheckOnClick = true,
+                    BackColor = C_INPUT,
+                    ForeColor = C_TEXT,
+                    BorderStyle = BorderStyle.FixedSingle
+                };
+                foreach (var n in names)
+                    list.Items.Add(n, allOn || PlanView.IsOn(n, on));
+                var ok = new Button
+                {
+                    Text = "OK",
+                    Dock = DockStyle.Bottom,
+                    Height = 32,
+                    DialogResult = DialogResult.OK,
+                    BackColor = C_PRIM,
+                    ForeColor = C_TEXT,
+                    FlatStyle = FlatStyle.Flat
+                };
+                f.Controls.Add(list);
+                f.Controls.Add(ok);
+                f.AcceptButton = ok;
+                if (f.ShowDialog(this) != DialogResult.OK) return;
+                var sel = new List<string>();
+                for (int i = 0; i < list.Items.Count; i++)
+                    if (list.GetItemChecked(i)) sel.Add(list.Items[i].ToString());
+                NvkUiState.PlanVpOn = PlanView.JoinLayers(sel);
+                _planLayers.Text = NvkUiState.PlanVpOn;
+                _status.Text = "Слои плана: " + sel.Count.ToString();
+            }
         }
 
         static string FillCode(ComboBox cb)

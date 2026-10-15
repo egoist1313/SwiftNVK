@@ -49,7 +49,7 @@ namespace Nvk.Cad
 
     static class NvkSession
     {
-        public const string Version = "0.172";
+        public const string Version = "0.173";
         public static int RunId;
         public static DomainResult Last;
         public static List<DomainResult> Runs = new List<DomainResult>();
@@ -103,6 +103,8 @@ namespace Nvk.Cad
         public static Dictionary<ProfileKind, List<CsCell>> CsCells = new Dictionary<ProfileKind, List<CsCell>>();
         public static Dictionary<ProfileKind, SheetWin> VolWins = new Dictionary<ProfileKind, SheetWin>();
         public static SheetWin PlanWin = new SheetWin();
+        public static SheetWin CoordWin = new SheetWin();
+        public static SheetWin SampWin = new SheetWin();
 
         public static void ClearSheetWins()
         {
@@ -113,6 +115,8 @@ namespace Nvk.Cad
             if (VolWins == null) VolWins = new Dictionary<ProfileKind, SheetWin>();
             else VolWins.Clear();
             PlanWin = new SheetWin();
+            CoordWin = new SheetWin();
+            SampWin = new SheetWin();
         }
 
         public static void AddEpWin(ProfileKind kind, double x0, double y0, double x1, double y1)
@@ -165,6 +169,18 @@ namespace Nvk.Cad
         {
             if (PlanWin == null) PlanWin = new SheetWin();
             PlanWin.Union(x0, y0, x1, y1);
+        }
+
+        public static void AddCoordWin(double x0, double y0, double x1, double y1)
+        {
+            if (CoordWin == null) CoordWin = new SheetWin();
+            CoordWin.Union(x0, y0, x1, y1);
+        }
+
+        public static void AddSampWin(double x0, double y0, double x1, double y1)
+        {
+            if (SampWin == null) SampWin = new SheetWin();
+            SampWin.Union(x0, y0, x1, y1);
         }
 
         public static void SetRuns(List<DomainResult> list)
