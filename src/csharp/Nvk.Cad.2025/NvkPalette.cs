@@ -7,6 +7,7 @@ using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 [assembly: CommandClass(typeof(Nvk.Cad.NvkPalette))]
 [assembly: CommandClass(typeof(Nvk.Cad.ZonePicker))]
+[assembly: CommandClass(typeof(Nvk.Cad.PlanRotPicker))]
 
 namespace Nvk.Cad
 {
@@ -68,6 +69,18 @@ namespace Nvk.Cad
         public static void SetZones(string zones)
         {
             NvkUiState.Zones = zones ?? "";
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc != null)
+                NvkUiState.MarkCurrent(doc.Name);
+            if (_panel != null)
+            {
+                try { _panel.LoadFromState(); } catch { }
+            }
+        }
+
+        public static void SetPlanRot(double deg)
+        {
+            NvkUiState.PlanRotDeg = deg;
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc != null)
                 NvkUiState.MarkCurrent(doc.Name);

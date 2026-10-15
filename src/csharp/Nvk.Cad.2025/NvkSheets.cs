@@ -559,7 +559,7 @@ namespace Nvk.Cad
                     try { vp.On = true; } catch { }
                     AimVp(vp, s.Win, s.ScaleN, s.Key, s.TwistDeg);
                     if (s.Key != null && s.Key.StartsWith("PLAN:", StringComparison.Ordinal))
-                        ApplyPlanLayers(tr, vp);
+                        ApplyPlanLayers(tr, vp, kind);
                 }
                 tr.Commit();
             }
@@ -667,11 +667,10 @@ namespace Nvk.Cad
                 + (Math.Abs(twistDeg) > 1e-9 ? "  пск " + twistDeg.ToString("0.##") : ""));
         }
 
-        static void ApplyPlanLayers(Transaction tr, Viewport vp)
+        static void ApplyPlanLayers(Transaction tr, Viewport vp, ProfileKind kind)
         {
             if (vp == null || tr == null) return;
-            var on = PlanView.SplitLayers(NvkUiState.PlanVpOn);
-            if (on.Count == 0) return;
+            var on = PlanView.SplitLayers(NvkUiState.PlanVpOnFor(kind));
             try
             {
                 var db = vp.Database;
@@ -693,7 +692,8 @@ namespace Nvk.Cad
                 {
                     try { vp.FreezeLayersInViewport(freeze.GetEnumerator()); } catch { }
                 }
-                NvkLog.Write("[НВК] PLAN слои вкл " + on.Count.ToString()
+                NvkLog.Write("[НВК] PLAN " + NameOf(kind)
+                    + " слои " + (on.Count == 0 ? "наши" : "вкл " + on.Count.ToString())
                     + "  заморозка VP " + freeze.Count.ToString());
             }
             catch (Exc ex)

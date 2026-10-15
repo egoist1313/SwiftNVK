@@ -31,7 +31,8 @@ namespace Nvk.Cad
         readonly CheckBox _blockCs, _showTags, _doCs, _doEp, _doPoper, _doVol, _doPlan, _doSheets;
         readonly CheckBox _showPerm;
         readonly CheckBox _projFact, _singleSc;
-        readonly TextBox _annGap, _zones, _planInt, _planMin, _planRot, _planLayers;
+        readonly TextBox _annGap, _zones, _planInt, _planMin;
+        readonly Label _planRotLbl;
         readonly CheckBox _annot, _pavAll, _pickZones, _planEn, _drawProj;
         readonly TextBox _other, _tblOff, _labRoad, _labEarth, _labBot;
         readonly TextBox _labTblL2, _labTblL3, _labTblL4, _labTblL5;
@@ -157,9 +158,23 @@ namespace Nvk.Cad
             _planEn  = Chk(pFact, "Ось и контур траншеи", true);
             _planInt = Num(pFact, "Интервал выносок, м", "50");
             _planMin = Num(pFact, "Мин. расстояние, м", "15");
-            _planRot = Num(pFact, "Поворот ПСК, град", "0");
-            _planLayers = Num(pFact, "Слои видового (пусто = все)", "");
-            pFact.Controls.Add(Btn("Выбрать слои плана…", PickPlanLayers, 240));
+            _planRotLbl = new Label
+            {
+                AutoSize = true,
+                MaximumSize = new Size(240, 0),
+                ForeColor = C_TEXT,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 6, 0, 4),
+                Text = "Поворот ПСК: 0°"
+            };
+            pFact.Controls.Add(_planRotLbl);
+            pFact.Controls.Add(Btn("Задать поворот точками…", PickPlanRot, 240));
+            pFact.Controls.Add(Head("Слои плана по листам"));
+            pFact.Controls.Add(Btn("Разработка…", () => PickPlanLayers(ProfileKind.Razrabotka), 240));
+            pFact.Controls.Add(Btn("Песок…", () => PickPlanLayers(ProfileKind.Pesok), 240));
+            pFact.Controls.Add(Btn("Труба…", () => PickPlanLayers(ProfileKind.Truba), 240));
+            pFact.Controls.Add(Btn("Защитный слой…", () => PickPlanLayers(ProfileKind.Zashita), 240));
+            pFact.Controls.Add(Btn("Обратная засыпка…", () => PickPlanLayers(ProfileKind.Zasypka), 240));
 
             pCov.Controls.Add(Head("Толщины покрытий, м"));
             _asph = Num(pCov, "Асфальт, м", "1.02");
@@ -289,8 +304,7 @@ namespace Nvk.Cad
             _planEn.Checked    = NvkUiState.PlanEn;
             _planInt.Text      = NvkUiState.PlanInt.ToString("0.#");
             _planMin.Text      = NvkUiState.PlanMin.ToString("0.#");
-            _planRot.Text      = NvkUiState.PlanRotDeg.ToString("0.###");
-            _planLayers.Text   = NvkUiState.PlanVpOn ?? "";
+            _planRotLbl.Text   = "Поворот ПСК: " + NvkUiState.PlanRotDeg.ToString("0.###") + "°";
             _other.Text        = NvkUiState.ThkOther.ToString("0.###");
             SetFill(_fillA, NvkUiState.FillAsph);
             SetFill(_fillT, NvkUiState.FillTrot);
@@ -400,8 +414,6 @@ namespace Nvk.Cad
             NvkUiState.PlanEn         = _planEn.Checked;
             NvkUiState.PlanInt        = Parse(_planInt, 50);
             NvkUiState.PlanMin        = Parse(_planMin, 15);
-            NvkUiState.PlanRotDeg     = Parse(_planRot, 0);
-            NvkUiState.PlanVpOn       = _planLayers.Text ?? "";
             NvkUiState.DrawProjections = _drawProj.Checked;
             NvkUiState.UseTextHeight   = true;
             NvkUiState.DeltaH          = true;
@@ -777,7 +789,14 @@ namespace Nvk.Cad
             Send("НВК-ЗОНЫ ");
         }
 
-        void PickPlanLayers()
+        void PickPlanRot()
+        {
+            SaveToState();
+            _status.Text = "План: две точки — направление оси X.";
+            Send("НВК-ПОВОРОТ-ПЛАНА ");
+        }
+
+        void PickPlanLayers(ProfileKind kind)
         {
             SaveToState();
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -808,13 +827,12 @@ namespace Nvk.Cad
                 return;
             }
             names.Sort(StringComparer.OrdinalIgnoreCase);
-            var on = PlanView.SplitLayers(NvkUiState.PlanVpOn);
-            bool allOn = on.Count == 0;
+            var on = PlanView.SplitLayers(NvkUiState.PlanVpOnFor(kind));
             using (var f = new Form())
             {
-                f.Text = "Слои видового плана";
+                f.Text = "Слои плана — " + NvkSheets.NameOf(kind);
                 f.Width = 380;
-                f.Height = 540;
+                f.Height = 560;
                 f.StartPosition = FormStartPosition.CenterParent;
                 f.BackColor = C_BG;
                 f.ForeColor = C_TEXT;
@@ -827,7 +845,27 @@ namespace Nvk.Cad
                     BorderStyle = BorderStyle.FixedSingle
                 };
                 foreach (var n in names)
-                    list.Items.Add(n, allOn || PlanView.IsOn(n, on));
+                    list.Items.Add(n, PlanView.IsOn(n, on));
+                var bar = new Panel
+                {
+                    Dock = DockStyle.Bottom,
+                    Height = 68,
+                    BackColor = C_BG
+                };
+                var ours = new Button
+                {
+                    Text = "Только наши",
+                    Dock = DockStyle.Top,
+                    Height = 32,
+                    BackColor = C_BTN,
+                    ForeColor = C_TEXT,
+                    FlatStyle = FlatStyle.Flat
+                };
+                ours.Click += (s, e) =>
+                {
+                    for (int i = 0; i < list.Items.Count; i++)
+                        list.SetItemChecked(i, PlanView.IsOurs(list.Items[i].ToString()));
+                };
                 var ok = new Button
                 {
                     Text = "OK",
@@ -838,16 +876,34 @@ namespace Nvk.Cad
                     ForeColor = C_TEXT,
                     FlatStyle = FlatStyle.Flat
                 };
+                bar.Controls.Add(ours);
+                bar.Controls.Add(ok);
                 f.Controls.Add(list);
-                f.Controls.Add(ok);
+                f.Controls.Add(bar);
                 f.AcceptButton = ok;
                 if (f.ShowDialog(this) != DialogResult.OK) return;
                 var sel = new List<string>();
                 for (int i = 0; i < list.Items.Count; i++)
                     if (list.GetItemChecked(i)) sel.Add(list.Items[i].ToString());
-                NvkUiState.PlanVpOn = PlanView.JoinLayers(sel);
-                _planLayers.Text = NvkUiState.PlanVpOn;
-                _status.Text = "Слои плана: " + sel.Count.ToString();
+                bool onlyOurs = true;
+                for (int i = 0; i < sel.Count; i++)
+                {
+                    if (!PlanView.IsOurs(sel[i])) { onlyOurs = false; break; }
+                }
+                if (onlyOurs)
+                {
+                    for (int i = 0; i < names.Count; i++)
+                    {
+                        if (PlanView.IsOurs(names[i]) && !PlanView.IsOn(names[i], sel))
+                        {
+                            onlyOurs = false;
+                            break;
+                        }
+                    }
+                }
+                NvkUiState.SetPlanVpOn(kind, onlyOurs ? "" : PlanView.JoinLayers(sel));
+                _status.Text = NvkSheets.NameOf(kind) + ": слои "
+                    + (onlyOurs ? "только наши" : sel.Count.ToString());
             }
         }
 

@@ -72,14 +72,38 @@ namespace Nvk.Core
             return string.Join(";", parts);
         }
 
-        /// <summary>Пустой список — все слои включены. Слой 0 всегда включён.</summary>
+        /// <summary>
+        /// Угол направления p0→p1 в градусах, против часовой от мировой X.
+        /// Совпадающие точки — 0.
+        /// </summary>
+        public static double AngleDeg(double x0, double y0, double x1, double y1)
+        {
+            double dx = x1 - x0, dy = y1 - y0;
+            if (dx * dx + dy * dy < 1e-18) return 0.0;
+            return Math.Atan2(dy, dx) * 180.0 / Math.PI;
+        }
+
+        /// <summary>Слои NVK-* плюс 0 и Defpoints — те, что плагин держит включёнными по умолчанию.</summary>
+        public static bool IsOurs(string layer)
+        {
+            if (string.IsNullOrEmpty(layer)) return false;
+            if (layer == "0") return true;
+            if (string.Equals(layer, "Defpoints", StringComparison.OrdinalIgnoreCase))
+                return true;
+            return layer.StartsWith("NVK-", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Пустой список — включены только наши слои (NVK-*, 0, Defpoints).
+        /// Иначе — только имена из списка. Слой 0 и Defpoints всегда включены.
+        /// </summary>
         public static bool IsOn(string layer, IList<string> on)
         {
             if (string.IsNullOrEmpty(layer)) return false;
             if (layer == "0") return true;
             if (string.Equals(layer, "Defpoints", StringComparison.OrdinalIgnoreCase))
                 return true;
-            if (on == null || on.Count == 0) return true;
+            if (on == null || on.Count == 0) return IsOurs(layer);
             for (int i = 0; i < on.Count; i++)
             {
                 if (string.Equals(on[i], layer, StringComparison.OrdinalIgnoreCase))

@@ -96,9 +96,15 @@ namespace Nvk.Cad
         public static bool PlanEn = true;
         public static double PlanInt = 50.0;
         public static double PlanMin = 15.0;
-        /// <summary>Поворот ПСК плана, градусы, против часовой от мировой X.</summary>
+        /// <summary>Поворот ПСК плана, градусы, против часовой от мировой X. Задаётся двумя точками.</summary>
         public static double PlanRotDeg;
-        /// <summary>Слои, включённые в видовом плана. Пусто = все.</summary>
+        /// <summary>Слои видового плана по листам L1…L5. Пусто = только NVK-* / 0 / Defpoints.</summary>
+        public static string PlanVpOnL1 = "";
+        public static string PlanVpOnL2 = "";
+        public static string PlanVpOnL3 = "";
+        public static string PlanVpOnL4 = "";
+        public static string PlanVpOnL5 = "";
+        /// <summary>Устаревший общий список 0.173. Читаем для переноса на листы.</summary>
         public static string PlanVpOn = "";
         public static bool DrawProjections = true;
         public static int ProjectionColor = 256;
@@ -380,7 +386,12 @@ namespace Nvk.Cad
             Pair(rb, "PLAN_INT", F(PlanInt, 1));
             Pair(rb, "PLAN_MIN", F(PlanMin, 1));
             Pair(rb, "PLAN_ROT", F(PlanRotDeg, 3));
-            Pair(rb, "PLAN_VP_ON", PlanVpOn ?? "");
+            Pair(rb, "PLAN_VP_ON", PlanVpOnL1 ?? "");
+            Pair(rb, "PLAN_VP_ON_L1", PlanVpOnL1 ?? "");
+            Pair(rb, "PLAN_VP_ON_L2", PlanVpOnL2 ?? "");
+            Pair(rb, "PLAN_VP_ON_L3", PlanVpOnL3 ?? "");
+            Pair(rb, "PLAN_VP_ON_L4", PlanVpOnL4 ?? "");
+            Pair(rb, "PLAN_VP_ON_L5", PlanVpOnL5 ?? "");
             Pair(rb, "DRAW_PROJ", DrawProjections ? "1" : "0");
             Pair(rb, "PROJ_COL", ProjectionColor.ToString(Inv));
             Pair(rb, "USE_TH", UseTextHeight ? "1" : "0");
@@ -454,6 +465,7 @@ namespace Nvk.Cad
         {
             Zones = "";
             PavAll = false;
+            PlanVpOn = PlanVpOnL1 = PlanVpOnL2 = PlanVpOnL3 = PlanVpOnL4 = PlanVpOnL5 = "";
             if (map == null || map.Count == 0) return;
             bool hasSlopeL = false;
             bool hasSlopeR = false;
@@ -466,7 +478,46 @@ namespace Nvk.Cad
             }
             if (!hasSlopeL) SlopeL = SlopeM;
             if (!hasSlopeR) SlopeR = SlopeM;
+            MigratePlanLayers();
             HasPush = true;
+        }
+
+        static void MigratePlanLayers()
+        {
+            if (!string.IsNullOrWhiteSpace(PlanVpOnL1)
+                || !string.IsNullOrWhiteSpace(PlanVpOnL2)
+                || !string.IsNullOrWhiteSpace(PlanVpOnL3)
+                || !string.IsNullOrWhiteSpace(PlanVpOnL4)
+                || !string.IsNullOrWhiteSpace(PlanVpOnL5))
+                return;
+            if (string.IsNullOrWhiteSpace(PlanVpOn)) return;
+            PlanVpOnL1 = PlanVpOnL2 = PlanVpOnL3 = PlanVpOnL4 = PlanVpOnL5 = PlanVpOn;
+        }
+
+        public static string PlanVpOnFor(ProfileKind kind)
+        {
+            switch (kind)
+            {
+                case ProfileKind.Razrabotka: return PlanVpOnL1 ?? "";
+                case ProfileKind.Pesok:      return PlanVpOnL2 ?? "";
+                case ProfileKind.Truba:      return PlanVpOnL3 ?? "";
+                case ProfileKind.Zashita:    return PlanVpOnL4 ?? "";
+                case ProfileKind.Zasypka:    return PlanVpOnL5 ?? "";
+                default:                     return "";
+            }
+        }
+
+        public static void SetPlanVpOn(ProfileKind kind, string s)
+        {
+            s = s ?? "";
+            switch (kind)
+            {
+                case ProfileKind.Razrabotka: PlanVpOnL1 = s; break;
+                case ProfileKind.Pesok:      PlanVpOnL2 = s; break;
+                case ProfileKind.Truba:      PlanVpOnL3 = s; break;
+                case ProfileKind.Zashita:    PlanVpOnL4 = s; break;
+                case ProfileKind.Zasypka:    PlanVpOnL5 = s; break;
+            }
         }
 
         static void Apply(string k, string v)
@@ -567,6 +618,11 @@ namespace Nvk.Cad
                 case "PLAN_MIN": PlanMin = D(v, PlanMin); break;
                 case "PLAN_ROT": PlanRotDeg = D(v, PlanRotDeg); break;
                 case "PLAN_VP_ON": PlanVpOn = v ?? ""; break;
+                case "PLAN_VP_ON_L1": PlanVpOnL1 = v ?? ""; break;
+                case "PLAN_VP_ON_L2": PlanVpOnL2 = v ?? ""; break;
+                case "PLAN_VP_ON_L3": PlanVpOnL3 = v ?? ""; break;
+                case "PLAN_VP_ON_L4": PlanVpOnL4 = v ?? ""; break;
+                case "PLAN_VP_ON_L5": PlanVpOnL5 = v ?? ""; break;
                 case "DRAW_PROJ": DrawProjections = v != "0"; break;
                 case "PROJ_COL": ProjectionColor = (int)D(v, ProjectionColor); break;
                 case "USE_TH": UseTextHeight = v != "0"; break;

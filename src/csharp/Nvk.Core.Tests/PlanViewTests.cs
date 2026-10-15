@@ -35,13 +35,39 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
-        public void EmptyOnListKeepsAll()
+        public void EmptyOnListKeepsOursOnly()
         {
-            Assert.True(PlanView.IsOn("C-ROAD", null));
-            Assert.True(PlanView.IsOn("C-ROAD", new string[0]));
+            Assert.False(PlanView.IsOn("C-ROAD", null));
+            Assert.False(PlanView.IsOn("C-ROAD", new string[0]));
+            Assert.True(PlanView.IsOn("NVK-PLAN", null));
+            Assert.True(PlanView.IsOn("NVK-PLAN", new string[0]));
             Assert.True(PlanView.IsOn("0", new[] { "NVK-PLAN" }));
+            Assert.True(PlanView.IsOn("Defpoints", new string[0]));
             Assert.False(PlanView.IsOn("C-ROAD", new[] { "NVK-PLAN" }));
             Assert.True(PlanView.IsOn("NVK-PLAN", new[] { "nvk-plan" }));
+            Assert.True(PlanView.IsOn("C-ROAD", new[] { "C-ROAD" }));
+        }
+
+        [Fact]
+        public void AngleDegFromTwoPoints()
+        {
+            Assert.Equal(0.0, PlanView.AngleDeg(0, 0, 10, 0), 6);
+            Assert.Equal(90.0, PlanView.AngleDeg(0, 0, 0, 5), 6);
+            Assert.Equal(180.0, PlanView.AngleDeg(0, 0, -4, 0), 6);
+            Assert.Equal(-90.0, PlanView.AngleDeg(0, 0, 0, -2), 6);
+            Assert.Equal(45.0, PlanView.AngleDeg(1, 1, 3, 3), 6);
+            Assert.Equal(0.0, PlanView.AngleDeg(2, 2, 2, 2), 6);
+        }
+
+        [Fact]
+        public void IsOursMatchesNvkPrefix()
+        {
+            Assert.True(PlanView.IsOurs("NVK-PLAN"));
+            Assert.True(PlanView.IsOurs("nvk-ep-razr"));
+            Assert.True(PlanView.IsOurs("0"));
+            Assert.True(PlanView.IsOurs("Defpoints"));
+            Assert.False(PlanView.IsOurs("C-ROAD"));
+            Assert.False(PlanView.IsOurs(""));
         }
     }
 }
