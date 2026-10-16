@@ -50,5 +50,31 @@ namespace Nvk.Core.Tests
             m = NodPairs.Parse(new string[0]);
             Assert.Empty(m);
         }
+
+        [Fact]
+        public void TrenchAndRowsFromDrawing()
+        {
+            var m = NodPairs.Parse(new[]
+            {
+                "TRENCH_L=0.450",
+                "TRENCH_R=0.600",
+                "TBL_ROWS_L1=ROAD|EARTH",
+                "TBL_ROWS_L1#2=|BOTTOM"
+            });
+            Assert.Equal("0.450", NodPairs.Get(m, "TRENCH_L", ""));
+            Assert.Equal("0.600", NodPairs.Get(m, "TRENCH_R", ""));
+            Assert.Equal("ROAD|EARTH|BOTTOM", NodPairs.Get(m, "TBL_ROWS_L1", ""));
+        }
+
+        [Fact]
+        public void MissingTrenchAndRowsAreEmpty()
+        {
+            var m = NodPairs.Parse(new[] { "THK_ASPH=1.02" });
+            Assert.Equal("", NodPairs.Get(m, "TRENCH_L", ""));
+            Assert.Equal("", NodPairs.Get(m, "TRENCH_R", ""));
+            Assert.Equal("", NodPairs.Get(m, "TBL_ROWS_L1", ""));
+            Assert.False(m.ContainsKey("TRENCH_L"));
+            Assert.False(m.ContainsKey("TBL_ROWS_L1"));
+        }
     }
 }

@@ -132,6 +132,8 @@ namespace Nvk.Cad
         public static string FactProfileHandleL5 = "";
         public static double? OshOverride = null;
         public static bool HasPush;
+        /// <summary>true — текущие statics пришли из NOD этого чертежа, не из профиля сеанса.</summary>
+        public static bool HasNod;
         public static string LoadedDocKey;
 
         public static void ApplyTo(SectionConfig cfg, TableCfg tbl)
@@ -432,6 +434,23 @@ namespace Nvk.Cad
             HasPush = true;
         }
 
+        public static string MakeDocKey(Database db, string name)
+        {
+            string n = name ?? "";
+            try
+            {
+                if (db != null)
+                {
+                    string g = db.FingerprintGuid;
+                    if (!string.IsNullOrEmpty(g)
+                        && !string.Equals(g, Guid.Empty.ToString(), StringComparison.OrdinalIgnoreCase))
+                        return n + "|" + g;
+                }
+            }
+            catch { }
+            return n;
+        }
+
         public static void MarkCurrent(string docKey)
         {
             LoadedDocKey = docKey ?? "";
@@ -445,29 +464,33 @@ namespace Nvk.Cad
         }
 
         /// <summary>
-        /// Подтянуть STATE из NOD чертежа. Возвращает true, если реально читали
-        /// (другой документ или force) — тогда панель надо LoadFromState, не SaveToState.
-        /// </summary>
-        /// <summary>
-        /// Вернуть true только если NOD содержал данные (не пустой).
-        /// false = NOD пуст или пропущено (IsCurrent) → вызывающий может загрузить профиль.
+        /// STATE из NOD текущего чертежа. true — в чертеже были данные, они применены.
+        /// Пустой NOD не помечает документ загруженным: повтор (BecameCurrent) прочитает снова.
         /// </summary>
         public static bool LoadFromDatabase(Database db, string docKey, bool force)
         {
             if (db == null) return false;
-            if (!force && IsCurrent(docKey)) return false;
+            string key = MakeDocKey(db, docKey);
             var map = NvkNod.Read(db);
-            LoadedDocKey = docKey ?? "";
+            bool has = map != null && map.Count > 0;
+            if (!has) return false;
+            if (!force && IsCurrent(key) && HasNod) return true;
             FromMap(map);
             NvkNod.ApplyLayout(db, map);
-            return map != null && map.Count > 0;
+            LoadedDocKey = key;
+            HasNod = true;
+            try
+            {
+                NvkLog.Write("[НВК] STATE из чертежа, ключей " + map.Count.ToString());
+            }
+            catch { }
+            return true;
         }
 
+        /// <summary>Сброс к значениям по умолчанию, затем ключи карты. Не оставляет поля прошлого сеанса.</summary>
         public static void FromMap(Dictionary<string, string> map)
         {
-            Zones = "";
-            PavAll = false;
-            PlanVpOn = PlanVpOnL1 = PlanVpOnL2 = PlanVpOnL3 = PlanVpOnL4 = PlanVpOnL5 = "";
+            ResetToDefaults();
             if (map == null || map.Count == 0) return;
             bool hasSlopeL = false;
             bool hasSlopeR = false;
@@ -482,6 +505,111 @@ namespace Nvk.Cad
             if (!hasSlopeR) SlopeR = SlopeM;
             MigratePlanLayers();
             HasPush = true;
+            SyncL1();
+        }
+
+        public static void ResetToDefaults()
+        {
+            Bedding = 0.10;
+            ThkZash = 0.30;
+            ThkAsph = 1.02;
+            ThkGazn = 0.15;
+            ThkTrot = 0.31;
+            ThkOther = 0.35;
+            FillAsph = "SAND";
+            FillTrot = "SAND";
+            FillGazn = "SOIL";
+            FillOther = "SOIL";
+            UseBlackEarth = false;
+            BlackEarthHandle = "";
+            BlackEarthName = "";
+            DesignHandle = "";
+            DesignName = "";
+            L1ShowMh = true;
+            TableOffsetM = 1.0;
+            L1Preset = "default";
+            LabelRoad = "";
+            LabelEarth = "";
+            LabelBottom = "";
+            L1RoadCol = 1;
+            L1EarthCol = 5;
+            L1BotCol = 1;
+            L1RoadLt = "Continuous";
+            L1EarthLt = "Continuous";
+            L1BotLt = "Continuous";
+            L1HatPat = "ANSI31";
+            L1HatCol = 8;
+            L1PavPat = "ANSI31";
+            L1PavCol = 8;
+            Joint = "SOCKET";
+            SlopeM = 0.0;
+            SlopeL = 0.0;
+            SlopeR = 0.0;
+            TrenchLeft = 0.0;
+            TrenchRight = 0.0;
+            HalfWidth = 3.0;
+            HScale = 10.0;
+            LScale = 1.0;
+            CsScale = 1.0;
+            CsYgap = 100.0;
+            CsTextH = 0.5;
+            TextH = 2.5;
+            TextOff = 10.0;
+            RoundTo = 2;
+            SlopeRound = 1;
+            SlopeUnit = "permille";
+            ShowPermille = true;
+            ShowLen = true;
+            ShowSlope = true;
+            LabelColW = 0.0;
+            BlockCs = true;
+            BlockEp = false;
+            ShowLineTags = true;
+            Stations = "AUTO";
+            DoCs = true;
+            DoEp = true;
+            DoPoper = true;
+            DoVol = true;
+            DoPlan = true;
+            DoSheets = true;
+            VpScaleEp = 500;
+            VpScaleCs = 200;
+            VpScalePlan = 500;
+            ProjFact = false;
+            SingleScatter = true;
+            UseScatterRazr = true;
+            UseScatterTruba = false;
+            UseScatterZashita = true;
+            UseScatterZasypka = true;
+            ScatterRazr = 0.05;
+            ScatterTruba = 0.005;
+            ScatterZashita = 0.05;
+            ScatterZasypka = 0.05;
+            Annotative = false;
+            AnnGap = 10.0;
+            PavAll = false;
+            PickZones = false;
+            Zones = "";
+            UsePipeWall = true;
+            Walls = "";
+            PlanEn = true;
+            PlanInt = 50.0;
+            PlanMin = 15.0;
+            PlanRotDeg = 0.0;
+            PlanVpOnL1 = PlanVpOnL2 = PlanVpOnL3 = PlanVpOnL4 = PlanVpOnL5 = "";
+            PlanVpOn = "";
+            DrawProjections = true;
+            ProjectionColor = 256;
+            UseTextHeight = true;
+            DeltaH = true;
+            LabelHeight = "";
+            LabelLength = "";
+            LabelSlope = "";
+            TblL2Label = TblL3Label = TblL4Label = TblL5Label = "";
+            RowsL1 = RowsL2 = RowsL3 = RowsL4 = RowsL5 = "";
+            FactProfileHandleL1 = FactProfileHandleL2 = FactProfileHandleL3
+                = FactProfileHandleL4 = FactProfileHandleL5 = "";
+            OshOverride = null;
         }
 
         static void MigratePlanLayers()

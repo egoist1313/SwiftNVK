@@ -98,6 +98,7 @@ namespace Nvk.Cad
 
         public static void ApplyLayout(Database db, Dictionary<string, string> map)
         {
+            NvkSession.ClearDrawingCaches();
             if (map == null || map.Count == 0) return;
             TryPt(map, "CS_X", "CS_Y", ref NvkSession.CsIns, ref NvkSession.CsInsHas);
             TryPt(map, "EP_X", "EP_Y", ref NvkSession.EpIns, ref NvkSession.EpInsHas);
@@ -112,15 +113,10 @@ namespace Nvk.Cad
             ApplyNums(Get(map, "LATOFF"), ref NvkSession.CacheLatOff);
             ApplyNums(Get(map, "PLAN_TGT"), ref NvkSession.CachePlanTgt);
             ApplyNums(Get(map, "PLAN_LAT"), ref NvkSession.CachePlanLat);
-            string ldr = Get(map, "PLAN_LDR");
-            if (!string.IsNullOrEmpty(ldr)) NvkSession.CachePlanLdr = ldr;
+            NvkSession.CachePlanLdr = Get(map, "PLAN_LDR") ?? "";
             string pipes = Get(map, "PIPES");
             if (!string.IsNullOrEmpty(pipes) && db != null)
-            {
-                var ids = PipesFromHandles(db, pipes);
-                if (ids.Count > 0)
-                    NvkSession.LastPipes = ids;
-            }
+                NvkSession.LastPipes = PipesFromHandles(db, pipes);
         }
 
         public static List<ObjectId> PipesFromHandles(Database db, string pipes)
@@ -319,8 +315,7 @@ namespace Nvk.Cad
 
         static void ApplyNums(string s, ref List<double> dest)
         {
-            var t = SplitNums(s);
-            if (t.Count >= 1) dest = t;
+            dest = SplitNums(s);
         }
 
         static List<double> SplitNums(string s)

@@ -54,7 +54,7 @@ namespace Nvk.Cad
             NvkUiState.FromRb(args);
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc != null)
-                NvkUiState.MarkCurrent(doc.Name);
+                NvkUiState.MarkCurrent(NvkUiState.MakeDocKey(doc.Database, doc.Name));
             if (_panel != null)
             {
                 try { _panel.LoadFromState(); } catch { }
@@ -71,7 +71,7 @@ namespace Nvk.Cad
             NvkUiState.Zones = zones ?? "";
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc != null)
-                NvkUiState.MarkCurrent(doc.Name);
+                NvkUiState.MarkCurrent(NvkUiState.MakeDocKey(doc.Database, doc.Name));
             if (_panel != null)
             {
                 try { _panel.LoadFromState(); } catch { }
@@ -83,7 +83,7 @@ namespace Nvk.Cad
             NvkUiState.PlanRotDeg = deg;
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc != null)
-                NvkUiState.MarkCurrent(doc.Name);
+                NvkUiState.MarkCurrent(NvkUiState.MakeDocKey(doc.Database, doc.Name));
             if (_panel != null)
             {
                 try { _panel.LoadFromState(); } catch { }
@@ -95,11 +95,16 @@ namespace Nvk.Cad
             if (doc == null) return;
             try
             {
-                bool loaded = NvkUiState.LoadFromDatabase(doc.Database, doc.Name, force);
-                if (!loaded && !NvkUiState.HasPush)
+                string key = NvkUiState.MakeDocKey(doc.Database, doc.Name);
+                bool fromDwg = NvkUiState.LoadFromDatabase(doc.Database, doc.Name, force);
+                if (!fromDwg && (force || !NvkUiState.IsCurrent(key)))
                 {
-                    NvkProfile.Load();
-                    NvkUiState.MarkCurrent(doc.Name);
+                    if (!NvkProfile.Load())
+                        NvkUiState.ResetToDefaults();
+                    NvkSession.ClearDrawingCaches();
+                    NvkUiState.HasNod = false;
+                    NvkUiState.MarkCurrent(key);
+                    try { NvkLog.Write("[НВК] STATE из профиля (в чертеже пусто)"); } catch { }
                 }
                 if (_panel != null)
                     _panel.LoadFromState();
@@ -113,17 +118,7 @@ namespace Nvk.Cad
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc != null)
-            {
-                bool loaded = false;
-                try { loaded = NvkUiState.LoadFromDatabase(doc.Database, doc.Name, false); }
-                catch { }
-                // Чертёж без NOD (новый или ещё не сохранялся) — берём профиль между сеансами
-                if (!loaded && !NvkUiState.HasPush)
-                {
-                    NvkProfile.Load();
-                    NvkUiState.MarkCurrent(doc.Name);
-                }
-            }
+                SyncFromDoc(doc, false);
             if (_ps == null)
             {
                 _ps = new PaletteSet("Поперечник НВК", "NVKPANEL", Id);

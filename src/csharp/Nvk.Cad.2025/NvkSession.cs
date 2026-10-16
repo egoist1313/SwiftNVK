@@ -49,7 +49,7 @@ namespace Nvk.Cad
 
     static class NvkSession
     {
-        public const string Version = "0.180";
+        public const string Version = "0.181";
         public static int RunId;
         public static DomainResult Last;
         public static List<DomainResult> Runs = new List<DomainResult>();
@@ -105,6 +105,33 @@ namespace Nvk.Cad
         public static SheetWin PlanWin = new SheetWin();
         public static SheetWin CoordWin = new SheetWin();
         public static SheetWin SampWin = new SheetWin();
+
+        /// <summary>
+        /// Сброс кэшей, привязанных к чертежу: трубы, разброс, вставки, окна листов.
+        /// Не трогает стили L1…L5 и Table.
+        /// </summary>
+        public static void ClearDrawingCaches()
+        {
+            Last = null;
+            Runs = new List<DomainResult>();
+            LastPipes = new List<ObjectId>();
+            LastCsInserts = new List<ObjectId>();
+            LastEp = null;
+            CsInsHas = EpInsHas = VolInsHas = false;
+            CsIns = EpIns = VolIns = Point3d.Origin;
+            if (EpHas != null)
+            {
+                for (int i = 0; i < EpHas.Length; i++) EpHas[i] = false;
+            }
+            if (CsHas != null)
+            {
+                for (int i = 0; i < CsHas.Length; i++) CsHas[i] = false;
+            }
+            CacheScatter = CacheScatter2 = CacheScatter3 = CacheScatter4 = CacheScatter5 = null;
+            CacheLatOff = CachePlanTgt = CachePlanLat = null;
+            CachePlanLdr = "";
+            ClearSheetWins();
+        }
 
         public static void ClearSheetWins()
         {

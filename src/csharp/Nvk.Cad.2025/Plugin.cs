@@ -21,8 +21,7 @@ namespace Nvk.Cad
                 try
                 {
                     NvkLayers.EnsureAll(doc.Database);
-                    bool hasData = NvkUiState.LoadFromDatabase(doc.Database, doc.Name, true);
-                    if (!hasData) NvkProfile.Load();
+                    NvkPalette.SyncFromDoc(doc, true);
                     NvkEpLive.Attach(doc);
                 }
                 catch { }
