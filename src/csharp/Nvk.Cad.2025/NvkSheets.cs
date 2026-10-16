@@ -184,7 +184,6 @@ namespace Nvk.Cad
                         nFail++;
                         NvkLog.Write("[НВК] лист " + (have ?? want) + " FAIL " + ex.Message);
                     }
-                    NvkQuiet.ToModel();
                 }
             }
             finally
@@ -410,12 +409,26 @@ namespace Nvk.Cad
         static int MakeLevel(Database db, LayoutManager lm, string name, bool createdNew,
             ProfileKind kind, SheetWin ep, List<CsCell> cells)
         {
+            string stayOn = "Model";
+            try
+            {
+                string cur = lm.CurrentLayout;
+                if (!string.IsNullOrEmpty(cur)) stayOn = cur;
+            }
+            catch { }
+
             ObjectId layoutId = ObjectId.Null;
             try { layoutId = lm.GetLayoutId(name); } catch { }
             if (layoutId.IsNull)
             {
                 layoutId = lm.CreateLayout(name);
                 createdNew = true;
+                try
+                {
+                    if (!string.Equals(lm.CurrentLayout, stayOn, StringComparison.OrdinalIgnoreCase))
+                        lm.CurrentLayout = stayOn;
+                }
+                catch { }
             }
 
             int nEp = ScaleN(NvkUiState.VpScaleEp, 500);
@@ -427,8 +440,6 @@ namespace Nvk.Cad
             SheetWin plan = null;
             if (NvkUiState.DoPlan && kind != ProfileKind.Truba)
                 plan = NvkSession.PlanWin;
-
-            try { lm.CurrentLayout = "Model"; } catch { }
 
             var have = new Dictionary<string, ObjectId>(StringComparer.OrdinalIgnoreCase);
             double paperW = 841.0, paperH = 594.0;
@@ -546,12 +557,6 @@ namespace Nvk.Cad
             }
 
             NvkLog.Write("[НВК] лист " + name + " вид из модели " + specs.Count.ToString());
-            string prevLayout = "Model";
-            try { prevLayout = lm.CurrentLayout; } catch { }
-            try { lm.CurrentLayout = name; } catch (Exc ex)
-            {
-                NvkLog.Write("[НВК] лист " + name + " вкладка: " + ex.Message);
-            }
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 foreach (var s in specs)
@@ -571,7 +576,6 @@ namespace Nvk.Cad
                 }
                 tr.Commit();
             }
-            try { lm.CurrentLayout = string.IsNullOrEmpty(prevLayout) ? "Model" : prevLayout; } catch { }
             NvkLog.Write("[НВК] лист " + name + " вид записан");
 
             NvkLog.Write("[НВК] лист " + name
@@ -661,6 +665,7 @@ namespace Nvk.Cad
             try { vp.ViewDirection = new Vector3d(0.0, 0.0, 1.0); } catch { }
             try { vp.ViewTarget = new Point3d(cx, cy, 0.0); } catch { }
             try { vp.ViewCenter = new Point2d(0.0, 0.0); } catch { }
+            try { vp.TwistAngle = twist; } catch { }
             try { vp.ViewHeight = viewH; } catch { }
             try { vp.TwistAngle = twist; } catch (Exc ex)
             {
