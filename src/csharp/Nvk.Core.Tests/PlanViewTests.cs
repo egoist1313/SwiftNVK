@@ -88,6 +88,14 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void PaperMmToModelAtPlanScale()
+        {
+            Assert.Equal(1.25, PlanView.PaperMmToModel(2.5, 500), 6);
+            Assert.Equal(0.5, PlanView.PaperMmToModel(2.5, 200), 6);
+            Assert.Equal(1.25, PlanView.PaperMmToModel(2.5, 0), 6);
+        }
+
+        [Fact]
         public void SampLayerOffOnPipePlan()
         {
             Assert.True(PlanView.IsSampLeader(PlanView.LayerSamp));

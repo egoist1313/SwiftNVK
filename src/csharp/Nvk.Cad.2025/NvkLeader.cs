@@ -323,11 +323,13 @@ namespace Nvk.Cad
                 ml.ContentType = ContentType.MTextContent;
                 try { ml.Annotative = AnnotativeStates.False; } catch (Exc) { }
 
-                double th = 2.5, asz = 1.25;
+                double thIgn = 2.5, aszIgn = 1.25;
                 ObjectId txtSt = ObjectId.Null;
-                ReadStyle(db, tr, ref th, ref asz, ref txtSt);
-                if (th < 0.05) th = 2.5;
-                if (asz < 0.01) asz = th * 0.5;
+                ReadStyle(db, tr, ref thIgn, ref aszIgn, ref txtSt);
+                double th = PlanView.PaperMmToModel(2.5, NvkUiState.VpScalePlan);
+                double asz = PlanView.PaperMmToModel(1.25, NvkUiState.VpScalePlan);
+                if (th < 1e-3) th = 0.5;
+                if (asz < 1e-4) asz = th * 0.5;
 
                 var mt = new MText();
                 if (db != null) mt.SetDatabaseDefaults(db);

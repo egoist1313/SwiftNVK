@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Nvk.Core;
 using Xunit;
@@ -44,6 +45,19 @@ namespace Nvk.Core.Tests
             Assert.Equal("Т2", rows[1].Name);
             Assert.Equal(10.0, rows[0].X, 1);
             Assert.Equal(20.0, rows[1].X, 1);
+        }
+
+        [Fact]
+        public void SampleArrowInsideTrenchShelfAtEdge()
+        {
+            var chain = PipeWithMh();
+            var cfg = new SectionConfig { PlanEn = true, PlanMin = 1.0, Joint = JointType.Socket };
+            double hw = cfg.BottomRight(0.3);
+            var rows = PlanPoints.Samples(chain, cfg, new List<double> { 10.0 }, null, 1);
+            Assert.Single(rows);
+            Assert.True(Math.Abs(rows[0].Y) <= hw + 1e-9);
+            Assert.Equal(hw + PlanPoints.SampShelfOut, Math.Abs(rows[0].Ty), 6);
+            Assert.Equal(Math.Sign(rows[0].Y), Math.Sign(rows[0].Ty));
         }
 
         [Fact]

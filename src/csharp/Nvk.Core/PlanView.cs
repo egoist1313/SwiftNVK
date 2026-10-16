@@ -124,6 +124,13 @@ namespace Nvk.Core
             oy = y + py * dist;
         }
 
+        /// <summary>Миллиметры бумаги → метры модели при масштабе 1:scaleN.</summary>
+        public static double PaperMmToModel(double mm, double scaleN)
+        {
+            if (scaleN < 1.0) scaleN = 500.0;
+            return mm * scaleN / 1000.0;
+        }
+
         public const string LayerMh = "NVK-PLAN-MH";
         public const string LayerSamp = "NVK-PLAN-SAMP";
 

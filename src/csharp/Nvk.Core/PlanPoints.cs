@@ -15,6 +15,9 @@ namespace Nvk.Core
     /// <summary>Координаты колодцев и точек отбора проб в плане.</summary>
     public static class PlanPoints
     {
+        /// <summary>Полка выноски отбора сразу за бровкой дна котлована, м.</summary>
+        public const double SampShelfOut = 0.5;
+
         public static List<NamedXy> Manholes(Chain chain)
         {
             var rows = new List<NamedXy>();
@@ -66,16 +69,18 @@ namespace Nvk.Core
                 double lat = latOffs != null && i < latOffs.Count
                     ? latOffs[i] : Scatter.PlanLat(hw, 1, i);
                 hw = lat >= 0.0 ? hwR : hwL;
+                double side = lat >= 0.0 ? 1.0 : -1.0;
+                if (Math.Abs(lat) > hw) lat = side * hw;
                 double ax = hit.X + hit.Nx * lat;
                 double ay = hit.Y + hit.Ny * lat;
-                double side = lat >= 0.0 ? 1.0 : -1.0;
+                double shelf = hw + SampShelfOut;
                 rows.Add(new NamedXy
                 {
                     Name = "Т" + nextNum.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     X = ax,
                     Y = ay,
-                    Tx = hit.X + hit.Nx * side * (hw + 5.0),
-                    Ty = hit.Y + hit.Ny * side * (hw + 5.0)
+                    Tx = hit.X + hit.Nx * side * shelf,
+                    Ty = hit.Y + hit.Ny * side * shelf
                 });
                 nextNum++;
             }

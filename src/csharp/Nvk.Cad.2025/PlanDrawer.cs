@@ -66,10 +66,8 @@ namespace Nvk.Cad
                     foreach (var p in samples)
                     {
                         nLead++;
-                        double tx, ty;
-                        PlanView.Offset(p.X, p.Y, planDeg, 5.0, out tx, out ty);
-                        PlaceLeader(ms, tr, poses, p.X, p.Y, tx, ty, p.Name,
-                            PlanView.LayerSamp, planDeg);
+                        PlaceLeader(ms, tr, poses, p.X, p.Y, p.Tx, p.Ty, p.Name,
+                            PlanView.LayerSamp, planDeg, false);
                     }
                 }
 
@@ -281,16 +279,17 @@ namespace Nvk.Cad
             double off = (r > 0.05 ? r : 0.5) + 5.0;
             double tx, ty;
             PlanView.Offset(x, y, planDeg, off, out tx, out ty);
-            PlaceLeader(ms, tr, poses, x, y, tx, ty, name, PlanView.LayerMh, planDeg);
+            PlaceLeader(ms, tr, poses, x, y, tx, ty, name, PlanView.LayerMh, planDeg, true);
         }
 
         static void PlaceLeader(BlockTableRecord ms, Transaction tr,
             Dictionary<string, LeaderPose> poses,
-            double ax, double ay, double tx, double ty, string key, string layer, double planDeg)
+            double ax, double ay, double tx, double ty, string key, string layer, double planDeg,
+            bool keepText)
         {
             double rot = PlanView.LeaderRotRad(planDeg);
             LeaderPose p;
-            if (poses != null && poses.TryGetValue(key, out p) && p != null)
+            if (keepText && poses != null && poses.TryGetValue(key, out p) && p != null)
             {
                 tx = p.X;
                 ty = p.Y;

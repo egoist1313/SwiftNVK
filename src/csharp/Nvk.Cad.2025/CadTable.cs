@@ -32,7 +32,7 @@ namespace Nvk.Cad
                 var cell = tbl.Cells[r, c];
                 cell.TextString = text ?? "";
                 cell.TextHeight = textH;
-                cell.Alignment = header ? CellAlignment.MiddleCenter : CellAlignment.MiddleLeft;
+                cell.Alignment = CellAlignment.MiddleCenter;
             }
             catch (Exc) { }
         }
