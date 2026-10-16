@@ -51,7 +51,7 @@ namespace Nvk.Cad
     /// <summary>
     /// Пять вкладок уровней. На каждом: VP продольника, VP сечений,
     /// VP расчёта объёмов; отдельные VP таблиц координат и отбора проб;
-    /// на четырёх (кроме Трубы) — VP плана.
+    /// VP плана на всех пяти (на Трубе слой отбора проб заморожен).
     /// </summary>
     static class NvkSheets
     {
@@ -161,7 +161,7 @@ namespace Nvk.Cad
                     bool hasCoord = NvkUiState.DoVol && NvkSession.CoordWin != null && NvkSession.CoordWin.Valid;
                     bool hasSamp = NvkUiState.DoVol && kind != ProfileKind.Truba
                         && NvkSession.SampWin != null && NvkSession.SampWin.Valid;
-                    bool hasPlan = NvkUiState.DoPlan && kind != ProfileKind.Truba
+                    bool hasPlan = NvkUiState.DoPlan
                         && NvkSession.PlanWin != null && NvkSession.PlanWin.Valid;
                     if (!hasEp && !hasCs && !hasVol && !hasCoord && !hasSamp && !hasPlan)
                     {
@@ -332,9 +332,14 @@ namespace Nvk.Cad
                 UnionNearby(db, tr, NvkSession.SampWin, new[] { "NVK-VOL-SAMP" });
 
             double px0, py0, px1, py1;
-            if (TryLayerExtents(db, tr, "NVK-PLAN", out px0, out py0, out px1, out py1))
+            string[] planLyrs = { "NVK-PLAN", PlanView.LayerMh, PlanView.LayerSamp };
+            for (int i = 0; i < planLyrs.Length; i++)
             {
-                NvkSession.AddPlanWin(px0, py0, px1, py1);
+                if (TryLayerExtents(db, tr, planLyrs[i], out px0, out py0, out px1, out py1))
+                    NvkSession.AddPlanWin(px0, py0, px1, py1);
+            }
+            if (NvkSession.PlanWin != null && NvkSession.PlanWin.Valid)
+            {
                 var p = NvkSession.PlanWin;
                 NvkLog.Write("[НВК] PLAN окно L=" + p.MinX.ToString("0.0")
                     + " R=" + p.MaxX.ToString("0.0")
@@ -438,7 +443,7 @@ namespace Nvk.Cad
             if (NvkUiState.DoVol && NvkSession.VolWins != null)
                 NvkSession.VolWins.TryGetValue(kind, out vol);
             SheetWin plan = null;
-            if (NvkUiState.DoPlan && kind != ProfileKind.Truba)
+            if (NvkUiState.DoPlan)
                 plan = NvkSession.PlanWin;
 
             var have = new Dictionary<string, ObjectId>(StringComparer.OrdinalIgnoreCase);
@@ -627,9 +632,8 @@ namespace Nvk.Cad
             place(vol, nEp, "VOL:" + ((int)kind).ToString(), 0.0);
             place(coord, nEp, "COORD", 0.0);
             place(samp, nEp, "SAMP", 0.0);
-            double planTwist = kind != ProfileKind.Truba ? NvkUiState.PlanRotDeg : 0.0;
-            if (kind != ProfileKind.Truba)
-                place(plan, nPlan, "PLAN:" + ((int)kind).ToString(), planTwist);
+            double planTwist = NvkUiState.PlanRotDeg;
+            place(plan, nPlan, "PLAN:" + ((int)kind).ToString(), planTwist);
 
             if (cells != null && cells.Count > 0)
             {
@@ -687,6 +691,7 @@ namespace Nvk.Cad
         {
             if (vp == null || tr == null) return;
             var on = PlanView.SplitLayers(NvkUiState.PlanVpOnFor(kind));
+            bool freezeSamp = kind == ProfileKind.Truba;
             try
             {
                 var db = vp.Database;
@@ -697,7 +702,7 @@ namespace Nvk.Cad
                 {
                     var rec = (LayerTableRecord)tr.GetObject(id, OpenMode.ForRead);
                     if (rec.IsDependent) continue;
-                    if (PlanView.IsOn(rec.Name, on)) thaw.Add(id);
+                    if (PlanView.IsOn(rec.Name, on, freezeSamp)) thaw.Add(id);
                     else freeze.Add(id);
                 }
                 if (thaw.Count > 0)

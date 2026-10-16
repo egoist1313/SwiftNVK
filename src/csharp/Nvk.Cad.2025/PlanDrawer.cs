@@ -12,6 +12,10 @@ namespace Nvk.Cad
     static class PlanDrawer
     {
         const string Layer = "NVK-PLAN";
+        static readonly string[] LeaderLayers =
+        {
+            Layer, PlanView.LayerMh, PlanView.LayerSamp
+        };
 
         public static string Draw(Database db, Transaction tr)
         {
@@ -26,16 +30,19 @@ namespace Nvk.Cad
             if (!cfg0.PlanEn)
                 return "[НВК] PLAN: выкл. (plan_en)";
             EnsureLayer(db, tr, Layer, 1);
+            EnsureLayer(db, tr, PlanView.LayerMh, 6);
+            EnsureLayer(db, tr, PlanView.LayerSamp, 3);
             var poses = LeaderPoses.Parse(NvkSession.CachePlanLdr);
-            var live = NvkLeader.Collect(db, tr, Layer);
+            var live = NvkLeader.Collect(db, tr, LeaderLayers);
             LeaderPoses.Overlay(poses, live);
             int nLiveArr = 0;
             foreach (var kv in live)
                 if (kv.Value != null && kv.Value.HasArrow) nLiveArr++;
             NvkLog.Write("[НВК] PLAN выноски из чертежа " + live.Count.ToString(CultureInfo.InvariantCulture)
                 + "  стрелок " + nLiveArr.ToString(CultureInfo.InvariantCulture));
-            EraseLayer(db, tr, Layer);
+            EraseLayer(db, tr, LeaderLayers);
             NvkLeader.LogStyle(db, tr);
+            double planDeg = NvkUiState.PlanRotDeg;
 
             var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
             var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
@@ -59,7 +66,10 @@ namespace Nvk.Cad
                     foreach (var p in samples)
                     {
                         nLead++;
-                        PlaceLeader(ms, tr, poses, p.X, p.Y, p.Tx, p.Ty, p.Name);
+                        double tx, ty;
+                        PlanView.Offset(p.X, p.Y, planDeg, 5.0, out tx, out ty);
+                        PlaceLeader(ms, tr, poses, p.X, p.Y, tx, ty, p.Name,
+                            PlanView.LayerSamp, planDeg);
                     }
                 }
 
@@ -68,7 +78,7 @@ namespace Nvk.Cad
                     if (s.StartR > 0.05)
                     {
                         AddCircle(ms, tr, s.X0, s.Y0, s.StartR);
-                        AddMhLeader(ms, tr, s, true, poses);
+                        AddMhLeader(ms, tr, s, true, poses, planDeg);
                         nMh++;
                     }
                 }
@@ -76,7 +86,7 @@ namespace Nvk.Cad
                 if (lastSeg.EndR > 0.05)
                 {
                     AddCircle(ms, tr, lastSeg.X1, lastSeg.Y1, lastSeg.EndR);
-                    AddMhLeader(ms, tr, lastSeg, false, poses);
+                    AddMhLeader(ms, tr, lastSeg, false, poses, planDeg);
                     nMh++;
                 }
             }
@@ -105,7 +115,7 @@ namespace Nvk.Cad
             {
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                 if (ent == null || ent.IsErased) continue;
-                if (!string.Equals(ent.Layer, Layer, StringComparison.OrdinalIgnoreCase))
+                if (!IsPlanLayer(ent.Layer))
                     continue;
                 Extents3d ext;
                 try { ext = ent.GeometricExtents; }
@@ -244,38 +254,46 @@ namespace Nvk.Cad
             tr.AddNewlyCreatedDBObject(c, true);
         }
 
+        static bool IsPlanLayer(string layer)
+        {
+            return LayerIn(layer, LeaderLayers);
+        }
+
+        static bool LayerIn(string layer, string[] layers)
+        {
+            if (string.IsNullOrEmpty(layer) || layers == null) return false;
+            for (int i = 0; i < layers.Length; i++)
+            {
+                if (string.Equals(layer, layers[i], StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
         static void AddMhLeader(BlockTableRecord ms, Transaction tr, PipeSeg s, bool atStart,
-            Dictionary<string, LeaderPose> poses)
+            Dictionary<string, LeaderPose> poses, double planDeg)
         {
             string name = atStart ? s.StartName : s.EndName;
             if (string.IsNullOrEmpty(name)) return;
             double x = atStart ? s.X0 : s.X1;
             double y = atStart ? s.Y0 : s.Y1;
             double r = atStart ? s.StartR : s.EndR;
-            double dx = s.X1 - s.X0, dy = s.Y1 - s.Y0;
-            double len = Math.Sqrt(dx * dx + dy * dy);
-            double px = 0.0, py = 1.0;
-            if (len > 1e-9) { px = -dy / len; py = dx / len; }
             double off = (r > 0.05 ? r : 0.5) + 5.0;
-            PlaceLeader(ms, tr, poses, x, y, x + px * off, y + py * off, name);
+            double tx, ty;
+            PlanView.Offset(x, y, planDeg, off, out tx, out ty);
+            PlaceLeader(ms, tr, poses, x, y, tx, ty, name, PlanView.LayerMh, planDeg);
         }
 
         static void PlaceLeader(BlockTableRecord ms, Transaction tr,
             Dictionary<string, LeaderPose> poses,
-            double ax, double ay, double tx, double ty, string key)
+            double ax, double ay, double tx, double ty, string key, string layer, double planDeg)
         {
-            double rot = 0.0;
+            double rot = PlanView.LeaderRotRad(planDeg);
             LeaderPose p;
             if (poses != null && poses.TryGetValue(key, out p) && p != null)
             {
                 tx = p.X;
                 ty = p.Y;
-                rot = p.Rot;
-                if (p.HasArrow)
-                {
-                    ax = p.Ax;
-                    ay = p.Ay;
-                }
             }
             if (poses != null)
             {
@@ -285,7 +303,7 @@ namespace Nvk.Cad
                     Ax = ax, Ay = ay, HasArrow = true
                 };
             }
-            NvkLeader.Make(ms, tr, Layer, ax, ay, tx, ty, key, rot);
+            NvkLeader.Make(ms, tr, layer, ax, ay, tx, ty, key, rot);
         }
 
         static void AddPline(BlockTableRecord ms, Transaction tr, List<PlanPt> pts, bool closed, short color, int lw)
@@ -320,7 +338,7 @@ namespace Nvk.Cad
             tr.AddNewlyCreatedDBObject(ltr, true);
         }
 
-        static void EraseLayer(Database db, Transaction tr, string layer)
+        static void EraseLayer(Database db, Transaction tr, string[] layers)
         {
             var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
             var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
@@ -328,7 +346,7 @@ namespace Nvk.Cad
             foreach (ObjectId id in ms)
             {
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                if (ent != null && string.Equals(ent.Layer, layer, StringComparison.OrdinalIgnoreCase))
+                if (ent != null && LayerIn(ent.Layer, layers))
                     erase.Add(id);
             }
             foreach (var id in erase)

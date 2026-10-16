@@ -68,6 +68,37 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void LeaderRotFollowsPlanX()
+        {
+            Assert.Equal(0.0, PlanView.LeaderRotRad(0), 9);
+            Assert.Equal(System.Math.PI / 2.0, PlanView.LeaderRotRad(90), 9);
+            Assert.Equal(-PlanView.TwistRad(30), PlanView.LeaderRotRad(30), 9);
+        }
+
+        [Fact]
+        public void OffsetAlongPlanY()
+        {
+            double ox, oy;
+            PlanView.Offset(10, 20, 0, 5, out ox, out oy);
+            Assert.Equal(10.0, ox, 6);
+            Assert.Equal(25.0, oy, 6);
+            PlanView.Offset(0, 0, 90, 5, out ox, out oy);
+            Assert.Equal(-5.0, ox, 6);
+            Assert.Equal(0.0, oy, 6);
+        }
+
+        [Fact]
+        public void SampLayerOffOnPipePlan()
+        {
+            Assert.True(PlanView.IsSampLeader(PlanView.LayerSamp));
+            Assert.False(PlanView.IsSampLeader(PlanView.LayerMh));
+            Assert.False(PlanView.IsOn(PlanView.LayerSamp, null, true));
+            Assert.True(PlanView.IsOn(PlanView.LayerMh, null, true));
+            Assert.True(PlanView.IsOn(PlanView.LayerSamp, null, false));
+            Assert.False(PlanView.IsOn(PlanView.LayerSamp, new[] { PlanView.LayerMh }, true));
+        }
+
+        [Fact]
         public void IsOursMatchesNvkPrefix()
         {
             Assert.True(PlanView.IsOurs("NVK-PLAN"));

@@ -9,6 +9,7 @@ namespace Nvk.Cad
         static readonly string[] Layers =
         {
             "NVK-CS", "NVK-POPER", "NVK-VOL", "NVK-PLAN",
+            "NVK-PLAN-MH", "NVK-PLAN-SAMP",
             "NVK-EP-RAZR", "NVK-EP-PESOK", "NVK-EP-TRUBA", "NVK-EP-ZASH", "NVK-EP-ZAS",
             "NVK-INS", "NVK-HATCH", "NVK-HATCHBND", "NVK-DATA", "NVK-MARK"
         };

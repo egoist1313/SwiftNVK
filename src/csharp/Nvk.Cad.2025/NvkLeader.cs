@@ -28,7 +28,10 @@ namespace Nvk.Cad
             var arrow = new Point3d(arrowX, arrowY, 0.0);
             var text = new Point3d(textX, textY, 0.0);
             if (arrow.DistanceTo(text) < 1e-3)
-                text = new Point3d(textX + 5.0, textY, 0.0);
+            {
+                double px = -Math.Sin(rot), py = Math.Cos(rot);
+                text = new Point3d(textX + 5.0 * px, textY + 5.0 * py, 0.0);
+            }
 
             var ml = TryManaged(btr, tr, db, layer, arrow, text, contents, rot);
             if (ml != null) { _ok++; return ml; }
@@ -44,7 +47,7 @@ namespace Nvk.Cad
             return null;
         }
 
-        public static Dictionary<string, LeaderPose> Collect(Database db, Transaction tr, string layer)
+        public static Dictionary<string, LeaderPose> Collect(Database db, Transaction tr, params string[] layers)
         {
             var map = new Dictionary<string, LeaderPose>(StringComparer.OrdinalIgnoreCase);
             if (db == null || tr == null) return map;
@@ -56,7 +59,7 @@ namespace Nvk.Cad
                 {
                     var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                     if (ent == null) continue;
-                    if (!string.Equals(ent.Layer, layer, StringComparison.OrdinalIgnoreCase))
+                    if (!LayerHit(ent.Layer, layers))
                         continue;
                     var ml = ent as MLeader;
                     if (ml != null)
@@ -77,6 +80,18 @@ namespace Nvk.Cad
             }
             catch (Exc) { }
             return map;
+        }
+
+        static bool LayerHit(string layer, string[] layers)
+        {
+            if (string.IsNullOrEmpty(layer) || layers == null || layers.Length == 0)
+                return false;
+            for (int i = 0; i < layers.Length; i++)
+            {
+                if (string.Equals(layer, layers[i], StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
 
         static void Add(Dictionary<string, LeaderPose> map, LeaderPose p)
@@ -306,6 +321,7 @@ namespace Nvk.Cad
                 }
                 catch (Exc) { }
                 ml.ContentType = ContentType.MTextContent;
+                try { ml.Annotative = AnnotativeStates.False; } catch (Exc) { }
 
                 double th = 2.5, asz = 1.25;
                 ObjectId txtSt = ObjectId.Null;
@@ -340,13 +356,27 @@ namespace Nvk.Cad
                 try { ml.ArrowSize = asz; } catch (Exc) { }
                 try { ml.EnableLanding = true; } catch (Exc) { }
                 try { ml.EnableDogleg = true; } catch (Exc) { }
-                try { ml.DoglegLength = Math.Max(th, asz); } catch (Exc) { }
+                double dogLen = Math.Max(th, asz);
+                try { ml.DoglegLength = dogLen; } catch (Exc) { }
                 try { ml.LandingGap = 0.5 * th; } catch (Exc) { }
                 try { ml.LeaderLineType = LeaderType.StraightLeader; } catch (Exc) { }
+                try
+                {
+                    ml.SetTextAttachmentType(TextAttachmentType.AttachmentMiddle,
+                        LeaderDirectionType.LeftLeader);
+                }
+                catch (Exc) { }
 
-                int line = AddLine(ml);
+                Vector3d dog = new Vector3d(Math.Cos(rot), Math.Sin(rot), 0.0);
+                if (dog.Length < 1e-9) dog = Vector3d.XAxis;
+                else dog = dog.GetNormal();
+                Point3d land = text - dog * dogLen;
+
+                int leader, line;
+                AddLeader(ml, out leader, out line);
                 ml.AddFirstVertex(line, arrow);
-                ml.AddLastVertex(line, text);
+                ml.AddLastVertex(line, land);
+                try { ml.SetDogleg(leader, dog); } catch (Exc) { }
                 try { ml.TextLocation = text; } catch (Exc) { }
 
                 if (!string.IsNullOrEmpty(layer)) ml.Layer = layer;
@@ -364,7 +394,6 @@ namespace Nvk.Cad
                     ml.TextLocation = text;
                 }
                 catch (Exc) { }
-                ApplyAnno(ml, db, tr);
                 NvkTag.Stamp(tr, ml);
                 return ml;
             }
@@ -375,18 +404,24 @@ namespace Nvk.Cad
             }
         }
 
-        static int AddLine(MLeader ml)
+        static void AddLeader(MLeader ml, out int leader, out int line)
         {
-            try { return ml.AddLeaderLine(0); }
-            catch (Exc)
+            leader = 0;
+            line = 0;
+            try
             {
-                int li = ml.AddLeader();
-                try { return ml.AddLeaderLine(li); }
-                catch (Exc)
-                {
-                    return li;
-                }
+                leader = ml.AddLeader();
+                try { line = ml.AddLeaderLine(leader); }
+                catch (Exc) { line = leader; }
+                return;
             }
+            catch (Exc) { }
+            try
+            {
+                line = ml.AddLeaderLine(0);
+                leader = 0;
+            }
+            catch (Exc) { }
         }
 
         static bool TryCom(string layer, Point3d arrow, Point3d text, string contents, double rot)

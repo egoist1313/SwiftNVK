@@ -832,6 +832,7 @@ namespace Nvk.Cad
             }
             names.Sort(StringComparer.OrdinalIgnoreCase);
             var on = PlanView.SplitLayers(NvkUiState.PlanVpOnFor(kind));
+            bool freezeSamp = kind == ProfileKind.Truba;
             using (var f = new Form())
             {
                 f.Text = "Слои плана — " + NvkSheets.NameOf(kind);
@@ -849,7 +850,7 @@ namespace Nvk.Cad
                     BorderStyle = BorderStyle.FixedSingle
                 };
                 foreach (var n in names)
-                    list.Items.Add(n, PlanView.IsOn(n, on));
+                    list.Items.Add(n, PlanView.IsOn(n, on, freezeSamp));
                 var bar = new Panel
                 {
                     Dock = DockStyle.Bottom,
@@ -868,7 +869,7 @@ namespace Nvk.Cad
                 ours.Click += (s, e) =>
                 {
                     for (int i = 0; i < list.Items.Count; i++)
-                        list.SetItemChecked(i, PlanView.IsOurs(list.Items[i].ToString()));
+                        list.SetItemChecked(i, PlanView.IsOn(list.Items[i].ToString(), null, freezeSamp));
                 };
                 var ok = new Button
                 {
@@ -898,7 +899,8 @@ namespace Nvk.Cad
                 {
                     for (int i = 0; i < names.Count; i++)
                     {
-                        if (PlanView.IsOurs(names[i]) && !PlanView.IsOn(names[i], sel))
+                        if (freezeSamp && PlanView.IsSampLeader(names[i])) continue;
+                        if (PlanView.IsOurs(names[i]) && !PlanView.IsOn(names[i], sel, freezeSamp))
                         {
                             onlyOurs = false;
                             break;

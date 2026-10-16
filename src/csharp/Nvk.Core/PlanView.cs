@@ -91,6 +91,48 @@ namespace Nvk.Core
             return -xAxisDeg * Math.PI / 180.0;
         }
 
+        /// <summary>Поворот текста/полки выноски: вдоль оси X плана, радианы.</summary>
+        public static double LeaderRotRad(double xAxisDeg)
+        {
+            return xAxisDeg * Math.PI / 180.0;
+        }
+
+        /// <summary>Единичная ось X плана (мировые координаты).</summary>
+        public static void AxisUnit(double xAxisDeg, out double ux, out double uy)
+        {
+            double r = LeaderRotRad(xAxisDeg);
+            ux = Math.Cos(r);
+            uy = Math.Sin(r);
+        }
+
+        /// <summary>Единичная ось Y плана: перпендикуляр оси X, вверх на листе.</summary>
+        public static void PerpUnit(double xAxisDeg, out double px, out double py)
+        {
+            double ux, uy;
+            AxisUnit(xAxisDeg, out ux, out uy);
+            px = -uy;
+            py = ux;
+        }
+
+        /// <summary>Смещение вдоль оси Y плана (полка над объектом на листе).</summary>
+        public static void Offset(double x, double y, double xAxisDeg, double dist,
+            out double ox, out double oy)
+        {
+            double px, py;
+            PerpUnit(xAxisDeg, out px, out py);
+            ox = x + px * dist;
+            oy = y + py * dist;
+        }
+
+        public const string LayerMh = "NVK-PLAN-MH";
+        public const string LayerSamp = "NVK-PLAN-SAMP";
+
+        public static bool IsSampLeader(string layer)
+        {
+            return !string.IsNullOrEmpty(layer)
+                && string.Equals(layer, LayerSamp, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>Слои NVK-* плюс 0 и Defpoints — те, что плагин держит включёнными по умолчанию.</summary>
         public static bool IsOurs(string layer)
         {
@@ -107,7 +149,16 @@ namespace Nvk.Core
         /// </summary>
         public static bool IsOn(string layer, IList<string> on)
         {
+            return IsOn(layer, on, false);
+        }
+
+        /// <summary>
+        /// freezeSamp — на плане трубы слой отбора всегда выключен.
+        /// </summary>
+        public static bool IsOn(string layer, IList<string> on, bool freezeSamp)
+        {
             if (string.IsNullOrEmpty(layer)) return false;
+            if (freezeSamp && IsSampLeader(layer)) return false;
             if (layer == "0") return true;
             if (string.Equals(layer, "Defpoints", StringComparison.OrdinalIgnoreCase))
                 return true;
