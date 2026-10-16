@@ -27,7 +27,7 @@ namespace Nvk.Cad
 
         readonly TextBox _bedding, _zash, _asph, _gazn, _trot, _slopeL, _slopeR, _trenchL, _trenchR, _hwidth, _ygap;
         readonly ComboBox _joint, _slopeU;
-        readonly TextBox _hSc, _lSc, _csSc, _csTh, _textH, _textOff, _stations, _labW, _labH, _vpEp, _vpCs;
+        readonly TextBox _hSc, _lSc, _csSc, _csTh, _textH, _textOff, _stations, _labW, _labH, _vpEp, _vpCs, _vpPlan;
         readonly CheckBox _blockCs, _showTags, _doCs, _doEp, _doPoper, _doVol, _doPlan, _doSheets;
         readonly CheckBox _showPerm;
         readonly CheckBox _projFact, _singleSc;
@@ -134,6 +134,7 @@ namespace Nvk.Cad
             _csTh = Num(pPar, "Текст сечения", "0.5");
             _vpEp = Num(pPar, "Лист профиль 1:", "500");
             _vpCs = Num(pPar, "Лист сечения 1:", "200");
+            _vpPlan = Num(pPar, "Лист план 1:", "500");
 
             pPar.Controls.Add(Head("Графика"));
             _blockCs  = Chk(pPar, "Сечения блоками", true);
@@ -279,6 +280,7 @@ namespace Nvk.Cad
             _csTh.Text    = NvkUiState.CsTextH.ToString("0.##");
             _vpEp.Text    = NvkUiState.VpScaleEp.ToString("0");
             _vpCs.Text    = NvkUiState.VpScaleCs.ToString("0");
+            _vpPlan.Text  = NvkUiState.VpScalePlan.ToString("0");
             _textH.Text   = NvkUiState.TextH.ToString("0.##");
             _textOff.Text = NvkUiState.TextOff.ToString("0.#");
             Pick(_slopeU, NvkUiState.SlopeUnit);
@@ -384,6 +386,8 @@ namespace Nvk.Cad
             if (NvkUiState.VpScaleEp < 1) NvkUiState.VpScaleEp = 500;
             NvkUiState.VpScaleCs = Parse(_vpCs, 200);
             if (NvkUiState.VpScaleCs < 1) NvkUiState.VpScaleCs = 200;
+            NvkUiState.VpScalePlan = Parse(_vpPlan, 500);
+            if (NvkUiState.VpScalePlan < 1) NvkUiState.VpScalePlan = 500;
             NvkUiState.TextH     = Parse(_textH, 2.5);
             NvkUiState.TextOff   = Parse(_textOff, 10);
             NvkUiState.RoundTo = 2;

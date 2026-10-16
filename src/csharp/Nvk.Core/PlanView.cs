@@ -83,6 +83,14 @@ namespace Nvk.Core
             return Math.Atan2(dy, dx) * 180.0 / Math.PI;
         }
 
+        /// <summary>
+        /// TwistAngle видового: ось X плана (градусы от мировой X) становится горизонталью листа.
+        /// </summary>
+        public static double TwistRad(double xAxisDeg)
+        {
+            return -xAxisDeg * Math.PI / 180.0;
+        }
+
         /// <summary>Слои NVK-* плюс 0 и Defpoints — те, что плагин держит включёнными по умолчанию.</summary>
         public static bool IsOurs(string layer)
         {

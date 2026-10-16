@@ -60,6 +60,14 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void TwistRadMakesPickedXHorizontal()
+        {
+            Assert.Equal(0.0, PlanView.TwistRad(0), 9);
+            Assert.Equal(-System.Math.PI / 2.0, PlanView.TwistRad(90), 9);
+            Assert.Equal(System.Math.PI / 4.0, PlanView.TwistRad(-45), 9);
+        }
+
+        [Fact]
         public void IsOursMatchesNvkPrefix()
         {
             Assert.True(PlanView.IsOurs("NVK-PLAN"));

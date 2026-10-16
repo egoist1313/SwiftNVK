@@ -420,6 +420,7 @@ namespace Nvk.Cad
 
             int nEp = ScaleN(NvkUiState.VpScaleEp, 500);
             int nCs = ScaleN(NvkUiState.VpScaleCs, 200);
+            int nPlan = ScaleN(NvkUiState.VpScalePlan, 500);
             SheetWin vol = null;
             if (NvkUiState.DoVol && NvkSession.VolWins != null)
                 NvkSession.VolWins.TryGetValue(kind, out vol);
@@ -472,7 +473,7 @@ namespace Nvk.Cad
             if (usableW < 40.0) usableW = 40.0;
             SheetWin coord = NvkUiState.DoVol ? NvkSession.CoordWin : null;
             SheetWin samp = (NvkUiState.DoVol && kind != ProfileKind.Truba) ? NvkSession.SampWin : null;
-            var specs = PackSpecs(kind, ep, vol, plan, coord, samp, cells, nEp, nCs,
+            var specs = PackSpecs(kind, ep, vol, plan, coord, samp, cells, nEp, nCs, nPlan,
                 margin, gap, titleBand, usableW, paperH);
 
             int nAdd = 0;
@@ -505,7 +506,7 @@ namespace Nvk.Cad
                 if (vol != null && vol.Valid) titleTxt += "    объёмы";
                 if (coord != null && coord.Valid) titleTxt += "    характерные точки";
                 if (samp != null && samp.Valid) titleTxt += "    отбор проб";
-                if (plan != null && plan.Valid) titleTxt += "    план";
+                if (plan != null && plan.Valid) titleTxt += "    план 1:" + nPlan.ToString();
                 MText titleEnt = null;
                 foreach (ObjectId id in ps)
                 {
@@ -545,6 +546,12 @@ namespace Nvk.Cad
             }
 
             NvkLog.Write("[НВК] лист " + name + " вид из модели " + specs.Count.ToString());
+            string prevLayout = "Model";
+            try { prevLayout = lm.CurrentLayout; } catch { }
+            try { lm.CurrentLayout = name; } catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] лист " + name + " вкладка: " + ex.Message);
+            }
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 foreach (var s in specs)
@@ -553,6 +560,7 @@ namespace Nvk.Cad
                     if (!have.TryGetValue(s.Key, out id) || id.IsNull) continue;
                     var vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
                     if (vp == null || vp.IsErased) continue;
+                    try { vp.Locked = false; } catch { }
                     try { vp.Width = s.W; } catch { }
                     try { vp.Height = s.H; } catch { }
                     try { vp.CenterPoint = new Point3d(s.Cx, s.Cy, 0.0); } catch { }
@@ -563,6 +571,7 @@ namespace Nvk.Cad
                 }
                 tr.Commit();
             }
+            try { lm.CurrentLayout = string.IsNullOrEmpty(prevLayout) ? "Model" : prevLayout; } catch { }
             NvkLog.Write("[НВК] лист " + name + " вид записан");
 
             NvkLog.Write("[НВК] лист " + name
@@ -570,13 +579,14 @@ namespace Nvk.Cad
                 + "  бумага " + paperW.ToString("0") + "x" + paperH.ToString("0")
                 + "  EP 1:" + nEp.ToString()
                 + "  CS 1:" + nCs.ToString()
+                + "  план 1:" + nPlan.ToString()
                 + "  экранов +" + nAdd.ToString()
                 + "  вид " + specs.Count.ToString());
             return nAdd > 0 ? nAdd : specs.Count;
         }
 
         static List<VpSpec> PackSpecs(ProfileKind kind, SheetWin ep, SheetWin vol, SheetWin plan,
-            SheetWin coord, SheetWin samp, List<CsCell> cells, int nEp, int nCs,
+            SheetWin coord, SheetWin samp, List<CsCell> cells, int nEp, int nCs, int nPlan,
             double margin, double gap, double titleBand, double usableW, double paperH)
         {
             var specs = new List<VpSpec>();
@@ -615,7 +625,7 @@ namespace Nvk.Cad
             place(samp, nEp, "SAMP", 0.0);
             double planTwist = kind != ProfileKind.Truba ? NvkUiState.PlanRotDeg : 0.0;
             if (kind != ProfileKind.Truba)
-                place(plan, nEp, "PLAN:" + ((int)kind).ToString(), planTwist);
+                place(plan, nPlan, "PLAN:" + ((int)kind).ToString(), planTwist);
 
             if (cells != null && cells.Count > 0)
             {
@@ -643,28 +653,29 @@ namespace Nvk.Cad
             double mm = MmPerM(scaleN);
             double cx = (win.MinX + win.MaxX) * 0.5;
             double cy = (win.MinY + win.MaxY) * 0.5;
-            double twist = twistDeg * Math.PI / 180.0;
+            double twist = PlanView.TwistRad(twistDeg);
+            double viewH = vp.Height / mm;
+            if (viewH < 1e-9) viewH = 1.0;
+            try { vp.Locked = false; } catch { }
             try { vp.PerspectiveOn = false; } catch { }
             try { vp.ViewDirection = new Vector3d(0.0, 0.0, 1.0); } catch { }
-            try { vp.TwistAngle = twist; } catch { }
-            if (Math.Abs(twist) > 1e-9)
+            try { vp.ViewTarget = new Point3d(cx, cy, 0.0); } catch { }
+            try { vp.ViewCenter = new Point2d(0.0, 0.0); } catch { }
+            try { vp.ViewHeight = viewH; } catch { }
+            try { vp.TwistAngle = twist; } catch (Exc ex)
             {
-                try { vp.ViewTarget = new Point3d(cx, cy, 0.0); } catch { }
-                try { vp.ViewCenter = new Point2d(0.0, 0.0); } catch { }
+                NvkLog.Write("[НВК] VP twist " + key + ": " + ex.Message);
             }
-            else
-            {
-                try { vp.ViewTarget = new Point3d(0.0, 0.0, 0.0); } catch { }
-                try { vp.ViewCenter = new Point2d(cx, cy); } catch { }
-            }
-            try { vp.ViewHeight = vp.Height / mm; } catch { }
+            double gotDeg = 0.0;
+            try { gotDeg = vp.TwistAngle * 180.0 / Math.PI; } catch { }
             NvkLog.Write("[НВК] VP вид " + key
                 + "  1:" + scaleN.ToString()
                 + "  центр " + cx.ToString("0.0") + "," + cy.ToString("0.0")
                 + "  модель " + win.Width.ToString("0.00") + "x" + win.Height.ToString("0.00")
                 + "  бумага " + vp.Width.ToString("0.0") + "x" + vp.Height.ToString("0.0")
                 + "  H=" + vp.ViewHeight.ToString("0.00")
-                + (Math.Abs(twistDeg) > 1e-9 ? "  пск " + twistDeg.ToString("0.##") : ""));
+                + "  пск " + twistDeg.ToString("0.##")
+                + "  twist " + gotDeg.ToString("0.##"));
         }
 
         static void ApplyPlanLayers(Transaction tr, Viewport vp, ProfileKind kind)

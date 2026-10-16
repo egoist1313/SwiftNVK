@@ -76,6 +76,7 @@ namespace Nvk.Cad
         public static bool DoSheets = true;
         public static double VpScaleEp = 500;
         public static double VpScaleCs = 200;
+        public static double VpScalePlan = 500;
         public static bool ProjFact;
         public static bool SingleScatter = true;
         public static bool UseScatterRazr = true;
@@ -365,6 +366,7 @@ namespace Nvk.Cad
             Pair(rb, "DO_SHEETS", DoSheets ? "1" : "0");
             Pair(rb, "VP_SC_EP", F(VpScaleEp, 0));
             Pair(rb, "VP_SC_CS", F(VpScaleCs, 0));
+            Pair(rb, "VP_SC_PLAN", F(VpScalePlan, 0));
             Pair(rb, "PROJ_FACT", ProjFact ? "1" : "0");
             Pair(rb, "SINGLE_SC", SingleScatter ? "1" : "0");
             Pair(rb, "USE_SC_R", UseScatterRazr ? "1" : "0");
@@ -591,6 +593,7 @@ namespace Nvk.Cad
                 case "DO_SHEETS": DoSheets = v != "0"; break;
                 case "VP_SC_EP": VpScaleEp = D(v, VpScaleEp); if (VpScaleEp < 1) VpScaleEp = 500; break;
                 case "VP_SC_CS": VpScaleCs = D(v, VpScaleCs); if (VpScaleCs < 1) VpScaleCs = 200; break;
+                case "VP_SC_PLAN": VpScalePlan = D(v, VpScalePlan); if (VpScalePlan < 1) VpScalePlan = 500; break;
                 case "PROJ_FACT": ProjFact = v != "0"; break;
                 case "SINGLE_SC": SingleScatter = v != "0"; break;
                 case "USE_SC_R": UseScatterRazr = v != "0"; break;

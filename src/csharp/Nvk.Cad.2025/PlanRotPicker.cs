@@ -53,7 +53,8 @@ namespace Nvk.Cad
             }
             NvkUiState.PlanRotDeg = deg;
             NvkPalette.SetPlanRot(deg);
-            ed.WriteMessage("\n[НВК] поворот ПСК " + deg.ToString("0.###") + "°");
+            try { NvkPipeline.SaveNod(); } catch (Exc) { }
+            ed.WriteMessage("\n[НВК] поворот ПСК " + deg.ToString("0.###") + "°  (Обновить — применить на листах)");
         }
     }
 }
