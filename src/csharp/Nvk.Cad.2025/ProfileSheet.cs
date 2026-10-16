@@ -233,8 +233,9 @@ namespace Nvk.Cad
 
             if (hatchTop.Count >= 2 && bot.Count >= 2)
             {
-                var hx = st.HatchExcavation ?? FillStyle.Of("ANSI31", 8, 1);
-                double hxSc = ProfileHatchScale(hx.Pattern, lSc) * (hx.Scale <= 0 ? 1 : hx.Scale);
+                var hx = HatchPat.ForKind(ProfileKind.Razrabotka, st, null)
+                    ?? FillStyle.Of("ANSI31", 8, 1);
+                double hxSc = HatchPat.Scale(hx);
                 if (gapAtMh)
                     HatchBandGapped(ms, tr, layer, hatchTop, bot, last, o, lSc, hx.Pattern, hxSc, CadColor.Of(hx));
                 else
@@ -581,24 +582,21 @@ namespace Nvk.Cad
             ProfileKind kind, SectionConfig cfg, SheetStyle sh, bool gapAtMh)
         {
             HeightSrc topSrc, botSrc;
-            string pat;
             switch (kind)
             {
                 case ProfileKind.Razrabotka:
-                    topSrc = HeightSrc.Surface; botSrc = HeightSrc.TrenchBottom; pat = "ANSI31"; break;
+                    topSrc = HeightSrc.Surface; botSrc = HeightSrc.TrenchBottom; break;
                 case ProfileKind.Pesok:
-                    topSrc = HeightSrc.SandTop; botSrc = HeightSrc.TrenchBottom; pat = "ANSI31"; break;
+                    topSrc = HeightSrc.SandTop; botSrc = HeightSrc.TrenchBottom; break;
                 case ProfileKind.Truba:
-                    topSrc = HeightSrc.Invert; botSrc = HeightSrc.Invert; pat = null; break;
+                    topSrc = HeightSrc.Invert; botSrc = HeightSrc.Invert; break;
                 case ProfileKind.Zashita:
-                    topSrc = HeightSrc.ZashTop; botSrc = HeightSrc.SandTop; pat = "AR-SAND"; break;
+                    topSrc = HeightSrc.ZashTop; botSrc = HeightSrc.SandTop; break;
                 default:
-                    topSrc = HeightSrc.Surface; botSrc = HeightSrc.ZashTop; pat = "DOTS"; break;
+                    topSrc = HeightSrc.Surface; botSrc = HeightSrc.ZashTop; break;
             }
-            if (kind == ProfileKind.Truba)
-                pat = null;
-            else if (sh != null && sh.Hatch != null && !string.IsNullOrEmpty(sh.Hatch.Pattern))
-                pat = sh.Hatch.Pattern;
+            var hx = HatchPat.ForKind(kind, NvkSession.L1, sh);
+            string pat = hx != null ? hx.Pattern : null;
 
             var topPts = PtsFor(topSrc, last, cfg, o, lSc, hSc, osh);
             var botPts = PtsFor(botSrc, last, cfg, o, lSc, hSc, osh);
@@ -676,10 +674,8 @@ namespace Nvk.Cad
             if (pat != null && topPts.Count >= 2 && botPts.Count >= 2
                 && AvgY(topPts) > AvgY(botPts) + 1e-4)
             {
-                var col = sh != null && sh.Hatch != null ? CadColor.Of(sh.Hatch) : Aci(8);
-                double sc = ProfileHatchScale(pat, lSc);
-                if (sh != null && sh.Hatch != null && sh.Hatch.Scale > 0)
-                    sc *= sh.Hatch.Scale;
+                var col = hx != null ? CadColor.Of(hx) : Aci(8);
+                double sc = HatchPat.Scale(hx);
                 if (kind == ProfileKind.Zashita || kind == ProfileKind.Zasypka)
                 {
                     if (gapAtMh)
@@ -1103,7 +1099,8 @@ namespace Nvk.Cad
         static void HatchDiamGroups(BlockTableRecord ms, Transaction tr, DomainResult last,
             Point3d o, double lSc, List<Point2d> top, List<Point2d> bot, string pat, string visLayer)
         {
-            HatchDiamGroups(ms, tr, last, o, lSc, top, bot, pat, visLayer, Aci(8), ProfileHatchScale(pat, lSc));
+            HatchDiamGroups(ms, tr, last, o, lSc, top, bot, pat, visLayer, Aci(8),
+                HatchPat.Scale(FillStyle.Of(pat, 8, 1)));
         }
 
         static void HatchDiamGroups(BlockTableRecord ms, Transaction tr, DomainResult last,
@@ -1136,7 +1133,8 @@ namespace Nvk.Cad
         static void HatchPipesInner(BlockTableRecord ms, Transaction tr, DomainResult last,
             Point3d o, double lSc, List<Point2d> top, List<Point2d> bot, string pat, string visLayer)
         {
-            HatchPipesInner(ms, tr, last, o, lSc, top, bot, pat, visLayer, Aci(8), ProfileHatchScale(pat, lSc));
+            HatchPipesInner(ms, tr, last, o, lSc, top, bot, pat, visLayer, Aci(8),
+                HatchPat.Scale(FillStyle.Of(pat, 8, 1)));
         }
 
         static void HatchPipesInner(BlockTableRecord ms, Transaction tr, DomainResult last,
@@ -1156,10 +1154,7 @@ namespace Nvk.Cad
                     {
                         var closed = new List<Point2d>(tc);
                         for (int i = bc.Count - 1; i >= 0; i--) closed.Add(bc[i]);
-                        string p = pat;
-                        if (pat == "DOTS" && last.Cfg != null && last.Cfg.ThkPavement > 0)
-                            p = "AR-SAND";
-                        Hatch(ms, tr, visLayer, closed.ToArray(), p, scale, col);
+                        Hatch(ms, tr, visLayer, closed.ToArray(), pat, scale, col);
                     }
                 }
                 ch += sg.Length2d;
@@ -2112,16 +2107,6 @@ namespace Nvk.Cad
                 case ProfileKind.Zashita: return 6;
                 default: return 3;
             }
-        }
-
-        static double ProfileHatchScale(string pat, double lSc)
-        {
-            double dim = NvkSession.Cannoscale > 0 ? NvkSession.Cannoscale : 1000.0;
-            double horiz = (lSc > 0 ? dim / lSc : dim);
-            double bas = 1.0;
-            if (string.Equals(pat, "DOTS", StringComparison.OrdinalIgnoreCase)) bas = 1.0;
-            else if (string.Equals(pat, "AR-SAND", StringComparison.OrdinalIgnoreCase)) bas = 0.05;
-            return bas * (horiz / 1000.0);
         }
 
         static void EnsureLayer(Database db, Transaction tr, string name, short color)

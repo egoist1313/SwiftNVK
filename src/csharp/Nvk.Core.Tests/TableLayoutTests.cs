@@ -128,6 +128,27 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void HatchForKindMatchesSheetAndScale()
+        {
+            var l1 = L1Style.Default();
+            l1.HatchExcavation = FillStyle.Rgb("DOTS", 1, 2, 3, 2);
+            var hx = HatchPat.ForKind(ProfileKind.Razrabotka, l1, null);
+            Assert.Equal("DOTS", hx.Pattern);
+            Assert.Equal(0.4, HatchPat.Scale(hx), 6);
+
+            var l2 = SheetStyle.Pesok();
+            l2.Hatch = FillStyle.Rgb("AR-SAND", 10, 20, 30, 3);
+            Assert.Equal("AR-SAND", HatchPat.ForKind(ProfileKind.Pesok, l1, l2).Pattern);
+            Assert.Equal(0.03, HatchPat.Scale(l2.Hatch), 6);
+
+            Assert.Null(HatchPat.ForKind(ProfileKind.Truba, l1, SheetStyle.Truba()));
+            Assert.Equal("ANSI31", HatchPat.ForKind(ProfileKind.Pesok, l1, SheetStyle.Pesok()).Pattern);
+            Assert.Equal("AR-SAND", HatchPat.ForKind(ProfileKind.Zashita, l1, SheetStyle.Zashita()).Pattern);
+            Assert.Equal("DOTS", HatchPat.ForKind(ProfileKind.Zasypka, l1, SheetStyle.Zasypka()).Pattern);
+            Assert.Equal(1.0, HatchPat.Scale(FillStyle.Rgb("ANSI31", 8, 8, 8, 1)), 6);
+        }
+
+        [Fact]
         public void CsTableHeightUsesSevenCharFloor()
         {
             var hit = new StationHit { Station = 10, Invert = 100, Diam = 0.3 };

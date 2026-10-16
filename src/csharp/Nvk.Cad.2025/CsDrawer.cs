@@ -198,14 +198,14 @@ namespace Nvk.Cad
             if (pitUp && level == 1)
             {
                 var earth = ToDraw(TrenchGeom.EarthOutline(g, mL, mR), sc, osh, ox, oy);
-                TryHatch(btr, tr, earth, "ANSI31", HatchPat.CsFixed("ANSI31"), Aci(8));
+                ApplyHatch(btr, tr, earth, HatchOf(ProfileKind.Razrabotka), true);
             }
 
             if (level >= 2)
             {
                 var sand = ToDraw(Trap(bL, bR, e.TrenchBottom, xInvL, xInvR, e.SandTop), sc, osh, ox, oy);
                 AddPline(btr, tr, sand, Aci(level == 2 ? cur : gray), closed: true, lw: level == 2 ? 30 : 0);
-                TryHatch(btr, tr, sand, "AR-SAND", HatchPat.CsFixed("AR-SAND"), Aci(level == 2 ? (short)2 : gray));
+                ApplyHatch(btr, tr, sand, HatchOf(ProfileKind.Pesok), level == 2);
             }
 
             Point3d pipeC = new Point3d(ox, oy + (zCtr - osh) * sc, 0.0);
@@ -220,10 +220,11 @@ namespace Nvk.Cad
                 {
                     var zash = ToDraw(zashPoly, sc, osh, ox, oy);
                     AddPline(btr, tr, zash, Aci(level == 4 ? cur : gray), closed: true, lw: level == 4 ? 30 : 0);
+                    var zashFill = HatchOf(ProfileKind.Zashita);
                     if (pipeInZash)
-                        TryHatchHole(btr, tr, zash, pipeC, pipeR, "AR-SAND", HatchPat.CsFixed("AR-SAND"), Aci(level == 4 ? (short)2 : gray));
+                        ApplyHatchHole(btr, tr, zash, pipeC, pipeR, zashFill, level == 4);
                     else
-                        TryHatch(btr, tr, zash, "AR-SAND", HatchPat.CsFixed("AR-SAND"), Aci(level == 4 ? (short)2 : gray));
+                        ApplyHatch(btr, tr, zash, zashFill, level == 4);
                 }
                 else if (level == 4)
                 {
@@ -246,10 +247,8 @@ namespace Nvk.Cad
             if (level >= 5 && e.HasBackfill)
             {
                 var zas = ToDraw(TrenchGeom.BackfillDrawPoly(g, mL, mR), sc, osh, ox, oy);
-                var cfgFill = NvkSession.Last != null ? NvkSession.Last.Cfg : null;
-                string fill = HatchPat.Backfill(g.ZoneType, cfgFill);
                 AddPline(btr, tr, zas, Aci(cur), closed: true, lw: 30);
-                TryHatch(btr, tr, zas, fill, HatchPat.CsFixed(fill), Aci(3));
+                ApplyHatch(btr, tr, zas, HatchOf(ProfileKind.Zasypka), true);
             }
 
             DrawL0L6(btr, tr, g, sc, osh, ox, oy, mL, mR, level);
@@ -689,6 +688,28 @@ namespace Nvk.Cad
             {
                 AddSeg(btr, tr, x1, y1, x2, y2, Aci(1), 0);
             }
+        }
+
+        static FillStyle HatchOf(ProfileKind kind)
+        {
+            if (kind == ProfileKind.Razrabotka)
+                return HatchPat.ForKind(kind, NvkSession.L1, null);
+            return HatchPat.ForKind(kind, NvkSession.L1, NvkSession.Sheet(kind));
+        }
+
+        static void ApplyHatch(BlockTableRecord btr, Transaction tr, Point2d[] pts, FillStyle fill, bool current)
+        {
+            if (fill == null || string.IsNullOrEmpty(fill.Pattern)) return;
+            TryHatch(btr, tr, pts, fill.Pattern, HatchPat.Scale(fill),
+                current ? CadColor.Of(fill) : Aci(8));
+        }
+
+        static void ApplyHatchHole(BlockTableRecord btr, Transaction tr, Point2d[] pts,
+            Point3d center, double r, FillStyle fill, bool current)
+        {
+            if (fill == null || string.IsNullOrEmpty(fill.Pattern)) return;
+            TryHatchHole(btr, tr, pts, center, r, fill.Pattern, HatchPat.Scale(fill),
+                current ? CadColor.Of(fill) : Aci(8));
         }
 
         static void TryHatchHole(BlockTableRecord btr, Transaction tr, Point2d[] pts, Point3d center, double r, string pat, double patScale, AcadColor color)
