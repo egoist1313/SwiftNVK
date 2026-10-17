@@ -105,6 +105,7 @@ namespace Nvk.Cad
             if (pipes.Count > 0 && !force)
             {
                 NvkSession.LastPipes = pipes;
+                NvkSites.RememberPipes();
                 ed.WriteMessage("\n[НВК] INPUT: труб " + pipes.Count
                     + "  TIN=" + (string.IsNullOrEmpty(NvkUiState.DesignName) ? "-" : NvkUiState.DesignName)
                     + "  (НВК-ВВОД — сменить)");
@@ -118,6 +119,7 @@ namespace Nvk.Cad
                 if (pipes.Count > 0)
                 {
                     NvkSession.LastPipes = pipes;
+                    NvkSites.RememberPipes();
                     ed.WriteMessage("\n[НВК] оставляю прежние трубы: " + pipes.Count);
                     return "труб " + pipes.Count;
                 }
@@ -125,6 +127,7 @@ namespace Nvk.Cad
                 return null;
             }
             NvkSession.LastPipes = ids;
+            NvkSites.RememberPipes();
             ed.WriteMessage("\n[НВК] труб: " + ids.Count);
             PickTin(ed, doc, false);
             SaveNod();

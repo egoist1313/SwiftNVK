@@ -70,8 +70,99 @@ namespace Nvk.Cad
             if (db == null) return;
             var map = NvkUiState.Serialize();
             AddLayout(map, db);
-            string seg = NvkSession.Last != null ? NvkSession.Last.SegId : null;
+            NvkSites.PutInto(map);
+            string seg = NvkSites.CurrentId;
+            if (string.IsNullOrEmpty(seg) && NvkSession.Last != null)
+                seg = NvkSession.Last.SegId;
             Write(db, map, seg);
+        }
+
+        public static void CaptureLayout(Dictionary<string, string> map)
+        {
+            var doc = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+            AddLayout(map, doc != null ? doc.Database : null);
+        }
+
+        public static void WriteSite(Database db, string segId, IDictionary<string, string> map)
+        {
+            if (db == null || map == null || string.IsNullOrEmpty(segId)) return;
+            WriteKey(db, "S_" + SegKey(segId), map);
+        }
+
+        public static string SegKeyPublic(string s)
+        {
+            return SegKey(s);
+        }
+
+        public static Dictionary<string, string> ReadKey(Database db, string key)
+        {
+            var empty = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (db == null || string.IsNullOrEmpty(key)) return empty;
+            try
+            {
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var nod = (DBDictionary)tr.GetObject(db.NamedObjectsDictionaryId, OpenMode.ForRead);
+                    if (nod == null || !nod.Contains("NVK"))
+                    {
+                        tr.Commit();
+                        return empty;
+                    }
+                    var nvk = tr.GetObject(nod.GetAt("NVK"), OpenMode.ForRead) as DBDictionary;
+                    if (nvk == null || !nvk.Contains(key))
+                    {
+                        tr.Commit();
+                        return empty;
+                    }
+                    var rec = tr.GetObject(nvk.GetAt(key), OpenMode.ForRead) as Xrecord;
+                    if (rec == null || rec.Data == null)
+                    {
+                        tr.Commit();
+                        return empty;
+                    }
+                    var lines = new List<string>();
+                    foreach (TypedValue tv in rec.Data)
+                    {
+                        if (tv.TypeCode == 1 && tv.Value is string s && s.Length > 0)
+                            lines.Add(s);
+                    }
+                    tr.Commit();
+                    return NodPairs.Parse(lines);
+                }
+            }
+            catch
+            {
+                return empty;
+            }
+        }
+
+        public static void DeleteKey(Database db, string key)
+        {
+            if (db == null || string.IsNullOrEmpty(key)) return;
+            try
+            {
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var nod = (DBDictionary)tr.GetObject(db.NamedObjectsDictionaryId, OpenMode.ForWrite);
+                    if (nod == null || !nod.Contains("NVK"))
+                    {
+                        tr.Commit();
+                        return;
+                    }
+                    var nvk = (DBDictionary)tr.GetObject(nod.GetAt("NVK"), OpenMode.ForWrite);
+                    if (nvk != null && nvk.Contains(key))
+                    {
+                        try
+                        {
+                            var old = tr.GetObject(nvk.GetAt(key), OpenMode.ForWrite);
+                            old.Erase();
+                        }
+                        catch (Exc) { }
+                    }
+                    tr.Commit();
+                }
+            }
+            catch (Exc) { }
         }
 
         /// <summary>
@@ -90,7 +181,9 @@ namespace Nvk.Cad
                     map = Read(db);
                 }
                 map[key] = value ?? "";
-                string seg = NvkSession.Last != null ? NvkSession.Last.SegId : null;
+                string seg = NvkSites.CurrentId;
+                if (string.IsNullOrEmpty(seg) && NvkSession.Last != null)
+                    seg = NvkSession.Last.SegId;
                 Write(db, map, seg);
             }
             catch { }
@@ -182,7 +275,10 @@ namespace Nvk.Cad
             map["PLAN_LAT"] = JoinNums(NvkSession.CachePlanLat);
             map["PLAN_LDR"] = NvkSession.CachePlanLdr ?? "";
             map["PIPES"] = HandlesOf(NvkSession.LastPipes);
-            map["SEG"] = NvkSession.Last != null ? (NvkSession.Last.SegId ?? "") : "";
+            string seg = NvkSites.CurrentId;
+            if (string.IsNullOrEmpty(seg) && NvkSession.Last != null)
+                seg = NvkSession.Last.SegId ?? "";
+            map["SEG"] = seg ?? "";
             if (db != null && string.IsNullOrEmpty(map["PIPES"]) && NvkSession.LastPipes != null)
                 map["PIPES"] = HandlesOf(NvkSession.LastPipes);
         }

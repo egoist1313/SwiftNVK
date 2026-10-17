@@ -39,6 +39,25 @@ namespace Nvk.Cad
             catch { }
         }
 
+        public static void Reload()
+        {
+            try
+            {
+                if (_panel != null) _panel.LoadFromState();
+                if (_rowPanel != null) _rowPanel.LoadFromState();
+            }
+            catch { }
+        }
+
+        public static void Flush()
+        {
+            try
+            {
+                if (_panel != null) _panel.SaveToState();
+            }
+            catch { }
+        }
+
         public static ResultBuffer GetLisp(ResultBuffer args)
         {
             if (_panel != null)
@@ -102,6 +121,7 @@ namespace Nvk.Cad
                     if (!NvkProfile.Load())
                         NvkUiState.ResetToDefaults();
                     NvkSession.ClearDrawingCaches();
+                    NvkSites.Reset();
                     NvkUiState.HasNod = false;
                     NvkUiState.MarkCurrent(key);
                     try { NvkLog.Write("[НВК] STATE из профиля (в чертеже пусто)"); } catch { }

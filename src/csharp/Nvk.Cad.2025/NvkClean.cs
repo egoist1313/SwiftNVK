@@ -71,6 +71,56 @@ namespace Nvk.Cad
                  + "  (трубы и TIN не трогали)";
         }
 
+        public static string EraseSeg(Database db, Transaction tr, string seg)
+        {
+            if (db == null || tr == null || string.IsNullOrEmpty(seg))
+                return "[НВК] нет участка";
+            int nEnt = 0, nBlk = 0;
+            var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+            var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+            var erase = new List<ObjectId>();
+            foreach (ObjectId id in ms)
+            {
+                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null) continue;
+                string g = NvkTag.Get(ent);
+                bool ours = string.Equals(g, seg, StringComparison.OrdinalIgnoreCase);
+                if (!ours)
+                {
+                    var br = ent as BlockReference;
+                    string bname = null;
+                    if (br != null)
+                    {
+                        try { bname = br.Name; } catch { }
+                    }
+                    if (NvkTag.MatchesBlock(bname, seg)) ours = true;
+                }
+                if (ours) erase.Add(id);
+            }
+            foreach (var id in erase)
+            {
+                tr.GetObject(id, OpenMode.ForWrite).Erase();
+                nEnt++;
+            }
+            bt.UpgradeOpen();
+            var blkErase = new List<ObjectId>();
+            foreach (ObjectId id in bt)
+            {
+                var btr = (BlockTableRecord)tr.GetObject(id, OpenMode.ForRead);
+                if (btr.IsAnonymous || btr.IsLayout) continue;
+                if (NvkTag.MatchesBlock(btr.Name, seg)
+                    && btr.GetBlockReferenceIds(true, true).Count == 0)
+                    blkErase.Add(id);
+            }
+            foreach (var id in blkErase)
+            {
+                var btr = (BlockTableRecord)tr.GetObject(id, OpenMode.ForWrite);
+                btr.Erase();
+                nBlk++;
+            }
+            return "[НВК] участок " + seg + ": объектов " + nEnt + "  блоков " + nBlk;
+        }
+
         static bool IsNvkLayer(string layer)
         {
             if (string.IsNullOrEmpty(layer)) return false;

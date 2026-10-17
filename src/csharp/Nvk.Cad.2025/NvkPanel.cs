@@ -47,6 +47,8 @@ namespace Nvk.Cad
         readonly DataGridView _wallGrid;
         System.Collections.Generic.List<TableRowDef> _defsL1, _defsL2, _defsL3, _defsL4, _defsL5;
         readonly Label _status, _info;
+        readonly ComboBox _sites;
+        bool _siteBusy;
 
         public NvkPanel()
         {
@@ -86,6 +88,34 @@ namespace Nvk.Cad
                 Margin = new Padding(0, 4, 0, 8)
             };
             pRun.Controls.Add(_info);
+
+            pRun.Controls.Add(Head("Участки"));
+            var siteBar = new FlowLayoutPanel
+            {
+                Width = 244,
+                Height = 38,
+                WrapContents = false,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 0, 0, 4)
+            };
+            _sites = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Width = 164,
+                Height = 28,
+                BackColor = C_INPUT,
+                ForeColor = C_TEXT,
+                Font = new Font("Segoe UI", 9f),
+                DrawMode = DrawMode.OwnerDrawFixed,
+                ItemHeight = 22,
+                Margin = new Padding(0, 2, 2, 2)
+            };
+            _sites.DrawItem += DrawComboItem;
+            _sites.SelectedIndexChanged += OnSitePicked;
+            siteBar.Controls.Add(_sites);
+            siteBar.Controls.Add(Btn("+", () => { SaveToState(); Send("НВК-УЧАСТОК-ДОБ "); }, 34));
+            siteBar.Controls.Add(Btn("×", () => { SaveToState(); Send("НВК-УЧАСТОК-УД "); }, 34));
+            pRun.Controls.Add(siteBar);
 
             pRun.Controls.Add(Head("Этапы"));
             _doCs    = Chk(pRun, "Поперечники", true);
@@ -354,7 +384,39 @@ namespace Nvk.Cad
             if (_defsL3 != null) RowScatter.ApplyLegacy(_defsL3, ProfileKind.Truba);
             if (_defsL4 != null) RowScatter.ApplyLegacy(_defsL4, ProfileKind.Zashita);
             if (_defsL5 != null) RowScatter.ApplyLegacy(_defsL5, ProfileKind.Zasypka);
+            FillSites();
             RefreshInfo();
+        }
+
+        void FillSites()
+        {
+            if (_sites == null) return;
+            _siteBusy = true;
+            try
+            {
+                NvkSites.EnsureOne();
+                _sites.Items.Clear();
+                for (int i = 0; i < NvkSites.All.Count; i++)
+                    _sites.Items.Add(NvkSites.All[i].Name ?? NvkSites.All[i].Id);
+                int ix = NvkSites.Index;
+                if (ix < 0) ix = 0;
+                if (_sites.Items.Count == 0) return;
+                if (ix >= _sites.Items.Count) ix = _sites.Items.Count - 1;
+                _sites.SelectedIndex = ix;
+            }
+            finally
+            {
+                _siteBusy = false;
+            }
+        }
+
+        void OnSitePicked(object sender, EventArgs e)
+        {
+            if (_siteBusy || _sites == null) return;
+            int i = _sites.SelectedIndex;
+            if (i < 0 || i == NvkSites.Index) return;
+            SaveToState();
+            Send("НВК-УЧАСТОК " + (i + 1).ToString() + " ");
         }
 
         public void SaveToState()
@@ -543,13 +605,20 @@ namespace Nvk.Cad
 
         public void RefreshInfo()
         {
+            var site = NvkSites.Current;
+            string head = site != null && !string.IsNullOrEmpty(site.Name) ? site.Name : "Участок";
+            int nPipe = NvkSession.LastPipes != null ? NvkSession.LastPipes.Count : 0;
             var last = NvkSession.Last;
             if (last == null || last.Chain == null)
             {
-                _info.Text = "Домена нет. Построить спросит трубы и TIN.";
+                if (nPipe > 0)
+                    _info.Text = head + "  труб " + nPipe
+                        + "\nПостроить пересчитает домен.";
+                else
+                    _info.Text = head + "\nНет труб. «+» или Трубы.";
                 return;
             }
-            _info.Text = "Труб " + last.Chain.Segs.Count
+            _info.Text = head + "  труб " + last.Chain.Segs.Count
                 + "   L=" + last.Chain.Total.ToString("0.0") + " м"
                 + "\nTIN " + (last.SurfName ?? "-")
                 + "   сечений " + (last.Geoms == null ? 0 : last.Geoms.Count);

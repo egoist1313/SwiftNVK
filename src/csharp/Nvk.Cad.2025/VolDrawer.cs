@@ -264,6 +264,7 @@ namespace Nvk.Cad
             mt.Contents = txt;
             ms.AppendEntity(mt);
             tr.AddNewlyCreatedDBObject(mt, true);
+            NvkTag.Stamp(tr, mt);
             return mt.ObjectId;
         }
 
@@ -307,7 +308,8 @@ namespace Nvk.Cad
             foreach (ObjectId id in msr)
             {
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                if (ent != null && string.Equals(ent.Layer, layer, StringComparison.OrdinalIgnoreCase))
+                if (ent != null && string.Equals(ent.Layer, layer, StringComparison.OrdinalIgnoreCase)
+                    && NvkTag.Matches(ent, NvkSites.CurrentId))
                     erase.Add(id);
             }
             foreach (var id in erase)

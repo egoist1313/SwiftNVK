@@ -29,6 +29,26 @@ namespace Nvk.Cad
         [CommandMethod("НВК-ВВОД", CommandFlags.UsePickSet)]
         public void Input() { NvkPipeline.StageInput(true); }
 
+        [CommandMethod("НВК-УЧАСТОК-ДОБ")]
+        public void SiteAdd() { NvkSites.AddFromCommand(); }
+
+        [CommandMethod("НВК-УЧАСТОК-УД")]
+        public void SiteDel() { NvkSites.RemoveFromCommand(); }
+
+        [CommandMethod("НВК-УЧАСТОК")]
+        public void SiteGo()
+        {
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            var opt = new Autodesk.AutoCAD.EditorInput.PromptIntegerOptions("\nНомер участка: ");
+            opt.AllowNone = false;
+            opt.LowerLimit = 1;
+            opt.UpperLimit = 99;
+            var res = doc.Editor.GetInteger(opt);
+            if (res.Status != Autodesk.AutoCAD.EditorInput.PromptStatus.OK) return;
+            NvkSites.Select(res.Value - 1);
+        }
+
         [CommandMethod("НВК-ДАМП", CommandFlags.UsePickSet)]
         public void Dump() { NvkPipeline.Dump(); }
 

@@ -413,7 +413,8 @@ namespace Nvk.Cad
             foreach (ObjectId id in ms)
             {
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                if (ent != null && LayerIn(ent.Layer, layers))
+                if (ent != null && LayerIn(ent.Layer, layers)
+                    && NvkTag.Matches(ent, NvkSites.CurrentId))
                     erase.Add(id);
             }
             foreach (var id in erase)

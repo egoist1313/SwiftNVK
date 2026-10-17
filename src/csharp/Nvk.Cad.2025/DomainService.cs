@@ -176,7 +176,8 @@ namespace Nvk.Cad
                 geoms.Add(g);
             }
 
-            string segId = MakeSegId(chain.Segs);
+            string segId = NvkSites.CurrentId;
+            if (string.IsNullOrEmpty(segId)) segId = MakeSegId(chain.Segs);
 
             var result = new DomainResult
             {

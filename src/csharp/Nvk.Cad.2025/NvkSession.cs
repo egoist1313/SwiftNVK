@@ -49,7 +49,7 @@ namespace Nvk.Cad
 
     static class NvkSession
     {
-        public const string Version = "0.189";
+        public const string Version = "0.190";
         public static int RunId;
         public static DomainResult Last;
         public static List<DomainResult> Runs = new List<DomainResult>();
@@ -214,6 +214,7 @@ namespace Nvk.Cad
         {
             Runs = list ?? new List<DomainResult>();
             Last = Runs.Count > 0 ? Runs[0] : null;
+            NvkSites.AttachRuns(Runs);
         }
 
         public static List<DomainResult> AllRuns()

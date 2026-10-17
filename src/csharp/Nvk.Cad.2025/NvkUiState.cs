@@ -485,6 +485,7 @@ namespace Nvk.Cad
             if (!force && IsCurrent(key) && HasNod) return true;
             FromMap(map);
             NvkNod.ApplyLayout(db, map);
+            NvkSites.TakeFrom(map, db);
             LoadedDocKey = key;
             HasNod = true;
             try

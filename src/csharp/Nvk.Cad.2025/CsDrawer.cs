@@ -842,9 +842,12 @@ namespace Nvk.Cad
                 {
                     try { n = br.Name; } catch (Exc) { }
                 }
-                if (n != null && n.StartsWith("NVK-CS-", StringComparison.OrdinalIgnoreCase))
+                string seg = NvkSites.CurrentId;
+                if (n != null && n.StartsWith("NVK-CS-", StringComparison.OrdinalIgnoreCase)
+                    && NvkTag.MatchesBlock(n, seg))
                     erase.Add(id);
-                else if (string.Equals(ent.Layer, LayerIns, StringComparison.OrdinalIgnoreCase))
+                else if (string.Equals(ent.Layer, LayerIns, StringComparison.OrdinalIgnoreCase)
+                         && NvkTag.Matches(ent, seg))
                     erase.Add(id);
             }
             foreach (var id in erase)
@@ -858,7 +861,8 @@ namespace Nvk.Cad
             {
                 var btr = (BlockTableRecord)tr.GetObject(id, OpenMode.ForRead);
                 if (btr.IsAnonymous || btr.IsLayout) continue;
-                if (btr.Name != null && btr.Name.StartsWith("NVK-CS-", StringComparison.OrdinalIgnoreCase))
+                if (btr.Name != null && btr.Name.StartsWith("NVK-CS-", StringComparison.OrdinalIgnoreCase)
+                    && NvkTag.MatchesBlock(btr.Name, NvkSites.CurrentId))
                     blkErase.Add(id);
             }
             foreach (var id in blkErase)

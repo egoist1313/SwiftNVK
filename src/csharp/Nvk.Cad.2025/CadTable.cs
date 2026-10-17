@@ -22,6 +22,7 @@ namespace Nvk.Cad
                 tbl.Columns[c].Width = textH * 12.0;
             ms.AppendEntity(tbl);
             tr.AddNewlyCreatedDBObject(tbl, true);
+            NvkTag.Stamp(tr, tbl);
             return tbl;
         }
 
