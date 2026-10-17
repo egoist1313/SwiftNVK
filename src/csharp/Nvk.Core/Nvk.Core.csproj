@@ -4,7 +4,7 @@
     <LangVersion>8.0</LangVersion>
     <Nullable>disable</Nullable>
     <RootNamespace>Nvk.Core</RootNamespace>
-    <Version>0.188.0</Version>
+    <Version>0.189.0</Version>
     <AssemblyName>Nvk.Core</AssemblyName>
   </PropertyGroup>
 </Project>

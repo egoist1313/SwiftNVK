@@ -236,10 +236,7 @@ namespace Nvk.Cad
                 var hx = HatchPat.ForKind(ProfileKind.Razrabotka, st, null)
                     ?? FillStyle.Of("ANSI31", 8, 1);
                 double hxSc = HatchPat.Scale(hx);
-                if (gapAtMh)
-                    HatchBandGapped(ms, tr, layer, hatchTop, bot, last, o, lSc, hx.Pattern, hxSc, CadColor.Of(hx));
-                else
-                    Hatch(ms, tr, layer, Band(hatchTop, bot), hx.Pattern, hxSc, CadColor.Of(hx));
+                Hatch(ms, tr, layer, Band(hatchTop, bot), hx.Pattern, hxSc, CadColor.Of(hx));
             }
             if (gapAtMh)
             {
@@ -397,27 +394,6 @@ namespace Nvk.Cad
                 {
                     var clip = ClipPts(pts, x1, x2);
                     if (clip.Count >= 2) StylePline(ms, tr, layer, clip, st);
-                }
-                ch += sg.Length2d;
-            }
-        }
-
-        static void HatchBandGapped(BlockTableRecord ms, Transaction tr, string layer,
-            List<Point2d> top, List<Point2d> bot, DomainResult last, Point3d o, double lSc,
-            string pat, double scale, AcadColor col)
-        {
-            if (top == null || top.Count < 2 || bot == null || bot.Count < 2) return;
-            double ch = 0.0;
-            foreach (var sg in last.Chain.Segs)
-            {
-                double x1 = o.X + (ch + GapR(sg, true)) * lSc;
-                double x2 = o.X + (ch + sg.Length2d - GapR(sg, false)) * lSc;
-                if (x2 > x1 + 1e-3)
-                {
-                    var topClip = ClipPts(top, x1, x2);
-                    var botClip = ClipPts(bot, x1, x2);
-                    if (topClip.Count >= 2 && botClip.Count >= 2)
-                        Hatch(ms, tr, layer, Band(topClip, botClip), pat, scale, col);
                 }
                 ch += sg.Length2d;
             }
@@ -678,20 +654,7 @@ namespace Nvk.Cad
             {
                 var col = hx != null ? CadColor.Of(hx) : Aci(8);
                 double sc = HatchPat.Scale(hx);
-                if (kind == ProfileKind.Zashita)
-                {
-                    if (gapAtMh)
-                        HatchPipesInner(ms, tr, last, o, lSc, topPts, botPts, pat, layer, col, sc);
-                    else
-                        Hatch(ms, tr, layer, Band(topPts, botPts), pat, sc, col);
-                }
-                else
-                {
-                    if (gapAtMh)
-                        HatchDiamGroups(ms, tr, last, o, lSc, topPts, botPts, pat, layer, col, sc);
-                    else
-                        Hatch(ms, tr, layer, Band(topPts, botPts), pat, sc, col);
-                }
+                Hatch(ms, tr, layer, Band(topPts, botPts), pat, sc, col);
             }
 
             foreach (var row in ProfileRows.For(kind, NvkSession.Tbl()))
@@ -1098,71 +1061,6 @@ namespace Nvk.Cad
             }
         }
 
-        static void HatchDiamGroups(BlockTableRecord ms, Transaction tr, DomainResult last,
-            Point3d o, double lSc, List<Point2d> top, List<Point2d> bot, string pat, string visLayer)
-        {
-            HatchDiamGroups(ms, tr, last, o, lSc, top, bot, pat, visLayer, Aci(8),
-                HatchPat.Scale(FillStyle.Of(pat, 8, 1)));
-        }
-
-        static void HatchDiamGroups(BlockTableRecord ms, Transaction tr, DomainResult last,
-            Point3d o, double lSc, List<Point2d> top, List<Point2d> bot, string pat, string visLayer,
-            AcadColor col, double scale)
-        {
-            foreach (var seg in DiamSegs(last.Chain, o.X, lSc))
-            {
-                double ch = 0.0;
-                foreach (var sg in last.Chain.Segs)
-                {
-                    double mx1 = Math.Max(seg[0], o.X + (ch + GapR(sg, true)) * lSc);
-                    double mx2 = Math.Min(seg[1], o.X + (ch + sg.Length2d - GapR(sg, false)) * lSc);
-                    if (mx2 > mx1 + 1e-3)
-                    {
-                        var tc = ClipPts(top, mx1, mx2);
-                        var bc = ClipPts(bot, mx1, mx2);
-                        if (tc.Count >= 2 && bc.Count >= 2)
-                        {
-                            var closed = new List<Point2d>(tc);
-                            for (int i = bc.Count - 1; i >= 0; i--) closed.Add(bc[i]);
-                            Hatch(ms, tr, visLayer, closed.ToArray(), pat, scale, col);
-                        }
-                    }
-                    ch += sg.Length2d;
-                }
-            }
-        }
-
-        static void HatchPipesInner(BlockTableRecord ms, Transaction tr, DomainResult last,
-            Point3d o, double lSc, List<Point2d> top, List<Point2d> bot, string pat, string visLayer)
-        {
-            HatchPipesInner(ms, tr, last, o, lSc, top, bot, pat, visLayer, Aci(8),
-                HatchPat.Scale(FillStyle.Of(pat, 8, 1)));
-        }
-
-        static void HatchPipesInner(BlockTableRecord ms, Transaction tr, DomainResult last,
-            Point3d o, double lSc, List<Point2d> top, List<Point2d> bot, string pat, string visLayer,
-            AcadColor col, double scale)
-        {
-            double ch = 0.0;
-            foreach (var sg in last.Chain.Segs)
-            {
-                double x1 = o.X + (ch + GapR(sg, true)) * lSc;
-                double x2 = o.X + (ch + sg.Length2d - GapR(sg, false)) * lSc;
-                if (x2 > x1 + 1e-3)
-                {
-                    var tc = ClipPts(top, x1, x2);
-                    var bc = ClipPts(bot, x1, x2);
-                    if (tc.Count >= 2 && bc.Count >= 2)
-                    {
-                        var closed = new List<Point2d>(tc);
-                        for (int i = bc.Count - 1; i >= 0; i--) closed.Add(bc[i]);
-                        Hatch(ms, tr, visLayer, closed.ToArray(), pat, scale, col);
-                    }
-                }
-                ch += sg.Length2d;
-            }
-        }
-
         static List<double[]> DiamSegs(Chain chain, double x0, double lSc)
         {
             var segs = new List<double[]>();
@@ -1260,9 +1158,6 @@ namespace Nvk.Cad
         {
             double paper = NvkUiState.VpScaleEp >= 1.0 ? NvkUiState.VpScaleEp
                 : (NvkSession.Cannoscale > 0 ? NvkSession.Cannoscale : 1000);
-            bool gapAtMh = kind == ProfileKind.Razrabotka
-                ? (NvkSession.L1 == null || NvkSession.L1.ShowManholes)
-                : (NvkSession.Sheet(kind) == null || NvkSession.Sheet(kind).ShowManholes);
             var sb = new System.Text.StringBuilder();
             sb.Append("\\pql;");
             if (kind == ProfileKind.Truba)
@@ -1279,7 +1174,7 @@ namespace Nvk.Cad
             }
             else if (kind == ProfileKind.Zasypka)
             {
-                var zrows = BodyAreasZasypka(last, cfg, gapAtMh);
+                var zrows = BodyAreasZasypka(last, cfg, false);
                 double sand = 0, soil = 0;
                 foreach (var r in zrows)
                 {
@@ -1294,7 +1189,7 @@ namespace Nvk.Cad
             }
             else
             {
-                var areas = BodyAreasByDiam(last, kind, cfg, gapAtMh);
+                var areas = BodyAreasByDiam(last, kind, cfg, false);
                 if (areas.Count >= 2)
                 {
                     bool firstArea = true;
@@ -2337,10 +2232,7 @@ namespace Nvk.Cad
             if (!BandHasHeight(top, bot)) return;
             var col = CadColor.Of(hx);
             double sc = HatchPat.Scale(hx);
-            if (gapAtMh)
-                HatchPipesInner(ms, tr, last, o, lSc, top, bot, hx.Pattern, layer, col, sc);
-            else
-                Hatch(ms, tr, layer, Band(top, bot), hx.Pattern, sc, col);
+            Hatch(ms, tr, layer, Band(top, bot), hx.Pattern, sc, col);
         }
     }
 }
