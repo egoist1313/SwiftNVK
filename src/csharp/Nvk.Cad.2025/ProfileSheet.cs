@@ -172,7 +172,7 @@ namespace Nvk.Cad
             double oshDisplay = annGapM > 1e-9 ? osh - annGapM : osh;
             DrawTicks(ms, tr, layer, x0, y0, osh, hSc, axis, cfg, th, ticksBot);
             DrawTitle(ms, tr, layer, last, o, L * lSc, hSc, osh, cfg, th, kind);
-            DrawSectionMarks(ms, tr, last, o, lSc, hSc, osh, th, ticksBot, markOffset);
+            DrawSectionMarks(ms, tr, last, o, lSc, hSc, osh, th, ticksBot, markOffset, kind);
             DrawTable(ms, tr, LayerTbl, last, o, lSc, hSc, osh, kind, cfg, th, (double?)tableTop, oshDisplay);
             if (tbl.DrawProjections)
                 DrawProjections(ms, tr, layer, last, o, lSc, hSc, osh, cfg, th, tbl);
@@ -1638,15 +1638,16 @@ namespace Nvk.Cad
 
         static void DrawSectionMarks(BlockTableRecord ms, Transaction tr, DomainResult last,
             Point3d o, double lSc, double hSc, double osh, double th, double? tableBottom = null,
-            int markOffset = 0)
+            int markOffset = 0, ProfileKind kind = ProfileKind.Razrabotka)
         {
             if (last.Geoms == null) return;
             var cfg = last.Cfg ?? new SectionConfig();
-            EnsureLayer(ms.Database, tr, "NVK-MARK", 8);
+            EnsureLayer(ms.Database, tr, "NVK-MARK", 129);
             var tbl = NvkSession.Tbl();
             double markH = th * 0.7;
             if (tbl != null && tbl.Annotative)
                 markH = tbl.Scaled(markH, NvkSession.Cannoscale);
+            var col = CadColor.CsMark(kind);
             var stationX = new List<double>(last.Geoms.Count);
             for (int i = 0; i < last.Geoms.Count; i++)
                 stationX.Add(o.X + last.Geoms[i].Elev.Station * lSc);
@@ -1658,11 +1659,12 @@ namespace Nvk.Cad
                 var ap = AtCh(last.Axis, g.Elev.Station);
                 double yTop = o.Y + (ProfileRows.ZAt(HeightSrc.RoadTop, ap, cfg) - osh) * hSc;
                 double yBot = tableBottom ?? (o.Y - th);
-                AddLine(ms, tr, "NVK-MARK", x, yBot, x, yTop, Aci(8), 0);
+                AddLine(ms, tr, "NVK-MARK", x, yBot, x, yTop, col, 0);
                 double yLabel = yBot + (tbl != null ? tbl.OffsetPct : 0.0) * th / 100.0;
                 double lx = i < labelX.Count ? labelX[i] : x;
-                NvkText.Make(ms, tr, "NVK-MARK", lx, yLabel, CsAnnot.SectionMark(markOffset + i),
+                var mt = NvkText.Make(ms, tr, "NVK-MARK", lx, yLabel, CsAnnot.SectionMark(markOffset + i),
                     th * 0.7, AttachmentPoint.BottomLeft, Math.PI * 0.5, 0, false);
+                if (mt != null) mt.Color = col;
             }
         }
 

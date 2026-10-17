@@ -169,9 +169,8 @@ namespace Nvk.Cad
             double xInvL = TrenchGeom.XAtLeft(g, mL, e.SandTop);
             double xInvR = TrenchGeom.XAtRight(g, mR, e.SandTop);
             double zCtr = TrenchGeom.ZCenter(g);
-            var csCol = CsCol(kind);
-            int lwCur = 30;
-            int lwOld = 0;
+            short cur = 5;
+            short gray = 8;
 
             double xTopL = TrenchGeom.XTopLeft(g, mL);
             double xTopR = TrenchGeom.XTopRight(g, mR);
@@ -181,19 +180,19 @@ namespace Nvk.Cad
 
             if (g.InManhole)
             {
-                DrawManholeShaft(btr, tr, g, sc, osh, ox, oy, csCol);
-                DrawL0L6(btr, tr, g, sc, osh, ox, oy, mL, mR, level, csCol);
+                DrawManholeShaft(btr, tr, g, sc, osh, ox, oy);
+                DrawL0L6(btr, tr, g, sc, osh, ox, oy, mL, mR, level);
                 DrawAnnot(btr, tr, g, kind, sc, mL, mR, idx, ox, oy, hw);
                 return;
             }
 
             if (pitUp)
             {
-                AddSeg(btr, tr, ox + (-xTopL) * sc, oy + (zL - osh) * sc, ox + (-bL) * sc, oy + (e.TrenchBottom - osh) * sc, csCol, lwCur);
-                AddSeg(btr, tr, ox + bR * sc, oy + (e.TrenchBottom - osh) * sc, ox + xTopR * sc, oy + (zR - osh) * sc, csCol, lwCur);
+                AddSeg(btr, tr, ox + (-xTopL) * sc, oy + (zL - osh) * sc, ox + (-bL) * sc, oy + (e.TrenchBottom - osh) * sc, Aci(7), 0);
+                AddSeg(btr, tr, ox + bR * sc, oy + (e.TrenchBottom - osh) * sc, ox + xTopR * sc, oy + (zR - osh) * sc, Aci(7), 0);
             }
             if (level == 1 || level == 5)
-                AddPline(btr, tr, ToDraw(new[] { P(-bL, e.TrenchBottom), P(bR, e.TrenchBottom) }, sc, osh, ox, oy), csCol, false, lwCur);
+                AddPline(btr, tr, ToDraw(new[] { P(-bL, e.TrenchBottom), P(bR, e.TrenchBottom) }, sc, osh, ox, oy), Aci(1), false, 0);
 
             // L1: штриховка котлована без верхней «крышки» — земли после разработки в яме нет.
             if (pitUp && level == 1)
@@ -205,7 +204,7 @@ namespace Nvk.Cad
             if (level >= 2)
             {
                 var sand = ToDraw(Trap(bL, bR, e.TrenchBottom, xInvL, xInvR, e.SandTop), sc, osh, ox, oy);
-                AddPline(btr, tr, sand, csCol, closed: true, lw: level == 2 ? lwCur : lwOld);
+                AddPline(btr, tr, sand, Aci(level == 2 ? cur : gray), closed: true, lw: level == 2 ? 30 : 0);
                 ApplyHatch(btr, tr, sand, HatchOf(ProfileKind.Pesok, g));
             }
 
@@ -220,7 +219,7 @@ namespace Nvk.Cad
                 if (zashPoly.Count >= 3)
                 {
                     var zash = ToDraw(zashPoly, sc, osh, ox, oy);
-                    AddPline(btr, tr, zash, csCol, closed: true, lw: level == 4 ? lwCur : lwOld);
+                    AddPline(btr, tr, zash, Aci(level == 4 ? cur : gray), closed: true, lw: level == 4 ? 30 : 0);
                     var zashFill = HatchOf(ProfileKind.Zashita, g);
                     if (pipeInZash)
                         ApplyHatchHole(btr, tr, zash, pipeC, pipeR, zashFill);
@@ -230,7 +229,7 @@ namespace Nvk.Cad
                 else if (level == 4)
                 {
                     AddPline(btr, tr, ToDraw(new[] { P(-xInvL, e.SandTop), P(xInvR, e.SandTop) }, sc, osh, ox, oy),
-                        csCol, false, lwCur);
+                        Aci(cur), false, 30);
                 }
             }
 
@@ -239,7 +238,7 @@ namespace Nvk.Cad
                 var cir = new Circle(pipeC, Vector3d.ZAxis, pipeR);
                 cir.SetDatabaseDefaults();
                 cir.Layer = LayerIns;
-                cir.Color = csCol;
+                cir.Color = Aci(level == 3 ? cur : gray);
                 if (level == 3) cir.LineWeight = LineWeight.LineWeight030;
                 btr.AppendEntity(cir);
                 tr.AddNewlyCreatedDBObject(cir, true);
@@ -248,11 +247,11 @@ namespace Nvk.Cad
             if (level >= 5 && e.HasBackfill)
             {
                 var zas = ToDraw(TrenchGeom.BackfillDrawPoly(g, mL, mR), sc, osh, ox, oy);
-                AddPline(btr, tr, zas, csCol, closed: true, lw: lwCur);
+                AddPline(btr, tr, zas, Aci(cur), closed: true, lw: 30);
                 ApplyHatch(btr, tr, zas, HatchOf(ProfileKind.Zasypka, g));
             }
 
-            DrawL0L6(btr, tr, g, sc, osh, ox, oy, mL, mR, level, csCol);
+            DrawL0L6(btr, tr, g, sc, osh, ox, oy, mL, mR, level);
             if (withDims)
                 DrawDims(btr, tr, g, kind, sc, mL, mR, ox, oy);
             DrawLineTags(btr, tr, g, sc, osh, ox, oy, mL, mR, level, hw);
@@ -335,12 +334,12 @@ namespace Nvk.Cad
         /// L6 синяя: до засыпки (L1–L4) разрыв в котловане у стенки, L5 сплошная.
         /// L0 красный пунктир — проектное покрытие, без разрыва.
         /// </summary>
-        static void DrawL0L6(BlockTableRecord btr, Transaction tr, SectionGeom g, double sc, double osh, double ox, double oy, double mL, double mR, int level, AcadColor csCol)
+        static void DrawL0L6(BlockTableRecord btr, Transaction tr, SectionGeom g, double sc, double osh, double ox, double oy, double mL, double mR, int level)
         {
             bool gapL6 = level < 5;
-            DrawSurfWings(btr, tr, g, false, sc, osh, ox, oy, mL, mR, gapL6, csCol, 18, null);
+            DrawSurfWings(btr, tr, g, false, sc, osh, ox, oy, mL, mR, gapL6, Aci(5), 18, null);
             if (g.Pavement > 1e-6)
-                DrawSurfWings(btr, tr, g, true, sc, osh, ox, oy, mL, mR, false, csCol, 18, "DASHED");
+                DrawSurfWings(btr, tr, g, true, sc, osh, ox, oy, mL, mR, false, Aci(1), 18, "DASHED");
         }
 
         static void DrawSurfWings(BlockTableRecord btr, Transaction tr, SectionGeom g, bool rawTin,
@@ -444,7 +443,7 @@ namespace Nvk.Cad
         }
 
         static void DrawManholeShaft(BlockTableRecord btr, Transaction tr, SectionGeom g,
-            double sc, double osh, double ox, double oy, AcadColor csCol)
+            double sc, double osh, double ox, double oy)
         {
             var e = g.Elev;
             double hw = g.ManholeHalfW > 0.05 ? g.ManholeHalfW : 0.5;
@@ -455,7 +454,7 @@ namespace Nvk.Cad
             {
                 P(-hw, zBot), P(hw, zBot), P(hw, zTop), P(-hw, zTop)
             }, sc, osh, ox, oy);
-            AddPline(btr, tr, box, csCol, closed: true, lw: 30);
+            AddPline(btr, tr, box, Aci(7), closed: true, lw: 30);
         }
 
         static void DrawFrame(BlockTableRecord btr, Transaction tr, SectionGeom g, double sc, double osh, double ox, double oy, double hw)
@@ -689,19 +688,6 @@ namespace Nvk.Cad
             {
                 AddSeg(btr, tr, x1, y1, x2, y2, Aci(1), 0);
             }
-        }
-
-        static AcadColor CsCol(ProfileKind kind)
-        {
-            LineStyle st = null;
-            if (kind == ProfileKind.Razrabotka)
-                st = NvkSession.L1 != null ? NvkSession.L1.CsLine : null;
-            else
-            {
-                var sh = NvkSession.Sheet(kind);
-                st = sh != null ? sh.CsLine : null;
-            }
-            return st != null ? CadColor.Of(st) : Aci(129);
         }
 
         static FillStyle HatchOf(ProfileKind kind, SectionGeom g)

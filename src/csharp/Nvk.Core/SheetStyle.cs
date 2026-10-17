@@ -9,7 +9,7 @@ namespace Nvk.Core
         public LineStyle Cover { get; set; }
         public LineStyle Top { get; set; }
         public LineStyle Bot { get; set; }
-        /// <summary>Линии поперечника этого листа. По умолчанию ACI 129.</summary>
+        /// <summary>Вертикальные риски сечений на продольнике. По умолчанию ACI 129.</summary>
         public LineStyle CsLine { get; set; } = LineStyle.Of(129, "Continuous", 30);
 
         public static SheetStyle Pesok()
