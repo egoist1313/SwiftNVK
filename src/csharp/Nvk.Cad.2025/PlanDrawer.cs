@@ -256,7 +256,7 @@ namespace Nvk.Cad
             if (sit.Count >= 3)
             {
                 ObjectId loop = AddPline(ms, tr, sit, true, 5, 0, PlanView.LayerSit);
-                HatchSituation(ms, tr, loop);
+                HatchSituation(ms, tr, loop, sit);
             }
             PlanPt arrow, text;
             if (!PlanGeom.SituationLeader(axis, PlanGeom.SitArrowM, PlanGeom.SitTextM, out arrow, out text))
@@ -267,25 +267,37 @@ namespace Nvk.Cad
             PlaceLeader(ms, tr, poses, arrow.X, arrow.Y, text.X, text.Y, key, PlanView.LayerSit, planDeg, true);
         }
 
-        static void HatchSituation(BlockTableRecord ms, Transaction tr, ObjectId loop)
+        static void HatchSituation(BlockTableRecord ms, Transaction tr, ObjectId loop, List<PlanPt> sit)
         {
-            if (loop.IsNull) return;
+            if (sit == null || sit.Count < 3) return;
             try
             {
                 var h = new Hatch();
                 h.SetDatabaseDefaults();
                 h.Layer = PlanView.LayerSit;
                 h.Color = Aci(1);
+                h.HatchStyle = HatchStyle.Ignore;
                 ms.AppendEntity(h);
                 tr.AddNewlyCreatedDBObject(h, true);
                 h.SetHatchPattern(HatchPatternType.PreDefined, "ANSI31");
                 h.PatternScale = PlanGeom.SituationHatchScale(DimScale());
                 h.Associative = false;
-                var ids = new ObjectIdCollection();
-                ids.Add(loop);
-                h.AppendLoop(HatchLoopTypes.Outermost, ids);
+                var verts = new Point2dCollection();
+                var bulges = new DoubleCollection();
+                for (int i = 0; i < sit.Count; i++)
+                {
+                    verts.Add(new Point2d(sit[i].X, sit[i].Y));
+                    bulges.Add(0.0);
+                }
+                h.AppendLoop(HatchLoopTypes.External, verts, bulges);
                 h.EvaluateHatch(true);
                 NvkAnno.Apply(h);
+                NvkTag.Stamp(tr, h);
+                if (!loop.IsNull)
+                {
+                    var pl = tr.GetObject(loop, OpenMode.ForWrite) as Entity;
+                    if (pl != null) NvkTag.Stamp(tr, pl);
+                }
             }
             catch { }
         }
