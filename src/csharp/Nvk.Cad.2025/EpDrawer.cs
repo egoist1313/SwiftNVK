@@ -32,7 +32,7 @@ namespace Nvk.Cad
             var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForWrite);
             var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
             var keep = NvkSession.Last;
-            int nIns = 0, nMark = 0, nRun = 0, markOff = 0;
+            int nIns = 0, nMark = 0, nRun = 0, markOff = NvkSites.GeomOffset();
             double y = origin.Y;
             double osh0 = 0, rowGap0 = 0, lenSum = 0;
             foreach (var run in runs)

@@ -56,9 +56,11 @@ namespace Nvk.Cad
 
         public static void Stamp(Transaction tr, Entity e)
         {
-            string seg = NvkSites.CurrentId;
-            if (string.IsNullOrEmpty(seg) && NvkSession.Last != null)
+            string seg = null;
+            if (NvkSession.Last != null)
                 seg = NvkSession.Last.SegId;
+            if (string.IsNullOrEmpty(seg))
+                seg = NvkSites.CurrentId;
             Set(tr, e, seg);
         }
 

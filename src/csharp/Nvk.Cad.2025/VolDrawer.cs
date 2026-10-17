@@ -25,12 +25,13 @@ namespace Nvk.Cad
 
         public static string Draw(Database db, Transaction tr, Point3d origin)
         {
-            var runs = NvkSession.AllRuns();
+            var runs = NvkSession.VolRuns();
             bool any = false;
             foreach (var r in runs)
                 if (r != null && r.Chain != null) { any = true; break; }
             if (!any)
                 return "[НВК] VOL: нет домена.";
+            var keep = NvkSession.Last;
 
             var tblCfg = NvkSession.Tbl();
             double th = tblCfg.TextH > 0.0 ? tblCfg.TextH : 2.5;
@@ -78,6 +79,7 @@ namespace Nvk.Cad
             int sampNum = 1;
             foreach (var pack in packed)
             {
+                NvkSession.Last = pack.Run;
                 foreach (var p in PlanPoints.Manholes(pack.Run.Chain))
                 {
                     string key = p.X.ToString("0.00") + "," + p.Y.ToString("0.00");
@@ -113,9 +115,10 @@ namespace Nvk.Cad
                 var win = new SheetWin();
                 foreach (var pack in packed)
                 {
+                    NvkSession.Last = pack.Run;
                     if (nRun > 1)
                     {
-                        string head = "Участок " + pack.Index
+                        string head = SiteLabel(pack)
                             + (string.IsNullOrEmpty(pack.Run.NetName) ? "" : "  " + pack.Run.NetName)
                             + "  L=" + pack.Run.Chain.Total.ToString("0.00") + " м";
                         AccText(ms, tr, win, origin.X, y, th, wrapW, head);
@@ -185,6 +188,7 @@ namespace Nvk.Cad
                 }
                 y -= kindGap;
             }
+            if (keep != null) NvkSession.Last = keep;
             return "[НВК] VOL: текстов " + count + "  колодцев " + nMh
                  + "  проб " + nSamp + "  участков " + nRun
                  + "  окон " + (NvkSession.VolWins != null ? NvkSession.VolWins.Count.ToString() : "0")
@@ -198,6 +202,14 @@ namespace Nvk.Cad
             public SectionConfig Cfg;
             public List<VolLevel> Levels;
             public int Index;
+        }
+
+        static string SiteLabel(RunVol pack)
+        {
+            if (pack == null || pack.Run == null) return "Участок";
+            var s = NvkSites.ById(pack.Run.SegId);
+            if (s != null && !string.IsNullOrEmpty(s.Name)) return s.Name;
+            return "Участок " + pack.Index;
         }
 
         static string SumName(ProfileKind kind)
@@ -309,7 +321,7 @@ namespace Nvk.Cad
             {
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                 if (ent != null && string.Equals(ent.Layer, layer, StringComparison.OrdinalIgnoreCase)
-                    && NvkTag.Matches(ent, NvkSites.CurrentId))
+                    && (NvkUiState.VolJoinSites || NvkTag.Matches(ent, NvkSites.CurrentId)))
                     erase.Add(id);
             }
             foreach (var id in erase)

@@ -61,6 +61,17 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void SamplesContinueFromNextNum()
+        {
+            var chain = PipeWithMh();
+            var cfg = new SectionConfig { PlanEn = true, PlanMin = 1.0, Joint = JointType.Socket };
+            var rows = PlanPoints.Samples(chain, cfg, new List<double> { 10.0, 20.0 }, null, 3);
+            Assert.Equal(2, rows.Count);
+            Assert.Equal("Т3", rows[0].Name);
+            Assert.Equal("Т4", rows[1].Name);
+        }
+
+        [Fact]
         public void SamplesOffWhenPlanDisabled()
         {
             var chain = PipeWithMh();

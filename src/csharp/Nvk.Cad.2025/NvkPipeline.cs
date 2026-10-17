@@ -35,6 +35,7 @@ namespace Nvk.Cad
                 Step("CONFIG", StageConfig, ref ok, ref skip, ref fail);
                 Step("INPUT", () => StageInput(false), ref ok, ref skip, ref fail);
                 StageDomain();
+                DomainOtherSites();
                 bool domainOk = NvkSession.Last != null && NvkSession.Last.Chain != null;
                 LogStage("CHAIN", domainOk ? DomainInfo("CHAIN") : null, ref ok, ref fail);
                 LogStage("STATIONS", domainOk ? DomainInfo("STATIONS") : null, ref ok, ref fail);
@@ -84,7 +85,9 @@ namespace Nvk.Cad
         {
             StageConfig();
             StageInput(false);
-            return StageDomain();
+            var dump = StageDomain();
+            DomainOtherSites();
+            return dump;
         }
 
         public static string StageConfig()
@@ -136,12 +139,18 @@ namespace Nvk.Cad
 
         public static string StageDomain()
         {
+            return StageDomain(true);
+        }
+
+        static string StageDomain(bool promptTin)
+        {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return null;
             var ed = doc.Editor;
             var pipes = AlivePipes();
             if (pipes.Count == 0)
             {
+                if (!promptTin) return null;
                 var msg = StageInput(false);
                 pipes = AlivePipes();
                 if (pipes.Count == 0) return msg;
@@ -178,18 +187,26 @@ namespace Nvk.Cad
                     }
                     else if (surfs.Count > 1)
                     {
-                        tr.Commit();
-                        PickTin(ed, doc, true);
-                        using (var tr2 = doc.TransactionManager.StartTransaction())
+                        if (!promptTin)
                         {
-                            ObjectId sid = ObjectId.Null;
-                            string sn = NvkUiState.DesignName;
-                            if (!string.IsNullOrEmpty(NvkUiState.DesignHandle))
-                                sid = SurfaceSampler.ByHandle(doc.Database, NvkUiState.DesignHandle);
-                            var dump2 = DomainService.BuildDump(tr2, pipes, sid, sn, cfg, stations);
-                            tr2.Commit();
-                            NvkLog.Write(dump2);
-                            return dump2;
+                            surfId = surfs[0].Id;
+                            surfName = surfs[0].Name;
+                        }
+                        else
+                        {
+                            tr.Commit();
+                            PickTin(ed, doc, true);
+                            using (var tr2 = doc.TransactionManager.StartTransaction())
+                            {
+                                ObjectId sid = ObjectId.Null;
+                                string sn = NvkUiState.DesignName;
+                                if (!string.IsNullOrEmpty(NvkUiState.DesignHandle))
+                                    sid = SurfaceSampler.ByHandle(doc.Database, NvkUiState.DesignHandle);
+                                var dump2 = DomainService.BuildDump(tr2, pipes, sid, sn, cfg, stations);
+                                tr2.Commit();
+                                NvkLog.Write(dump2);
+                                return dump2;
+                            }
                         }
                     }
 
@@ -203,6 +220,40 @@ namespace Nvk.Cad
             {
                 ed.WriteMessage("\n[НВК] домен: " + ex.Message);
                 return null;
+            }
+        }
+
+        static void DomainOtherSites()
+        {
+            if (!NvkUiState.VolJoinSites) return;
+            NvkSites.EnsureOne();
+            if (NvkSites.All.Count < 2) return;
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            NvkSites.Capture();
+            int cur = NvkSites.Index;
+            try
+            {
+                for (int i = 0; i < NvkSites.All.Count; i++)
+                {
+                    if (i == cur) continue;
+                    var s = NvkSites.All[i];
+                    if (s == null || string.IsNullOrEmpty(s.Pipes)) continue;
+                    NvkSites.Index = i;
+                    NvkSites.Apply(s, doc.Database);
+                    if (AlivePipes().Count == 0) continue;
+                    StageDomain(false);
+                    NvkSites.Capture();
+                }
+            }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] домен других участков: " + ex.Message);
+            }
+            finally
+            {
+                NvkSites.Index = cur;
+                NvkSites.Apply(NvkSites.Current, doc.Database);
             }
         }
 

@@ -28,7 +28,7 @@ namespace Nvk.Cad
         readonly TextBox _bedding, _zash, _asph, _gazn, _trot, _slopeL, _slopeR, _trenchL, _trenchR, _hwidth, _ygap;
         readonly ComboBox _joint, _slopeU;
         readonly TextBox _hSc, _lSc, _csSc, _csTh, _textH, _textOff, _stations, _labW, _labH, _vpEp, _vpCs, _vpPlan;
-        readonly CheckBox _blockCs, _showTags, _doCs, _doEp, _doPoper, _doVol, _doPlan, _doSheets;
+        readonly CheckBox _blockCs, _showTags, _doCs, _doEp, _doPoper, _doVol, _volJoin, _doPlan, _doSheets;
         readonly CheckBox _showPerm;
         readonly CheckBox _projFact, _singleSc;
         readonly TextBox _annGap, _zones, _planInt, _planMin;
@@ -122,6 +122,7 @@ namespace Nvk.Cad
             _doEp    = Chk(pRun, "Продольники", true);
             _doPoper = Chk(pRun, "Таблица POPER", true);
             _doVol   = Chk(pRun, "Объёмы + колодцы", true);
+            _volJoin = Chk(pRun, "Объёмы все участки вместе", true);
             _doPlan  = Chk(pRun, "План", true);
             _doSheets = Chk(pRun, "Листы + видовые экраны", true);
             _stations = Num(pRun, "Станции (AUTO или пикеты)", "AUTO");
@@ -325,6 +326,7 @@ namespace Nvk.Cad
             _doEp.Checked      = NvkUiState.DoEp;
             _doPoper.Checked   = NvkUiState.DoPoper;
             _doVol.Checked     = NvkUiState.DoVol;
+            _volJoin.Checked   = NvkUiState.VolJoinSites;
             _doPlan.Checked    = NvkUiState.DoPlan;
             _doSheets.Checked  = NvkUiState.DoSheets;
             _projFact.Checked  = NvkUiState.ProjFact;
@@ -470,6 +472,7 @@ namespace Nvk.Cad
             NvkUiState.DoEp         = _doEp.Checked;
             NvkUiState.DoPoper      = _doPoper.Checked;
             NvkUiState.DoVol        = _doVol.Checked;
+            NvkUiState.VolJoinSites = _volJoin.Checked;
             NvkUiState.DoPlan       = _doPlan.Checked;
             NvkUiState.DoSheets     = _doSheets.Checked;
             NvkUiState.ProjFact     = _projFact.Checked;

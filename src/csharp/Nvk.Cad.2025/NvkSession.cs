@@ -49,7 +49,7 @@ namespace Nvk.Cad
 
     static class NvkSession
     {
-        public const string Version = "0.193";
+        public const string Version = "0.194";
         public static int RunId;
         public static DomainResult Last;
         public static List<DomainResult> Runs = new List<DomainResult>();
@@ -223,6 +223,17 @@ namespace Nvk.Cad
             var one = new List<DomainResult>();
             if (Last != null) one.Add(Last);
             return one;
+        }
+
+        /// <summary>Домены для объёмов: все участки, если VOL_JOIN, иначе текущий.</summary>
+        public static List<DomainResult> VolRuns()
+        {
+            if (NvkUiState.VolJoinSites)
+            {
+                var joined = NvkSites.JoinedRuns();
+                if (joined != null && joined.Count > 0) return joined;
+            }
+            return AllRuns();
         }
 
         public static TableCfg Tbl()

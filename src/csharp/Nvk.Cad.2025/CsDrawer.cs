@@ -79,6 +79,7 @@ namespace Nvk.Cad
             var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForWrite);
             var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
 
+            int mark0 = NvkSites.GeomOffset();
             int num = 0;
             foreach (var run in runs)
             {
@@ -89,6 +90,7 @@ namespace Nvk.Cad
                 for (int i = 0; i < run.Geoms.Count; i++, num++)
                 {
                     var g = run.Geoms[i];
+                    int mark = mark0 + num;
                     foreach (var kind in kinds)
                     {
                         if (!LayerStack.IsDrawn(kind, g.Elev))
@@ -106,7 +108,7 @@ namespace Nvk.Cad
                         if (asBlock)
                         {
                             string bname = BlockName(run.SegId, kind, i);
-                            ObjectId btrId = RecreateBlock(tr, bt, bname, btr => DrawLevel(btr, tr, g, kind, scale, mL, mR, num, 0, 0, hw, false));
+                            ObjectId btrId = RecreateBlock(tr, bt, bname, btr => DrawLevel(btr, tr, g, kind, scale, mL, mR, mark, 0, 0, hw, false));
                             var br = new BlockReference(ins, btrId);
                             br.Layer = LayerIns;
                             ms.AppendEntity(br);
@@ -115,7 +117,7 @@ namespace Nvk.Cad
                             DrawDims(ms, tr, g, kind, scale, mL, mR, ins.X, ins.Y);
                         }
                         else
-                            DrawLevel(ms, tr, g, kind, scale, mL, mR, num, ins.X, ins.Y, hw, true);
+                            DrawLevel(ms, tr, g, kind, scale, mL, mR, mark, ins.X, ins.Y, hw, true);
                         nIns++;
                         double osh = TrenchGeom.Osh(g.Elev);
                         double xTop = Math.Max(TrenchGeom.XTopLeft(g, mL), TrenchGeom.XTopRight(g, mR));
@@ -125,7 +127,7 @@ namespace Nvk.Cad
                         double x1 = ins.X + xTop * scale + 5.0 * th;
                         double y0 = ins.Y - tblH - 2.0 * th;
                         double y1 = ins.Y + (g.Elev.Surface - osh + 0.5) * scale + 6.0 * th;
-                        NvkSession.AddCsCell(kind, num, x0, y0, x1, y1);
+                        NvkSession.AddCsCell(kind, mark, x0, y0, x1, y1);
                     }
                 }
             }

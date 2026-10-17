@@ -49,7 +49,7 @@ namespace Nvk.Cad
             var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
             var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
 
-            int nLead = 0, nMh = 0, nRun = 0;
+            int nLead = NvkSites.SampleOffset(), nMh = 0, nRun = 0;
             var keep = NvkSession.Last;
             foreach (var last in runs)
             {

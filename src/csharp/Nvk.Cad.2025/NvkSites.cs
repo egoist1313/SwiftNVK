@@ -144,12 +144,82 @@ namespace Nvk.Cad
             if (doc != null) NvkNod.WriteSite(doc.Database, s.Id, map);
         }
 
+        public static NvkSite ById(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return null;
+            for (int i = 0; i < All.Count; i++)
+            {
+                var s = All[i];
+                if (s != null && string.Equals(s.Id, id, StringComparison.OrdinalIgnoreCase))
+                    return s;
+            }
+            return null;
+        }
+
+        /// <summary>Домены всех участков по порядку списка. Не подменяет Current.Runs.</summary>
+        public static List<DomainResult> JoinedRuns()
+        {
+            EnsureOne();
+            var r = new List<DomainResult>();
+            for (int i = 0; i < All.Count; i++)
+            {
+                var s = All[i];
+                if (s == null || s.Runs == null) continue;
+                for (int j = 0; j < s.Runs.Count; j++)
+                    if (s.Runs[j] != null) r.Add(s.Runs[j]);
+            }
+            return r;
+        }
+
+        /// <summary>Сколько сечений у участков перед текущим (сквозная нумерация).</summary>
+        public static int GeomOffset()
+        {
+            if (!NvkUiState.VolJoinSites) return 0;
+            int n = 0;
+            int cur = Index;
+            for (int i = 0; i < cur && i < All.Count; i++)
+                n += GeomCount(All[i]);
+            return n;
+        }
+
+        /// <summary>Сколько точек отбора у участков перед текущим (сквозные Тn).</summary>
+        public static int SampleOffset()
+        {
+            if (!NvkUiState.VolJoinSites) return 0;
+            int n = 0;
+            int cur = Index;
+            for (int i = 0; i < cur && i < All.Count; i++)
+            {
+                var s = All[i];
+                if (s == null || s.Runs == null) continue;
+                foreach (var run in s.Runs)
+                {
+                    if (run == null || run.Chain == null) continue;
+                    var cfg = run.Cfg ?? new SectionConfig();
+                    if (!cfg.PlanEn) continue;
+                    n += PlanPoints.Samples(run.Chain, cfg, run.PlanTargets, run.PlanLatOffs, 1).Count;
+                }
+            }
+            return n;
+        }
+
+        static int GeomCount(NvkSite s)
+        {
+            int n = 0;
+            if (s == null || s.Runs == null) return 0;
+            foreach (var r in s.Runs)
+                if (r != null && r.Geoms != null) n += r.Geoms.Count;
+            return n;
+        }
+
         public static void Apply(NvkSite s, Database db)
         {
             if (s == null) return;
+            bool join = NvkUiState.VolJoinSites;
             if (s.State != null && s.State.Count > 0)
             {
                 NvkUiState.FromMap(s.State);
+                NvkUiState.VolJoinSites = join;
                 if (db != null) NvkNod.ApplyLayout(db, s.State);
             }
             if (db != null && !string.IsNullOrEmpty(s.Pipes))
