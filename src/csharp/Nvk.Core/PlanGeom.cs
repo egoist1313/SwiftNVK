@@ -134,6 +134,49 @@ namespace Nvk.Core
         /// <summary>Полка выноски за границей коридора, м.</summary>
         public const double SitTextM = 14.0;
 
+        /// <summary>
+        /// Убрать почти коллинеарные вершины, чтобы OFFSET ±10 м не пилил зубцы
+        /// на стыках труб.
+        /// </summary>
+        public static List<PlanPt> Simplify(List<PlanPt> pts, double tol)
+        {
+            var r = new List<PlanPt>();
+            if (pts == null || pts.Count == 0) return r;
+            if (pts.Count <= 2 || tol <= 0.0)
+            {
+                r.AddRange(pts);
+                return r;
+            }
+            r.Add(pts[0]);
+            for (int i = 1; i < pts.Count - 1; i++)
+            {
+                var a = r[r.Count - 1];
+                var b = pts[i];
+                var c = pts[i + 1];
+                if (DistToSeg(a, c, b) > tol)
+                    r.Add(b);
+            }
+            r.Add(pts[pts.Count - 1]);
+            if (r.Count < 2)
+            {
+                r.Clear();
+                r.AddRange(pts);
+            }
+            return r;
+        }
+
+        static double DistToSeg(PlanPt a, PlanPt c, PlanPt b)
+        {
+            double lx = c.X - a.X, ly = c.Y - a.Y;
+            double len = Math.Sqrt(lx * lx + ly * ly);
+            if (len < 1e-12)
+            {
+                double dx = b.X - a.X, dy = b.Y - a.Y;
+                return Math.Sqrt(dx * dx + dy * dy);
+            }
+            return Math.Abs(lx * (b.Y - a.Y) - ly * (b.X - a.X)) / len;
+        }
+
         /// <summary>Замкнутый контур коридора постоянной полуширины, как pb-plan-make-situation.</summary>
         public static List<PlanPt> SituationClosed(List<PlanPt> axis, double halfWidth)
         {

@@ -439,6 +439,24 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void SimplifyDropsCollinearKeepsCorner()
+        {
+            var pts = new List<PlanPt>
+            {
+                new PlanPt(0, 0),
+                new PlanPt(5, 0.01),
+                new PlanPt(10, 0),
+                new PlanPt(10, 10)
+            };
+            var s = PlanGeom.Simplify(pts, 0.05);
+            Assert.Equal(3, s.Count);
+            Assert.Equal(0.0, s[0].X, 6);
+            Assert.Equal(10.0, s[1].X, 6);
+            Assert.Equal(0.0, s[1].Y, 6);
+            Assert.Equal(10.0, s[2].Y, 6);
+        }
+
+        [Fact]
         public void SituationCorridorIsTwentyMetersWide()
         {
             var axis = new List<PlanPt>

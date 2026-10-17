@@ -246,6 +246,47 @@ namespace Nvk.Cad
             EnsureOne();
             Current.Runs = CopyRuns(runs);
             Current.Pipes = NvkNod.HandlesOf(NvkSession.LastPipes);
+            ApplyNameFromRuns(Current);
+        }
+
+        public static void RefreshNameFromPipes(Database db)
+        {
+            EnsureOne();
+            if (db == null) return;
+            var pipes = NvkSession.LastPipes;
+            if (pipes == null || pipes.Count == 0) return;
+            try
+            {
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var segs = new List<PipeSeg>();
+                    foreach (var id in pipes)
+                    {
+                        if (id.IsNull || !id.IsValid || id.IsErased) continue;
+                        var pipe = tr.GetObject(id, OpenMode.ForRead) as Autodesk.Civil.DatabaseServices.Pipe;
+                        if (pipe != null) segs.Add(PipeReader.Read(tr, pipe));
+                    }
+                    tr.Commit();
+                    string name = SiteTitle.FromChains(Chain.Components(segs));
+                    if (!string.IsNullOrEmpty(name))
+                        Current.Name = name;
+                }
+            }
+            catch (Exc) { }
+        }
+
+        static void ApplyNameFromRuns(NvkSite s)
+        {
+            if (s == null || s.Runs == null) return;
+            var chains = new List<Chain>();
+            for (int i = 0; i < s.Runs.Count; i++)
+            {
+                var r = s.Runs[i];
+                if (r != null && r.Chain != null) chains.Add(r.Chain);
+            }
+            string name = SiteTitle.FromChains(chains);
+            if (!string.IsNullOrEmpty(name))
+                s.Name = name;
         }
 
         public static void Select(int i)

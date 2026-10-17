@@ -249,10 +249,127 @@ namespace Nvk.Cad
         /// Коридор ±10 м, штриховка ANSI31 (цвет 1, масштаб 5×DIMSCALE)
         /// и выноска «Предъявляемый участок»: остриё 6 м, полка 14 м влево от оси.
         /// </summary>
+        /// <summary>
+        /// Коридор ±10 м: OFFSET оси с скруглением углов, иначе miter.
+        /// Ось чуть упрощается, чтобы стыки труб не давали зубцы.
+        /// </summary>
+        static List<PlanPt> SituationByOffset(List<PlanPt> axis)
+        {
+            var src = PlanGeom.Simplify(axis, 0.05);
+            if (src == null || src.Count < 2) src = axis;
+            var fallback = PlanGeom.SituationClosed(src, PlanGeom.SitHalfM);
+            object oldGap = null;
+            try
+            {
+                oldGap = AcadApp.GetSystemVariable("OFFSETGAPTYPE");
+                AcadApp.SetSystemVariable("OFFSETGAPTYPE", 0);
+            }
+            catch { }
+            try
+            {
+                var acad = OffsetClosedDense(src, PlanGeom.SitHalfM, PlanGeom.SitHalfM, 0.5);
+                return acad.Count >= 4 ? acad : fallback;
+            }
+            finally
+            {
+                if (oldGap != null)
+                {
+                    try { AcadApp.SetSystemVariable("OFFSETGAPTYPE", oldGap); }
+                    catch { }
+                }
+            }
+        }
+
+        static List<PlanPt> OffsetClosedDense(List<PlanPt> axis, double hwL, double hwR, double step)
+        {
+            var empty = new List<PlanPt>();
+            Polyline pl = null;
+            DBObjectCollection leftC = null, rightC = null;
+            try
+            {
+                pl = new Polyline(axis.Count);
+                for (int i = 0; i < axis.Count; i++)
+                    pl.AddVertexAt(i, new Point2d(axis[i].X, axis[i].Y), 0, 0, 0);
+                leftC = pl.GetOffsetCurves(hwL);
+                rightC = pl.GetOffsetCurves(-hwR);
+                var left = SampleCurves(leftC, step);
+                var right = SampleCurves(rightC, step);
+                if (left.Count < 2 || right.Count < 2) return empty;
+                var closed = new List<PlanPt>(left.Count + right.Count);
+                closed.AddRange(left);
+                for (int i = right.Count - 1; i >= 0; i--)
+                    closed.Add(right[i]);
+                return closed;
+            }
+            catch
+            {
+                return empty;
+            }
+            finally
+            {
+                DisposeCol(leftC);
+                DisposeCol(rightC);
+                if (pl != null) pl.Dispose();
+            }
+        }
+
+        static List<PlanPt> SampleCurves(DBObjectCollection col, double step)
+        {
+            var pts = new List<PlanPt>();
+            if (col == null) return pts;
+            foreach (DBObject obj in col)
+            {
+                var c = obj as Curve;
+                if (c == null) continue;
+                SampleCurve(pts, c, step);
+            }
+            return pts;
+        }
+
+        static void SampleCurve(List<PlanPt> pts, Curve c, double step)
+        {
+            try
+            {
+                double len = c.GetDistanceAtParameter(c.EndParam);
+                if (len < 1e-9)
+                {
+                    AddUnique(pts, c.StartPoint.X, c.StartPoint.Y);
+                    return;
+                }
+                double ds = step > 0.05 ? step : 0.5;
+                int n = (int)Math.Ceiling(len / ds);
+                if (n < 1) n = 1;
+                for (int i = 0; i <= n; i++)
+                {
+                    double d = len * i / n;
+                    Point3d p;
+                    try { p = c.GetPointAtDist(d); }
+                    catch
+                    {
+                        double t = c.StartParam + (c.EndParam - c.StartParam) * i / n;
+                        p = c.GetPointAtParameter(t);
+                    }
+                    AddUnique(pts, p.X, p.Y);
+                }
+            }
+            catch { }
+        }
+
+        static void AddUnique(List<PlanPt> pts, double x, double y)
+        {
+            if (pts.Count > 0)
+            {
+                var last = pts[pts.Count - 1];
+                double dx = last.X - x, dy = last.Y - y;
+                if (dx * dx + dy * dy < 1e-8) return;
+            }
+            pts.Add(new PlanPt(x, y));
+        }
+
         static void DrawSituation(BlockTableRecord ms, Transaction tr, List<PlanPt> axis,
             Dictionary<string, LeaderPose> poses, double planDeg, int nRun)
         {
-            var sit = PlanGeom.SituationClosed(axis, PlanGeom.SitHalfM);
+            var sit = SituationByOffset(axis);
             if (sit.Count >= 3)
             {
                 ObjectId loop = AddPline(ms, tr, sit, true, 5, 0, PlanView.LayerSit);
