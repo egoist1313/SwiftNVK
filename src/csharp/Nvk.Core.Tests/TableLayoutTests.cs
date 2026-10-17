@@ -221,6 +221,16 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void FirstLengthLeaderGoesLeftOthersRight()
+        {
+            Assert.True(TableLayout.LengthLeaderToLeft(0));
+            Assert.False(TableLayout.LengthLeaderToLeft(1));
+            Assert.False(TableLayout.LengthLeaderToLeft(2));
+            Assert.Equal(1.0, TableLayout.LengthLeaderTextX(0, 2.0, 3.0, 1.0), 6);
+            Assert.Equal(4.0, TableLayout.LengthLeaderTextX(1, 2.0, 3.0, 1.0), 6);
+        }
+
+        [Fact]
         public void LengthIntervalsIncludeManholeGaps()
         {
             var spans = TableLayout.LengthIntervals(

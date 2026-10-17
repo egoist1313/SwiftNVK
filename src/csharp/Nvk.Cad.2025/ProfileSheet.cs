@@ -1912,6 +1912,7 @@ namespace Nvk.Cad
                 else if (row.Kind == SheetRowKind.Length)
                 {
                     // Нетто трубы плюс пролёты колодцев (0→стенка, стенка→стенка, стенка→конец).
+                    int spanI = 0;
                     foreach (var sp in lenSpans)
                     {
                         double xaCh = sp[0];
@@ -1928,7 +1929,9 @@ namespace Nvk.Cad
                         if (w < th)
                         {
                             double ymidL = 0.5 * (y + yB);
-                            AddMLeader(ms, tr, layer, 0.5 * (xa + xb), ymidL, xb + th, ymidL, lenStr, th, 0.0);
+                            bool left = TableLayout.LengthLeaderToLeft(spanI);
+                            double tx = TableLayout.LengthLeaderTextX(spanI, xa, xb, th);
+                            AddMLeader(ms, tr, layer, 0.5 * (xa + xb), ymidL, tx, ymidL, lenStr, th, 0.0, left);
                         }
                         else if (w < textW)
                             NvkText.Make(ms, tr, layer, 0.5 * (xa + xb), 0.5 * (y + yB),
@@ -1936,6 +1939,7 @@ namespace Nvk.Cad
                         else
                             NvkText.Make(ms, tr, layer, 0.5 * (xa + xb), 0.5 * (y + yB),
                                 lenStr, th, AttachmentPoint.MiddleCenter, 0.0);
+                        spanI++;
                     }
                 }
                 else if (row.Kind == SheetRowKind.Slope)
@@ -2146,7 +2150,7 @@ namespace Nvk.Cad
 
         static void AddMLeader(BlockTableRecord btr, Transaction tr, string layer,
             double arrowX, double arrowY, double textX, double textY,
-            string contents, double th, double textRot)
+            string contents, double th, double textRot, bool textLeft = false)
         {
             var ml = new MLeader();
             ml.SetDatabaseDefaults();
@@ -2166,7 +2170,7 @@ namespace Nvk.Cad
             var tblCfg = NvkSession.Tbl();
             if (tblCfg != null && tblCfg.Annotative) h = tblCfg.Scaled(h, NvkSession.Cannoscale);
             mt.TextHeight = h;
-            mt.Attachment = AttachmentPoint.MiddleLeft;
+            mt.Attachment = textLeft ? AttachmentPoint.MiddleRight : AttachmentPoint.MiddleLeft;
             mt.Location = new Point3d(textX, textY, 0.0);
             mt.Rotation = textRot;
             try { mt.TextStyleId = btr.Database.Textstyle; } catch (Exc) { }

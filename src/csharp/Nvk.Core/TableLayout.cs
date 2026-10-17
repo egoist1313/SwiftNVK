@@ -222,6 +222,22 @@ namespace Nvk.Core
             return segWidthDraw < 2.0 * textH;
         }
 
+        /// <summary>
+        /// Выноска длины, если текст не влазит: только первый интервал влево,
+        /// со второго — вправо.
+        /// </summary>
+        public static bool LengthLeaderToLeft(int spanIndex)
+        {
+            return spanIndex == 0;
+        }
+
+        /// <summary>X полки выноски длины. Первый интервал — xa−th, остальные — xb+th.</summary>
+        public static double LengthLeaderTextX(int spanIndex, double xa, double xb, double th)
+        {
+            if (LengthLeaderToLeft(spanIndex)) return xa - th;
+            return xb + th;
+        }
+
         /// <summary>0 в rowRound = брать fallback (глобальное округление таблицы).</summary>
         public static int Prec(int rowRound, int fallback)
         {
