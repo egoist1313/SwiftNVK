@@ -110,6 +110,7 @@ namespace Nvk.Core.Tests
         public void IsOursMatchesNvkPrefix()
         {
             Assert.True(PlanView.IsOurs("NVK-PLAN"));
+            Assert.True(PlanView.IsOurs(PlanView.LayerSit));
             Assert.True(PlanView.IsOurs("nvk-ep-razr"));
             Assert.True(PlanView.IsOurs("0"));
             Assert.True(PlanView.IsOurs("Defpoints"));

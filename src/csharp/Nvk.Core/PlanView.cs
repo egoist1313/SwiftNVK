@@ -133,6 +133,9 @@ namespace Nvk.Core
 
         public const string LayerMh = "NVK-PLAN-MH";
         public const string LayerSamp = "NVK-PLAN-SAMP";
+        /// <summary>Ситуационный коридор и выноска «Предъявляемый участок». PipeBuild: PB-PlanSituation.</summary>
+        public const string LayerSit = "NVK-PLAN-SIT";
+        public const string SitLabel = "Предъявляемый участок";
 
         public static bool IsSampLeader(string layer)
         {

@@ -332,7 +332,7 @@ namespace Nvk.Cad
                 UnionNearby(db, tr, NvkSession.SampWin, new[] { "NVK-VOL-SAMP" });
 
             double px0, py0, px1, py1;
-            string[] planLyrs = { "NVK-PLAN", PlanView.LayerMh, PlanView.LayerSamp };
+            string[] planLyrs = { "NVK-PLAN", PlanView.LayerMh, PlanView.LayerSamp, PlanView.LayerSit };
             for (int i = 0; i < planLyrs.Length; i++)
             {
                 if (TryLayerExtents(db, tr, planLyrs[i], out px0, out py0, out px1, out py1))

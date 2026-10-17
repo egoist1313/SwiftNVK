@@ -5,6 +5,7 @@ using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Nvk.Core;
+using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using AcadColor = Autodesk.AutoCAD.Colors.Color;
 
 namespace Nvk.Cad
@@ -14,7 +15,7 @@ namespace Nvk.Cad
         const string Layer = "NVK-PLAN";
         static readonly string[] LeaderLayers =
         {
-            Layer, PlanView.LayerMh, PlanView.LayerSamp
+            Layer, PlanView.LayerMh, PlanView.LayerSamp, PlanView.LayerSit
         };
 
         public static string Draw(Database db, Transaction tr)
@@ -32,6 +33,7 @@ namespace Nvk.Cad
             EnsureLayer(db, tr, Layer, 1);
             EnsureLayer(db, tr, PlanView.LayerMh, 6);
             EnsureLayer(db, tr, PlanView.LayerSamp, 3);
+            EnsureLayer(db, tr, PlanView.LayerSit, 5);
             var poses = LeaderPoses.Parse(NvkSession.CachePlanLdr);
             var live = NvkLeader.Collect(db, tr, LeaderLayers);
             LeaderPoses.Overlay(poses, live);
@@ -59,6 +61,7 @@ namespace Nvk.Cad
                 AddPline(ms, tr, axis, false, 1, 0);
                 var trench = TrenchByOffset(last.Chain, cfg);
                 AddPline(ms, tr, trench, true, 5, 30);
+                DrawSituation(ms, tr, axis, poses, planDeg, nRun);
 
                 if (cfg.PlanEn && last.PlanTargets != null)
                 {
@@ -99,7 +102,7 @@ namespace Nvk.Cad
 
             RecordPlanWin(db, tr);
             return "[НВК] PLAN: участков " + nRun
-                 + "  ось + траншея"
+                 + "  ось + траншея + предъявляемый участок"
                  + "  колодцев " + nMh + "  проб " + nLead;
         }
 
@@ -242,6 +245,64 @@ namespace Nvk.Cad
             try { col.Dispose(); } catch { }
         }
 
+        /// <summary>
+        /// Коридор ±10 м, штриховка ANSI31 (цвет 1, масштаб 5×DIMSCALE)
+        /// и выноска «Предъявляемый участок»: остриё 6 м, полка 14 м влево от оси.
+        /// </summary>
+        static void DrawSituation(BlockTableRecord ms, Transaction tr, List<PlanPt> axis,
+            Dictionary<string, LeaderPose> poses, double planDeg, int nRun)
+        {
+            var sit = PlanGeom.SituationClosed(axis, PlanGeom.SitHalfM);
+            if (sit.Count >= 3)
+            {
+                ObjectId loop = AddPline(ms, tr, sit, true, 5, 0, PlanView.LayerSit);
+                HatchSituation(ms, tr, loop);
+            }
+            PlanPt arrow, text;
+            if (!PlanGeom.SituationLeader(axis, PlanGeom.SitArrowM, PlanGeom.SitTextM, out arrow, out text))
+                return;
+            string key = PlanView.SitLabel;
+            if (nRun > 1)
+                key = PlanView.SitLabel + " " + nRun.ToString(CultureInfo.InvariantCulture);
+            PlaceLeader(ms, tr, poses, arrow.X, arrow.Y, text.X, text.Y, key, PlanView.LayerSit, planDeg, true);
+        }
+
+        static void HatchSituation(BlockTableRecord ms, Transaction tr, ObjectId loop)
+        {
+            if (loop.IsNull) return;
+            try
+            {
+                var h = new Hatch();
+                h.SetDatabaseDefaults();
+                h.Layer = PlanView.LayerSit;
+                h.Color = Aci(1);
+                ms.AppendEntity(h);
+                tr.AddNewlyCreatedDBObject(h, true);
+                h.SetHatchPattern(HatchPatternType.PreDefined, "ANSI31");
+                h.PatternScale = PlanGeom.SituationHatchScale(DimScale());
+                h.Associative = false;
+                var ids = new ObjectIdCollection();
+                ids.Add(loop);
+                h.AppendLoop(HatchLoopTypes.Outermost, ids);
+                h.EvaluateHatch(true);
+            }
+            catch { }
+        }
+
+        static double DimScale()
+        {
+            try
+            {
+                var v = AcadApp.GetSystemVariable("DIMSCALE");
+                if (v is double d) return d;
+                return Convert.ToDouble(v, CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return 1.0;
+            }
+        }
+
         static void AddCircle(BlockTableRecord ms, Transaction tr, double x, double y, double r)
         {
             var c = new Circle(new Point3d(x, y, 0.0), Vector3d.ZAxis, r);
@@ -305,12 +366,17 @@ namespace Nvk.Cad
             NvkLeader.Make(ms, tr, layer, ax, ay, tx, ty, key, rot);
         }
 
-        static void AddPline(BlockTableRecord ms, Transaction tr, List<PlanPt> pts, bool closed, short color, int lw)
+        static ObjectId AddPline(BlockTableRecord ms, Transaction tr, List<PlanPt> pts, bool closed, short color, int lw)
         {
-            if (pts == null || pts.Count < 2) return;
+            return AddPline(ms, tr, pts, closed, color, lw, Layer);
+        }
+
+        static ObjectId AddPline(BlockTableRecord ms, Transaction tr, List<PlanPt> pts, bool closed, short color, int lw, string layer)
+        {
+            if (pts == null || pts.Count < 2) return ObjectId.Null;
             var pl = new Polyline(pts.Count);
             pl.SetDatabaseDefaults();
-            pl.Layer = Layer;
+            pl.Layer = string.IsNullOrEmpty(layer) ? Layer : layer;
             pl.Closed = closed;
             pl.Color = Aci(color);
             if (lw > 0) pl.LineWeight = (LineWeight)lw;
@@ -318,6 +384,7 @@ namespace Nvk.Cad
                 pl.AddVertexAt(i, new Point2d(pts[i].X, pts[i].Y), 0, 0, 0);
             ms.AppendEntity(pl);
             tr.AddNewlyCreatedDBObject(pl, true);
+            return pl.ObjectId;
         }
 
         static AcadColor Aci(short i)

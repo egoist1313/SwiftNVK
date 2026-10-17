@@ -127,6 +127,62 @@ namespace Nvk.Core
             return result;
         }
 
+        /// <summary>Полуширина ситуационного коридора, м. PipeBuild: ±10 м от оси.</summary>
+        public const double SitHalfM = 10.0;
+        /// <summary>Остриё выноски «Предъявляемый участок» от оси, м.</summary>
+        public const double SitArrowM = 6.0;
+        /// <summary>Полка выноски за границей коридора, м.</summary>
+        public const double SitTextM = 14.0;
+
+        /// <summary>Замкнутый контур коридора постоянной полуширины, как pb-plan-make-situation.</summary>
+        public static List<PlanPt> SituationClosed(List<PlanPt> axis, double halfWidth)
+        {
+            var empty = new List<PlanPt>();
+            if (axis == null || axis.Count < 2 || halfWidth <= 0.0) return empty;
+            var hws = new List<double>(axis.Count - 1);
+            for (int i = 0; i < axis.Count - 1; i++)
+                hws.Add(halfWidth);
+            var left = OffsetPolyVar(axis, hws, 1.0);
+            var right = OffsetPolyVar(axis, hws, -1.0);
+            if (left.Count < 2 || right.Count < 2) return empty;
+            var closed = new List<PlanPt>(left.Count + right.Count);
+            closed.AddRange(left);
+            for (int i = right.Count - 1; i >= 0; i--)
+                closed.Add(right[i]);
+            return closed;
+        }
+
+        /// <summary>
+        /// Выноска по середине трассы: остриё и текст влево от оси (нормаль CCW).
+        /// Как pb-draw-plan-view: mid = n/2, направление от предыдущей вершины.
+        /// </summary>
+        public static bool SituationLeader(List<PlanPt> axis, double arrowDist, double textDist,
+            out PlanPt arrow, out PlanPt text)
+        {
+            arrow = default(PlanPt);
+            text = default(PlanPt);
+            if (axis == null || axis.Count < 2) return false;
+            int mid = axis.Count / 2;
+            if (mid < 1) mid = 1;
+            PlanPt p0 = axis[mid - 1];
+            PlanPt p1 = axis[mid];
+            double dx = p1.X - p0.X;
+            double dy = p1.Y - p0.Y;
+            double len = Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-6) return false;
+            double px = -dy / len;
+            double py = dx / len;
+            arrow = new PlanPt(p1.X + px * arrowDist, p1.Y + py * arrowDist);
+            text = new PlanPt(p1.X + px * textDist, p1.Y + py * textDist);
+            return true;
+        }
+
+        /// <summary>Масштаб ANSI31 коридора: 5 × max(1, DIMSCALE), как pb-plan-make-situation.</summary>
+        public static double SituationHatchScale(double dimscale)
+        {
+            return 5.0 * Math.Max(1.0, dimscale);
+        }
+
         static PlanPt Off(PlanPt p, double nx, double ny, double d)
         {
             return new PlanPt(p.X + nx * d, p.Y + ny * d);

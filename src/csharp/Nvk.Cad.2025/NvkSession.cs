@@ -49,7 +49,7 @@ namespace Nvk.Cad
 
     static class NvkSession
     {
-        public const string Version = "0.181";
+        public const string Version = "0.182";
         public static int RunId;
         public static DomainResult Last;
         public static List<DomainResult> Runs = new List<DomainResult>();

@@ -437,5 +437,46 @@ namespace Nvk.Core.Tests
         {
             return ax * by - ay * bx;
         }
+
+        [Fact]
+        public void SituationCorridorIsTwentyMetersWide()
+        {
+            var axis = new List<PlanPt>
+            {
+                new PlanPt(0, 0),
+                new PlanPt(40, 0)
+            };
+            var sit = PlanGeom.SituationClosed(axis, PlanGeom.SitHalfM);
+            Assert.True(sit.Count >= 4);
+            Assert.Equal(10.0, sit[0].Y, 6);
+            Assert.Equal(10.0, sit[1].Y, 6);
+            Assert.Equal(-10.0, sit[2].Y, 6);
+            Assert.Equal(-10.0, sit[3].Y, 6);
+        }
+
+        [Fact]
+        public void SituationLeaderAtMidLeftOfAxis()
+        {
+            var axis = new List<PlanPt>
+            {
+                new PlanPt(0, 0),
+                new PlanPt(20, 0),
+                new PlanPt(40, 0)
+            };
+            PlanPt arrow, text;
+            Assert.True(PlanGeom.SituationLeader(axis, PlanGeom.SitArrowM, PlanGeom.SitTextM, out arrow, out text));
+            Assert.Equal(20.0, arrow.X, 6);
+            Assert.Equal(6.0, arrow.Y, 6);
+            Assert.Equal(20.0, text.X, 6);
+            Assert.Equal(14.0, text.Y, 6);
+        }
+
+        [Fact]
+        public void SituationHatchScaleMatchesPipeBuild()
+        {
+            Assert.Equal(5.0, PlanGeom.SituationHatchScale(0.0), 6);
+            Assert.Equal(5.0, PlanGeom.SituationHatchScale(1.0), 6);
+            Assert.Equal(2500.0, PlanGeom.SituationHatchScale(500.0), 6);
+        }
     }
 }

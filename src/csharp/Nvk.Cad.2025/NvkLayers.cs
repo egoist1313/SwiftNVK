@@ -20,6 +20,7 @@ namespace Nvk.Cad
             ("NVK-PLAN",     1, false, false),
             ("NVK-PLAN-MH",  6, false, false),
             ("NVK-PLAN-SAMP", 3, false, false),
+            ("NVK-PLAN-SIT",  5, false, false),
             ("NVK-VOL",      7, false, false),
             ("NVK-VOL-MH",   7, false, false),
             ("NVK-VOL-SAMP", 7, false, false),
