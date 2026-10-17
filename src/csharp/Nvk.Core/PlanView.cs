@@ -136,6 +136,8 @@ namespace Nvk.Core
         /// <summary>Ситуационный коридор и выноска «Предъявляемый участок». PipeBuild: PB-PlanSituation.</summary>
         public const string LayerSit = "NVK-PLAN-SIT";
         public const string SitLabel = "Предъявляемый участок";
+        /// <summary>Гражданский слой покрытия на плане. На всех пяти ВЭ всегда оттаян.</summary>
+        public const string LayerCover = "Покрытия";
 
         public static bool IsSampLeader(string layer)
         {
@@ -143,7 +145,29 @@ namespace Nvk.Core
                 && string.Equals(layer, LayerSamp, StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>Слои NVK-* плюс 0 и Defpoints — те, что плагин держит включёнными по умолчанию.</summary>
+        public static bool IsSit(string layer)
+        {
+            return !string.IsNullOrEmpty(layer)
+                && string.Equals(layer, LayerSit, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsCover(string layer)
+        {
+            return !string.IsNullOrEmpty(layer)
+                && string.Equals(layer, LayerCover, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>0, Defpoints и Покрытия — на ВЭ плана всегда включены.</summary>
+        public static bool IsAlwaysOn(string layer)
+        {
+            if (string.IsNullOrEmpty(layer)) return false;
+            if (layer == "0") return true;
+            if (string.Equals(layer, "Defpoints", StringComparison.OrdinalIgnoreCase))
+                return true;
+            return IsCover(layer);
+        }
+
+        /// <summary>Слои NVK-* плюс 0 и Defpoints. Ситуационник наш, на ВЭ по умолчанию выключен.</summary>
         public static bool IsOurs(string layer)
         {
             if (string.IsNullOrEmpty(layer)) return false;
@@ -154,8 +178,8 @@ namespace Nvk.Core
         }
 
         /// <summary>
-        /// Пустой список — включены только наши слои (NVK-*, 0, Defpoints).
-        /// Иначе — только имена из списка. Слой 0 и Defpoints всегда включены.
+        /// Пустой список — наши слои кроме ситуационника; Покрытия, 0, Defpoints всегда.
+        /// Иначе — имена из списка плюс всегда-включённые. NVK-PLAN-SIT только если в списке.
         /// </summary>
         public static bool IsOn(string layer, IList<string> on)
         {
@@ -169,9 +193,17 @@ namespace Nvk.Core
         {
             if (string.IsNullOrEmpty(layer)) return false;
             if (freezeSamp && IsSampLeader(layer)) return false;
-            if (layer == "0") return true;
-            if (string.Equals(layer, "Defpoints", StringComparison.OrdinalIgnoreCase))
-                return true;
+            if (IsSit(layer))
+            {
+                if (on == null || on.Count == 0) return false;
+                for (int i = 0; i < on.Count; i++)
+                {
+                    if (string.Equals(on[i], layer, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                return false;
+            }
+            if (IsAlwaysOn(layer)) return true;
             if (on == null || on.Count == 0) return IsOurs(layer);
             for (int i = 0; i < on.Count; i++)
             {

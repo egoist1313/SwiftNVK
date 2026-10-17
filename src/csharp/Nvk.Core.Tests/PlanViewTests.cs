@@ -115,7 +115,36 @@ namespace Nvk.Core.Tests
             Assert.True(PlanView.IsOurs("0"));
             Assert.True(PlanView.IsOurs("Defpoints"));
             Assert.False(PlanView.IsOurs("C-ROAD"));
+            Assert.False(PlanView.IsOurs(PlanView.LayerCover));
             Assert.False(PlanView.IsOurs(""));
+        }
+
+        [Fact]
+        public void SitOffCoverOnByDefault()
+        {
+            Assert.False(PlanView.IsOn(PlanView.LayerSit, null));
+            Assert.False(PlanView.IsOn(PlanView.LayerSit, new string[0]));
+            Assert.False(PlanView.IsOn(PlanView.LayerSit, new[] { "NVK-PLAN" }));
+            Assert.True(PlanView.IsOn(PlanView.LayerSit, new[] { PlanView.LayerSit }));
+            Assert.True(PlanView.IsOn(PlanView.LayerCover, null));
+            Assert.True(PlanView.IsOn(PlanView.LayerCover, new string[0]));
+            Assert.True(PlanView.IsOn(PlanView.LayerCover, new[] { "NVK-PLAN" }));
+            Assert.True(PlanView.IsOn(PlanView.LayerCover, null, true));
+            Assert.False(PlanView.IsOn(PlanView.LayerSit, null, true));
+            Assert.False(PlanView.IsOn(PlanView.LayerSit, null, false));
+        }
+
+        [Fact]
+        public void CoverIsAlwaysOn()
+        {
+            Assert.True(PlanView.IsAlwaysOn("0"));
+            Assert.True(PlanView.IsAlwaysOn("Defpoints"));
+            Assert.True(PlanView.IsAlwaysOn(PlanView.LayerCover));
+            Assert.True(PlanView.IsAlwaysOn("покрытия"));
+            Assert.False(PlanView.IsAlwaysOn(PlanView.LayerSit));
+            Assert.False(PlanView.IsAlwaysOn("NVK-PLAN"));
+            Assert.True(PlanView.IsSit(PlanView.LayerSit));
+            Assert.True(PlanView.IsCover("Покрытия"));
         }
     }
 }

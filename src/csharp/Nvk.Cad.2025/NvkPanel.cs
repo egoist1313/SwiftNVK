@@ -894,26 +894,20 @@ namespace Nvk.Cad
                 var sel = new List<string>();
                 for (int i = 0; i < list.Items.Count; i++)
                     if (list.GetItemChecked(i)) sel.Add(list.Items[i].ToString());
-                bool onlyOurs = true;
-                for (int i = 0; i < sel.Count; i++)
+                bool matchesDefault = true;
+                for (int i = 0; i < list.Items.Count; i++)
                 {
-                    if (!PlanView.IsOurs(sel[i])) { onlyOurs = false; break; }
-                }
-                if (onlyOurs)
-                {
-                    for (int i = 0; i < names.Count; i++)
+                    string n = list.Items[i].ToString();
+                    bool want = PlanView.IsOn(n, null, freezeSamp);
+                    if (list.GetItemChecked(i) != want)
                     {
-                        if (freezeSamp && PlanView.IsSampLeader(names[i])) continue;
-                        if (PlanView.IsOurs(names[i]) && !PlanView.IsOn(names[i], sel, freezeSamp))
-                        {
-                            onlyOurs = false;
-                            break;
-                        }
+                        matchesDefault = false;
+                        break;
                     }
                 }
-                NvkUiState.SetPlanVpOn(kind, onlyOurs ? "" : PlanView.JoinLayers(sel));
+                NvkUiState.SetPlanVpOn(kind, matchesDefault ? "" : PlanView.JoinLayers(sel));
                 _status.Text = NvkSheets.NameOf(kind) + ": слои "
-                    + (onlyOurs ? "только наши" : sel.Count.ToString());
+                    + (matchesDefault ? "только наши" : sel.Count.ToString());
             }
         }
 
