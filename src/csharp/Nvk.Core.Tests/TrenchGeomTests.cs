@@ -105,6 +105,16 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void GapSurfaceOnlyOnL2L3L4()
+        {
+            Assert.False(TrenchGeom.GapSurface(1));
+            Assert.True(TrenchGeom.GapSurface(2));
+            Assert.True(TrenchGeom.GapSurface(3));
+            Assert.True(TrenchGeom.GapSurface(4));
+            Assert.False(TrenchGeom.GapSurface(5));
+        }
+
+        [Fact]
         public void SurfaceWingsGapAtTrenchWall()
         {
             var g = G();

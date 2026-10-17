@@ -256,6 +256,14 @@ namespace Nvk.Core
         }
 
         /// <summary>
+        /// L6 сплошная на L1 и L5 (pc-draw-surface). Разрыв в котловане только на L2–L4.
+        /// </summary>
+        public static bool GapSurface(int level)
+        {
+            return level >= 2 && level < 5;
+        }
+
+        /// <summary>
         /// Крылья L0/L6 с разрывом в котловане ±xTop (как pc-draw-surface на L2–L4).
         /// До засыпки земли в яме нет — линии обрываются у стенки.
         /// </summary>

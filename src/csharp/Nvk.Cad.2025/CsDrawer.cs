@@ -174,8 +174,10 @@ namespace Nvk.Cad
 
             double xTopL = TrenchGeom.XTopLeft(g, mL);
             double xTopR = TrenchGeom.XTopRight(g, mR);
-            double zL = Math.Max(e.TrenchBottom, TrenchGeom.SurfZAt(g, -xTopL));
-            double zR = Math.Max(e.TrenchBottom, TrenchGeom.SurfZAt(g, xTopR));
+            double zWallL = TrenchGeom.SurfZAt(g, -xTopL);
+            double zWallR = TrenchGeom.SurfZAt(g, xTopR);
+            double zL = Math.Max(e.TrenchBottom, zWallL);
+            double zR = Math.Max(e.TrenchBottom, zWallR);
             bool pitUp = zL > e.TrenchBottom + 1e-6 || zR > e.TrenchBottom + 1e-6;
 
             if (g.InManhole)
@@ -186,11 +188,11 @@ namespace Nvk.Cad
                 return;
             }
 
-            if (pitUp)
-            {
-                AddSeg(btr, tr, ox + (-xTopL) * sc, oy + (zL - osh) * sc, ox + (-bL) * sc, oy + (e.TrenchBottom - osh) * sc, Aci(7), 0);
-                AddSeg(btr, tr, ox + bR * sc, oy + (e.TrenchBottom - osh) * sc, ox + xTopR * sc, oy + (zR - osh) * sc, Aci(7), 0);
-            }
+            // Стенки от фактической L6, даже если L6 < L1 — иначе разрыв на сечении 1-1.
+            if (Math.Abs(zWallL - e.TrenchBottom) > 1e-6 || Math.Abs(xTopL - bL) > 1e-4)
+                AddSeg(btr, tr, ox + (-xTopL) * sc, oy + (zWallL - osh) * sc, ox + (-bL) * sc, oy + (e.TrenchBottom - osh) * sc, Aci(7), 0);
+            if (Math.Abs(zWallR - e.TrenchBottom) > 1e-6 || Math.Abs(xTopR - bR) > 1e-4)
+                AddSeg(btr, tr, ox + bR * sc, oy + (e.TrenchBottom - osh) * sc, ox + xTopR * sc, oy + (zWallR - osh) * sc, Aci(7), 0);
             if (level == 1 || level == 5)
                 AddPline(btr, tr, ToDraw(new[] { P(-bL, e.TrenchBottom), P(bR, e.TrenchBottom) }, sc, osh, ox, oy), Aci(1), false, 0);
 
@@ -331,12 +333,12 @@ namespace Nvk.Cad
         }
 
         /// <summary>
-        /// L6 синяя: до засыпки (L1–L4) разрыв в котловане у стенки, L5 сплошная.
-        /// L0 красный пунктир — проектное покрытие, без разрыва.
+        /// L6 синяя: разрыв в котловане только на L2–L4 (как pc-draw-surface).
+        /// L1 и L5 — сплошная. L0 красный пунктир без разрыва.
         /// </summary>
         static void DrawL0L6(BlockTableRecord btr, Transaction tr, SectionGeom g, double sc, double osh, double ox, double oy, double mL, double mR, int level)
         {
-            bool gapL6 = level < 5;
+            bool gapL6 = TrenchGeom.GapSurface(level);
             DrawSurfWings(btr, tr, g, false, sc, osh, ox, oy, mL, mR, gapL6, Aci(5), 18, null);
             if (g.Pavement > 1e-6)
                 DrawSurfWings(btr, tr, g, true, sc, osh, ox, oy, mL, mR, false, Aci(1), 18, "DASHED");

@@ -1208,11 +1208,17 @@ namespace Nvk.Cad
         {
             var r = new List<Point2d>();
             if (pts == null || pts.Count < 2) return r;
-            double y1 = YAt(pts, x1), y2 = YAt(pts, x2);
-            r.Add(new Point2d(x1, y1));
+            if (x2 < x1) { double t = x1; x1 = x2; x2 = t; }
+            double p0 = pts[0].X, p1 = pts[pts.Count - 1].X;
+            if (p1 < p0) { double t = p0; p0 = p1; p1 = t; }
+            if (x2 < p0 + 1e-9 || x1 > p1 - 1e-9) return r;
+            if (x1 < p0) x1 = p0;
+            if (x2 > p1) x2 = p1;
+            if (x2 < x1 + 1e-9) return r;
+            r.Add(new Point2d(x1, YAt(pts, x1)));
             foreach (var p in pts)
                 if (p.X > x1 + 1e-9 && p.X < x2 - 1e-9) r.Add(p);
-            r.Add(new Point2d(x2, y2));
+            r.Add(new Point2d(x2, YAt(pts, x2)));
             return r;
         }
 
@@ -2289,20 +2295,39 @@ namespace Nvk.Cad
                     HatchPat.ForBackfill(sheetHatch, zt, cfg));
                 return;
             }
-            double ch = 0.0;
-            while (ch < total - 1e-6)
+            for (int i = 0; i < cfg.Zones.Count; i++)
             {
-                string zt = cfg.ZoneAt(ch);
-                double ch2 = RoadZones.EndAt(ch, cfg.Zones, total);
-                if (ch2 <= ch + 1e-9) ch2 = total;
-                double x1 = o.X + ch * lSc;
-                double x2 = o.X + ch2 * lSc;
+                var z = cfg.Zones[i];
+                if (z == null || z.Ch1 <= z.Ch0 + 1e-9) continue;
+                double x1 = o.X + z.Ch0 * lSc;
+                double x2 = o.X + z.Ch1 * lSc;
                 var top = ClipPts(topPts, x1, x2);
                 var bot = ClipPts(botPts, x1, x2);
+                if (!BandHasHeight(top, bot)) continue;
+                if (z.Ch0 > 1e-6)
+                {
+                    double yt = YAt(topPts, x1);
+                    double yb = YAt(botPts, x1);
+                    if (yt > yb + 1e-3)
+                        AddLine(ms, tr, layer, x1, yb, x1, yt, Aci(7), 0);
+                }
                 HatchFillBand(ms, tr, layer, last, o, lSc, top, bot, gapAtMh,
-                    HatchPat.ForBackfill(sheetHatch, zt, cfg));
-                ch = ch2;
+                    HatchPat.ForBackfill(sheetHatch, z.Type, cfg));
             }
+        }
+
+        static bool BandHasHeight(List<Point2d> top, List<Point2d> bot)
+        {
+            if (top == null || bot == null || top.Count < 2 || bot.Count < 2) return false;
+            for (int i = 0; i < top.Count; i++)
+            {
+                if (top[i].Y > YAt(bot, top[i].X) + 1e-3) return true;
+            }
+            for (int i = 0; i < bot.Count; i++)
+            {
+                if (YAt(top, bot[i].X) > bot[i].Y + 1e-3) return true;
+            }
+            return false;
         }
 
         static void HatchFillBand(BlockTableRecord ms, Transaction tr, string layer,
@@ -2310,7 +2335,7 @@ namespace Nvk.Cad
             List<Point2d> top, List<Point2d> bot, bool gapAtMh, FillStyle hx)
         {
             if (hx == null || string.IsNullOrEmpty(hx.Pattern)) return;
-            if (top == null || bot == null || top.Count < 2 || bot.Count < 2) return;
+            if (!BandHasHeight(top, bot)) return;
             var col = CadColor.Of(hx);
             double sc = HatchPat.Scale(hx);
             if (gapAtMh)
