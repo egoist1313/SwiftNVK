@@ -1642,7 +1642,7 @@ namespace Nvk.Cad
         {
             if (last.Geoms == null) return;
             var cfg = last.Cfg ?? new SectionConfig();
-            EnsureLayer(ms.Database, tr, "NVK-MARK", 129);
+            EnsureLayer(ms.Database, tr, "NVK-MARK", 7);
             var tbl = NvkSession.Tbl();
             double markH = th * 0.7;
             if (tbl != null && tbl.Annotative)
@@ -1662,9 +1662,8 @@ namespace Nvk.Cad
                 AddLine(ms, tr, "NVK-MARK", x, yBot, x, yTop, col, 0);
                 double yLabel = yBot + (tbl != null ? tbl.OffsetPct : 0.0) * th / 100.0;
                 double lx = i < labelX.Count ? labelX[i] : x;
-                var mt = NvkText.Make(ms, tr, "NVK-MARK", lx, yLabel, CsAnnot.SectionMark(markOffset + i),
+                NvkText.Make(ms, tr, "NVK-MARK", lx, yLabel, CsAnnot.SectionMark(markOffset + i),
                     th * 0.7, AttachmentPoint.BottomLeft, Math.PI * 0.5, 0, false);
-                if (mt != null) mt.Color = col;
             }
         }
 
