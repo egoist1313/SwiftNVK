@@ -816,7 +816,9 @@ namespace Nvk.Cad
             Pair(rb, pfx + "_TOP", StylePack.Line(st.Top));
             Pair(rb, pfx + "_BOT", StylePack.Line(st.Bot));
             Pair(rb, pfx + "_CS", StylePack.Line(st.CsLine));
-            if (hatch) Pair(rb, pfx + "_HAT", StylePack.Fill(st.Hatch));
+            if (hatch) Pair(rb, pfx + "_HAT", StylePack.Fill(st.HatchSoil ?? st.Hatch));
+            if (st.HatchSand != null) Pair(rb, pfx + "_HAT_SAND", StylePack.Fill(st.HatchSand));
+            if (st.HatchSoil != null) Pair(rb, pfx + "_HAT_SOIL", StylePack.Fill(st.HatchSoil));
         }
 
         static void ApplyStyles(Dictionary<string, string> map)
@@ -845,6 +847,16 @@ namespace Nvk.Cad
             if (TryMap(map, pfx + "_BOT", out v)) st.Bot = StylePack.ParseLine(v, st.Bot);
             if (TryMap(map, pfx + "_CS", out v)) st.CsLine = StylePack.ParseLine(v, st.CsLine);
             if (hatch && TryMap(map, pfx + "_HAT", out v)) st.Hatch = StylePack.ParseFill(v, st.Hatch);
+            if (TryMap(map, pfx + "_HAT_SAND", out v))
+                st.HatchSand = StylePack.ParseFill(v, st.HatchSand ?? FillStyle.Of("AR-SAND", 5, 0.1));
+            if (TryMap(map, pfx + "_HAT_SOIL", out v))
+                st.HatchSoil = StylePack.ParseFill(v, st.HatchSoil ?? FillStyle.Of("DOTS", 5, 0.2));
+            else if (st.HatchSoil == null && st.Hatch != null)
+                st.HatchSoil = st.Hatch.Clone();
+            if (st.HatchSand == null && string.Equals(pfx, "L5", StringComparison.OrdinalIgnoreCase))
+                st.HatchSand = FillStyle.Of("AR-SAND", 5, 0.1);
+            if (st.HatchSoil != null)
+                st.Hatch = st.HatchSoil;
         }
 
         static bool TryMap(Dictionary<string, string> map, string key, out string v)

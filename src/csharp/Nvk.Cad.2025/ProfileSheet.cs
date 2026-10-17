@@ -2287,12 +2287,11 @@ namespace Nvk.Cad
             if (topPts == null || botPts == null || topPts.Count < 2 || botPts.Count < 2) return;
             if (AvgY(topPts) <= AvgY(botPts) + 1e-4) return;
             double total = last != null && last.Chain != null ? last.Chain.Total : 0.0;
-            var sheetHatch = sh != null ? sh.Hatch : null;
             if (cfg == null || cfg.Zones == null || cfg.Zones.Count == 0 || total < 1e-6)
             {
                 string zt = cfg != null ? cfg.ZoneType : null;
                 HatchFillBand(ms, tr, layer, last, o, lSc, topPts, botPts, gapAtMh,
-                    HatchPat.ForBackfill(sheetHatch, zt, cfg));
+                    HatchPat.ForBackfill(sh, zt, cfg));
                 return;
             }
             for (int i = 0; i < cfg.Zones.Count; i++)
@@ -2312,7 +2311,7 @@ namespace Nvk.Cad
                         AddLine(ms, tr, layer, x1, yb, x1, yt, Aci(7), 0);
                 }
                 HatchFillBand(ms, tr, layer, last, o, lSc, top, bot, gapAtMh,
-                    HatchPat.ForBackfill(sheetHatch, z.Type, cfg));
+                    HatchPat.ForBackfill(sh, z.Type, cfg));
             }
         }
 

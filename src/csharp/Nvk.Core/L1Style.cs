@@ -39,6 +39,19 @@ namespace Nvk.Core
         {
             return new FillStyle { Pattern = pat ?? "ANSI31", R = r, G = g, B = b, Color = 0, Scale = scale };
         }
+
+        public FillStyle Clone()
+        {
+            return new FillStyle
+            {
+                Pattern = Pattern ?? "ANSI31",
+                Color = Color,
+                R = R,
+                G = G,
+                B = B,
+                Scale = Scale
+            };
+        }
     }
 
     /// <summary>Настройки уровня L1 (разработка). Файл пресета — JSON в presets/l1.</summary>

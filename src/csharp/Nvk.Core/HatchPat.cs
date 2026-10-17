@@ -59,33 +59,24 @@ namespace Nvk.Core
             }
         }
 
-        /// <summary>L5: песок AR-SAND, местный грунт DOTS. Цвет берётся из стиля листа.</summary>
-        public static FillStyle ForBackfill(FillStyle sheet, string zoneType, SectionConfig cfg)
+        /// <summary>L5: свотч песка или грунта с вкладки засыпки.</summary>
+        public static FillStyle ForBackfill(SheetStyle sheet, string zoneType, SectionConfig cfg)
         {
             var k = BackfillMap.Of(zoneType, cfg);
-            string pat = BackfillMap.Hatch(k);
-            double scale = k == BackfillKind.Sand ? SandScale : SoilScale;
-            short aci = 5;
-            byte r = 0, g = 0, b = 0;
-            if (sheet != null)
-            {
-                aci = sheet.Color;
-                r = sheet.R;
-                g = sheet.G;
-                b = sheet.B;
-                if (string.Equals(sheet.Pattern, pat, StringComparison.OrdinalIgnoreCase)
-                    && sheet.Scale > 1e-9)
-                    scale = sheet.Scale;
-            }
-            return new FillStyle
-            {
-                Pattern = pat,
-                Color = aci,
-                R = r,
-                G = g,
-                B = b,
-                Scale = scale
-            };
+            FillStyle src = PickBackfill(sheet, k);
+            if (src != null && !string.IsNullOrEmpty(src.Pattern))
+                return src.Clone();
+            return k == BackfillKind.Sand
+                ? FillStyle.Of("AR-SAND", 5, SandScale)
+                : FillStyle.Of("DOTS", 5, SoilScale);
+        }
+
+        static FillStyle PickBackfill(SheetStyle sheet, BackfillKind k)
+        {
+            if (sheet == null) return null;
+            if (k == BackfillKind.Sand)
+                return sheet.HatchSand;
+            return sheet.HatchSoil ?? sheet.Hatch;
         }
 
         /// <summary>L5: по карте покрытия → песок / местный грунт (подписи объёмов).</summary>

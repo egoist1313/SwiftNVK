@@ -698,7 +698,7 @@ namespace Nvk.Cad
             {
                 var sh = NvkSession.Sheet(kind);
                 return HatchPat.ForBackfill(
-                    sh != null ? sh.Hatch : null,
+                    sh,
                     g != null ? g.ZoneType : null,
                     NvkSession.Last != null ? NvkSession.Last.Cfg : null);
             }

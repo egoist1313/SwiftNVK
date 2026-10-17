@@ -254,7 +254,7 @@ namespace Nvk.Cad
             pL4.Controls.Add(Head("Строки таблицы"));
             MakeRowConfigBtn(pL4, ProfileKind.Zashita, () => _defsL4, v => _defsL4 = v);
             _labTblL5 = Num(pL5, "Подпись строки в таблице профиля", "");
-            _s5 = MakeSheet(pL5, NvkSession.L5, "L0 покрытие", "L5 засыпка / земля", "L4 верх защиты");
+            _s5 = MakeSheet(pL5, NvkSession.L5, "L0 покрытие", "L5 засыпка / земля", "L4 верх защиты", true, true);
             pL5.Controls.Add(Head("Строки таблицы"));
             MakeRowConfigBtn(pL5, ProfileKind.Zasypka, () => _defsL5, v => _defsL5 = v);
 
@@ -1486,26 +1486,28 @@ namespace Nvk.Cad
         sealed class SheetUi
         {
             public CheckBox Mh;
-            public Button Hatch, Cover, Top, Bot, Cs;
+            public Button Hatch, HatchSand, HatchSoil, Cover, Top, Bot, Cs;
             public ComboBox CoverLt, TopLt, BotLt;
         }
 
-        SheetUi MakeSheet(Control p, SheetStyle st, string capCover, string capTop, string capBot, bool hatch = true)
+        SheetUi MakeSheet(Control p, SheetStyle st, string capCover, string capTop, string capBot,
+            bool hatch = true, bool sandSoil = false)
         {
             var ui = new SheetUi();
             ui.Mh = Chk(p, "Показывать колодцы", st != null && st.ShowManholes);
             ui.Cs = ColorRow(p, "Линии сечения", AciToRgb(129));
             if (st != null) PaintLine(ui.Cs, st.CsLine, AciToRgb(129));
-            if (hatch)
+            if (hatch && sandSoil)
             {
-                Color hCol = Color.Blue;
-                if (st != null && st.Hatch != null)
-                {
-                    hCol = (st.Hatch.R == 0 && st.Hatch.G == 0 && st.Hatch.B == 0 && st.Hatch.Color > 0)
-                        ? AciToRgb(st.Hatch.Color)
-                        : Color.FromArgb(st.Hatch.R, st.Hatch.G, st.Hatch.B);
-                }
-                ui.Hatch = HatchRow(p, "Штриховка", hCol);
+                ui.HatchSand = HatchRow(p, "Штриховка песка", FillSwatch(st != null ? st.HatchSand : null, Color.Blue));
+                ui.HatchSoil = HatchRow(p, "Штриховка местного грунта", FillSwatch(st != null ? st.HatchSoil ?? st.Hatch : null, Color.Blue));
+                if (st != null && st.HatchSand != null) PaintFill(ui.HatchSand, st.HatchSand);
+                if (st != null && (st.HatchSoil != null || st.Hatch != null))
+                    PaintFill(ui.HatchSoil, st.HatchSoil ?? st.Hatch);
+            }
+            else if (hatch)
+            {
+                ui.Hatch = HatchRow(p, "Штриховка", FillSwatch(st != null ? st.Hatch : null, Color.Blue));
                 if (st != null && st.Hatch != null) PaintFill(ui.Hatch, st.Hatch);
             }
             ui.Cover = ColorRow(p, capCover, Color.Red);
@@ -1523,10 +1525,19 @@ namespace Nvk.Cad
             return ui;
         }
 
+        static Color FillSwatch(FillStyle st, Color fallback)
+        {
+            if (st == null) return fallback;
+            if (st.R == 0 && st.G == 0 && st.B == 0 && st.Color > 0) return AciToRgb(st.Color);
+            return Color.FromArgb(st.R, st.G, st.B);
+        }
+
         static void PushSheet(SheetUi ui, SheetStyle st)
         {
             if (ui == null || st == null) return;
             ui.Mh.Checked = st.ShowManholes;
+            if (ui.HatchSand != null) PaintFill(ui.HatchSand, st.HatchSand);
+            if (ui.HatchSoil != null) PaintFill(ui.HatchSoil, st.HatchSoil ?? st.Hatch);
             if (ui.Hatch != null) PaintFill(ui.Hatch, st.Hatch);
             PaintLine(ui.Cs,    st.CsLine, AciToRgb(129));
             PaintLine(ui.Cover, st.Cover, Color.Red);
@@ -1541,7 +1552,18 @@ namespace Nvk.Cad
         {
             if (ui == null || st == null) return;
             st.ShowManholes = ui.Mh.Checked;
-            if (!allowHatch || ui.Hatch == null)
+            if (ui.HatchSand != null)
+            {
+                if (st.HatchSand == null) st.HatchSand = FillStyle.Of("AR-SAND", 5, 0.1);
+                CopyFill(ui.HatchSand, st.HatchSand);
+            }
+            if (ui.HatchSoil != null)
+            {
+                if (st.HatchSoil == null) st.HatchSoil = FillStyle.Of("DOTS", 5, 0.2);
+                CopyFill(ui.HatchSoil, st.HatchSoil);
+                st.Hatch = st.HatchSoil;
+            }
+            else if (!allowHatch || ui.Hatch == null)
                 st.Hatch = null;
             else
             {
