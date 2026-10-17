@@ -2156,12 +2156,30 @@ namespace Nvk.Cad
             ml.SetDatabaseDefaults();
             if (!string.IsNullOrEmpty(layer)) ml.Layer = layer;
             ml.ContentType = ContentType.MTextContent;
-            ml.ArrowSize = th * 0.5;
+            double asz = th * 0.5;
+            ml.ArrowSize = asz;
+            double dogLen = th > asz ? th : asz;
+            if (dogLen < 1e-6) dogLen = 1.0;
+            var dog = textLeft ? new Vector3d(-1, 0, 0) : new Vector3d(1, 0, 0);
+            var textPt = new Point3d(textX, textY, 0);
+            var land = textPt - dog * dogLen;
+            try { ml.EnableLanding = true; } catch (Exc) { }
+            try { ml.EnableDogleg = true; } catch (Exc) { }
+            try { ml.DoglegLength = dogLen; } catch (Exc) { }
+            try { ml.LandingGap = 0.5 * th; } catch (Exc) { }
+            try { ml.LeaderLineType = LeaderType.StraightLeader; } catch (Exc) { }
+            try
+            {
+                ml.SetTextAttachmentType(TextAttachmentType.AttachmentMiddle,
+                    textLeft ? LeaderDirectionType.LeftLeader : LeaderDirectionType.RightLeader);
+            }
+            catch (Exc) { }
 
             int li = ml.AddLeader();
             int lni = ml.AddLeaderLine(li);
             ml.AddFirstVertex(lni, new Point3d(arrowX, arrowY, 0));
-            ml.AddLastVertex(lni, new Point3d(textX, textY, 0));
+            ml.AddLastVertex(lni, land);
+            try { ml.SetDogleg(li, dog); } catch (Exc) { }
 
             var mt = new MText();
             mt.SetDatabaseDefaults();
@@ -2171,13 +2189,27 @@ namespace Nvk.Cad
             if (tblCfg != null && tblCfg.Annotative) h = tblCfg.Scaled(h, NvkSession.Cannoscale);
             mt.TextHeight = h;
             mt.Attachment = textLeft ? AttachmentPoint.MiddleRight : AttachmentPoint.MiddleLeft;
-            mt.Location = new Point3d(textX, textY, 0.0);
+            mt.Location = textPt;
             mt.Rotation = textRot;
             try { mt.TextStyleId = btr.Database.Textstyle; } catch (Exc) { }
             ml.MText = mt;
+            try { ml.TextLocation = textPt; } catch (Exc) { }
 
             btr.AppendEntity(ml);
             tr.AddNewlyCreatedDBObject(ml, true);
+            try
+            {
+                var mt2 = ml.MText;
+                if (mt2 != null)
+                {
+                    mt2.Attachment = textLeft ? AttachmentPoint.MiddleRight : AttachmentPoint.MiddleLeft;
+                    mt2.Location = textPt;
+                    mt2.Rotation = textRot;
+                    ml.MText = mt2;
+                }
+                ml.TextLocation = textPt;
+            }
+            catch (Exc) { }
             NvkTag.Stamp(tr, ml);
         }
 

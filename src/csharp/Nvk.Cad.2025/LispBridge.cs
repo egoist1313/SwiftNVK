@@ -15,7 +15,7 @@ namespace Nvk.Cad
 {
     public sealed class LispBridge
     {
-        const string PingOk = "NVK ok 0.192";
+        const string PingOk = "NVK ok 0.193";
 
         [LispFunction("NVK-PING")]
         public static ResultBuffer Ping(ResultBuffer args)
