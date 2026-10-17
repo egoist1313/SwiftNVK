@@ -916,7 +916,7 @@ namespace Nvk.Cad
                 case HeightSrc.PipeTop: return inv + d + wall;
                 case HeightSrc.ZashTop: return inv + d + wall + thk;
                 case HeightSrc.DeltaZash:
-                    return ProfileRows.DeltaZashThickness(inv + d + wall + thk, inv - wall, d);
+                    return ProfileRows.DeltaZashThickness(inv + d + wall + thk, inv + d + wall);
                 default: return inv;
             }
         }
@@ -1892,12 +1892,10 @@ namespace Nvk.Cad
                         if (row.Src == HeightSrc.DeltaZash)
                         {
                             var zTop = GetDrawn(kind, HeightSrc.ZashTop) ?? PtsFor(HeightSrc.ZashTop, last, cfg, o, lSc, hSc, osh);
-                            var zBot = GetDrawn(kind, HeightSrc.SandTop) ?? PtsFor(HeightSrc.SandTop, last, cfg, o, lSc, hSc, osh);
-                            double diam = last.Chain != null ? last.Chain.Locate(hxs[i]).Diam : 0.0;
+                            var zPipe = GetDrawn(kind, HeightSrc.PipeTop) ?? PtsFor(HeightSrc.PipeTop, last, cfg, o, lSc, hSc, osh);
                             zv = ProfileRows.DeltaZashThickness(
                                 ZFromLine(zTop, x, o, hSc, osh),
-                                ZFromLine(zBot, x, o, hSc, osh),
-                                diam);
+                                ZFromLine(zPipe, x, o, hSc, osh));
                         }
                         else
                             zv = ZFromLine(srcPts, x, o, hSc, osh);

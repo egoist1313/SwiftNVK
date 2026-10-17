@@ -68,22 +68,23 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
-        public void DeltaZashIsL4MinusL2MinusDiam()
+        public void DeltaZashIsL4MinusPipeTop()
         {
             var cfg = new SectionConfig { Bedding = 0.10, ThkZash = 0.30 };
             var p = new AxisPt { Invert = 100.0, Diam = 0.25, EarthZ = 102.0, Surface = 102.0 };
             double l4 = p.NamedZ(NamedLine.ZashTop, cfg);
-            double l2 = p.NamedZ(NamedLine.SandTop, cfg);
+            double pipe = p.NamedZ(NamedLine.PipeTop, cfg);
             double thk = ProfileRows.ZAt(HeightSrc.DeltaZash, p, cfg);
-            Assert.Equal(l4 - l2 - 0.25, thk, 6);
+            Assert.Equal(l4 - pipe, thk, 6);
             Assert.Equal(0.30, thk, 6);
         }
 
         [Fact]
-        public void DeltaZashZeroWhenL4OnL2()
+        public void DeltaZashZeroWhenL4OnPipe()
         {
-            Assert.Equal(0.0, ProfileRows.DeltaZashThickness(100.0, 100.0, 0.25), 6);
-            Assert.Equal(0.05, ProfileRows.DeltaZashThickness(100.40, 100.10, 0.25), 6);
+            Assert.Equal(0.0, ProfileRows.DeltaZashThickness(100.0, 100.0), 6);
+            Assert.Equal(0.05, ProfileRows.DeltaZashThickness(100.40, 100.35), 6);
+            Assert.Equal(0.05, ProfileRows.DeltaZashThickness(100.40, 100.10, 0.25, 0.0), 6);
         }
 
         [Fact]

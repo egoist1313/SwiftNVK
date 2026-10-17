@@ -272,17 +272,24 @@ namespace Nvk.Core
                 case HeightSrc.DeltaZash:
                     return DeltaZashThickness(
                         p.NamedZ(NamedLine.ZashTop, cfg),
-                        p.NamedZ(NamedLine.SandTop, cfg),
-                        p.Diam);
+                        p.NamedZ(NamedLine.PipeTop, cfg));
                 default: return p.Invert;
             }
         }
 
-        /// <summary>Толщина защитного слоя: L4 − L2 − диаметр трубы. Отрицательное → 0.</summary>
-        public static double DeltaZashThickness(double zashTop, double sandTop, double diam)
+        /// <summary>Толщина защитного слоя над трубой: L4 − наружный верх. Стенки Корсис не входят. Отрицательное → 0.</summary>
+        public static double DeltaZashThickness(double zashTop, double pipeTop)
         {
-            double t = zashTop - sandTop - diam;
+            double t = zashTop - pipeTop;
             return t < 0.0 ? 0.0 : t;
+        }
+
+        /// <summary>То же через постель: L4 − L2 − ID − 2·стенка = L4 − верх трубы.</summary>
+        public static double DeltaZashThickness(double zashTop, double sandTop, double diam, double wall)
+        {
+            if (wall < 0.0) wall = 0.0;
+            if (diam < 0.0) diam = 0.0;
+            return DeltaZashThickness(zashTop, sandTop + diam + 2.0 * wall);
         }
     }
 }

@@ -308,6 +308,7 @@ namespace Nvk.Core
                     + "  mL=" + F(mL) + "  mR=" + F(mR)
                     + "  толщина L2песок=" + F(g.Thickness(ProfileKind.Pesok))
                     + "  L4защ=" + F(g.Thickness(ProfileKind.Zashita))
+                    + "  защ_над_трубой=" + F(e.ZashTop - e.PipeTop)
                     + "  L5засып=" + (g.IsDrawn(ProfileKind.Zasypka) ? F(g.Thickness(ProfileKind.Zasypka)) : "нет")
                     + "  d=" + F(e.Diam));
                 if (g.SurfPts != null && g.SurfPts.Count > 0)

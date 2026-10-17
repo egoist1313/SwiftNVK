@@ -42,7 +42,7 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
-        public void DeltaZashWithWallIsCatalogPlusBothWalls()
+        public void DeltaZashWithWallIsCoverAbovePipe()
         {
             var cfg = new SectionConfig
             {
@@ -51,9 +51,26 @@ namespace Nvk.Core.Tests
                 UsePipeWall = true,
                 Walls = PipeWalls.KorsisSn8()
             };
-            var p = new AxisPt { Invert = 100.0, Diam = 0.216, EarthZ = 102.0, Surface = 102.0 };
+            var p = new AxisPt { Invert = 100.0, Diam = 0.250, EarthZ = 102.0, Surface = 102.0 };
+            double l4 = p.NamedZ(NamedLine.ZashTop, cfg);
+            double pipe = p.NamedZ(NamedLine.PipeTop, cfg);
+            double l2 = p.NamedZ(NamedLine.SandTop, cfg);
             double thk = ProfileRows.ZAt(HeightSrc.DeltaZash, p, cfg);
-            Assert.Equal(0.30 + 2 * 0.017, thk, 6);
+            Assert.Equal(0.30, thk, 6);
+            Assert.Equal(l4 - pipe, thk, 6);
+            Assert.Equal(0.30 + 2 * 0.017, l4 - l2 - 0.250, 6);
+        }
+
+        [Fact]
+        public void DeltaZashScatterStaysWithinAmpAbovePipe()
+        {
+            const double thk = 0.30;
+            const double amp = 0.05;
+            double pipe = 100.267;
+            Assert.Equal(thk, ProfileRows.DeltaZashThickness(pipe + thk, pipe), 6);
+            Assert.Equal(thk + amp, ProfileRows.DeltaZashThickness(pipe + thk + amp, pipe), 6);
+            Assert.Equal(thk - amp, ProfileRows.DeltaZashThickness(pipe + thk - amp, pipe), 6);
+            Assert.True(ProfileRows.DeltaZashThickness(pipe + thk + amp, pipe) <= thk + amp + 1e-9);
         }
     }
 }
