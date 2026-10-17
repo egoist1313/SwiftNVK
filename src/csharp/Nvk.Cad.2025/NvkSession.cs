@@ -49,7 +49,7 @@ namespace Nvk.Cad
 
     static class NvkSession
     {
-        public const string Version = "0.182";
+        public const string Version = "0.183";
         public static int RunId;
         public static DomainResult Last;
         public static List<DomainResult> Runs = new List<DomainResult>();
@@ -260,7 +260,7 @@ namespace Nvk.Cad
                 default: return null;
             }
             if (string.IsNullOrEmpty(s)) return null;
-            return Nvk.Core.TableRowDef.DeserializeList(s);
+            return TableRowDef.EnsureCoverFirst(kind, TableRowDef.DeserializeList(s));
         }
 
         public static int Idx(ProfileKind kind)

@@ -172,6 +172,7 @@ namespace Nvk.Core
 
         static List<TableRowDef> DefaultsL2() => new List<TableRowDef>
         {
+            CoverRow(),
             D(SheetRowKind.Height,  HeightSrc.SandTop,      "Отметка верха\\Pпостели из песка, м",    2, true, true, 0.05),
             D(SheetRowKind.Height,  HeightSrc.TrenchBottom, "Отметка дна\\Pтраншеи, м",               2, true, true, 0.05),
             D(SheetRowKind.Length,  default,                "Длина, м",                               2, true),
@@ -181,6 +182,7 @@ namespace Nvk.Core
 
         static List<TableRowDef> DefaultsL3() => new List<TableRowDef>
         {
+            CoverRow(),
             D(SheetRowKind.Slope,   default,                "Уклон, ‰",                               1, true),
             D(SheetRowKind.Height,  HeightSrc.Invert,       "Отметка низа\\Pили лотка трубы, м",      3, true),
             D(SheetRowKind.Length,  default,                "Длина, м",                               2, true),
@@ -206,6 +208,28 @@ namespace Nvk.Core
             D(SheetRowKind.Diam,    default,                "%%c трубопровода",                        2, true),
             D(SheetRowKind.Manhole, default,                "Номер колодца, точки,\\Pуглы поворота",   2, true),
         };
+
+        public static TableRowDef CoverRow()
+            => D(SheetRowKind.Height, HeightSrc.RoadTop, "Проектно-планировочное\\Pпокрытие, м", 2, true);
+
+        /// <summary>
+        /// L2/L3: первая строка — покрытие. Старые TBL_ROWS без RoadTop получают её в начало.
+        /// </summary>
+        public static List<TableRowDef> EnsureCoverFirst(ProfileKind kind, List<TableRowDef> rows)
+        {
+            if (kind != ProfileKind.Pesok && kind != ProfileKind.Truba) return rows;
+            if (rows == null) return rows;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if (rows[i] != null && rows[i].Type == SheetRowKind.Height
+                    && rows[i].Src == HeightSrc.RoadTop)
+                    return rows;
+            }
+            var copy = new List<TableRowDef>(rows.Count + 1);
+            copy.Add(CoverRow());
+            copy.AddRange(rows);
+            return copy;
+        }
 
         static TableRowDef D(SheetRowKind type, HeightSrc src, string label, int roundTo, bool show)
             => D(type, src, label, roundTo, show, false, 0.0);

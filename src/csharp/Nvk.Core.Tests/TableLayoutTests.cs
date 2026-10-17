@@ -134,18 +134,45 @@ namespace Nvk.Core.Tests
             l1.HatchExcavation = FillStyle.Rgb("DOTS", 1, 2, 3, 2);
             var hx = HatchPat.ForKind(ProfileKind.Razrabotka, l1, null);
             Assert.Equal("DOTS", hx.Pattern);
-            Assert.Equal(0.4, HatchPat.Scale(hx), 6);
+            Assert.Equal(2.0, HatchPat.Scale(hx), 6);
 
             var l2 = SheetStyle.Pesok();
             l2.Hatch = FillStyle.Rgb("AR-SAND", 10, 20, 30, 3);
             Assert.Equal("AR-SAND", HatchPat.ForKind(ProfileKind.Pesok, l1, l2).Pattern);
-            Assert.Equal(0.03, HatchPat.Scale(l2.Hatch), 6);
+            Assert.Equal(3.0, HatchPat.Scale(l2.Hatch), 6);
 
             Assert.Null(HatchPat.ForKind(ProfileKind.Truba, l1, SheetStyle.Truba()));
             Assert.Equal("ANSI31", HatchPat.ForKind(ProfileKind.Pesok, l1, SheetStyle.Pesok()).Pattern);
             Assert.Equal("AR-SAND", HatchPat.ForKind(ProfileKind.Zashita, l1, SheetStyle.Zashita()).Pattern);
             Assert.Equal("DOTS", HatchPat.ForKind(ProfileKind.Zasypka, l1, SheetStyle.Zasypka()).Pattern);
             Assert.Equal(1.0, HatchPat.Scale(FillStyle.Rgb("ANSI31", 8, 8, 8, 1)), 6);
+            Assert.Equal(0.1, HatchPat.Scale(SheetStyle.Zashita().Hatch), 6);
+            Assert.Equal(0.2, HatchPat.Scale(SheetStyle.Zasypka().Hatch), 6);
+            Assert.Equal(5, SheetStyle.Pesok().Hatch.Color);
+            Assert.Equal(129, SheetStyle.Pesok().CsLine.Color);
+            Assert.Equal(129, L1Style.Default().CsLine.Color);
+            Assert.Equal(5, L1Style.Default().HatchExcavation.Color);
+            var sand = HatchPat.ForBackfill(SheetStyle.Zasypka().Hatch, "ASPH", null);
+            Assert.Equal("AR-SAND", sand.Pattern);
+            Assert.Equal(0.1, HatchPat.Scale(sand), 6);
+            var soil = HatchPat.ForBackfill(SheetStyle.Zasypka().Hatch, "GAZN", null);
+            Assert.Equal("DOTS", soil.Pattern);
+            Assert.Equal(0.2, HatchPat.Scale(soil), 6);
+        }
+
+        [Fact]
+        public void StylePackRoundtripLineAndFill()
+        {
+            var line = LineStyle.Of(129, "DASHED", 18);
+            var back = StylePack.ParseLine(StylePack.Line(line), LineStyle.Of(7, "Continuous", 30));
+            Assert.Equal(129, back.Color);
+            Assert.Equal("DASHED", back.Linetype);
+            Assert.Equal(18, back.Weight);
+            var fill = FillStyle.Of("AR-SAND", 5, 0.1);
+            var fb = StylePack.ParseFill(StylePack.Fill(fill), FillStyle.Of("ANSI31", 8, 1));
+            Assert.Equal("AR-SAND", fb.Pattern);
+            Assert.Equal(5, fb.Color);
+            Assert.Equal(0.1, fb.Scale, 6);
         }
 
         [Fact]

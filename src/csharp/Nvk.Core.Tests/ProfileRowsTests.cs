@@ -39,10 +39,32 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
-        public void L3StartsWithSlope()
+        public void L2AndL3StartWithRoadTop()
         {
-            var rows = ProfileRows.For(ProfileKind.Truba);
-            Assert.Equal(SheetRowKind.Slope, rows[0].Kind);
+            var l2 = ProfileRows.For(ProfileKind.Pesok);
+            Assert.Equal(HeightSrc.RoadTop, l2[0].Src);
+            Assert.Contains("покрытие", l2[0].Label);
+            var l3 = ProfileRows.For(ProfileKind.Truba);
+            Assert.Equal(HeightSrc.RoadTop, l3[0].Src);
+            Assert.Equal(SheetRowKind.Slope, l3[1].Kind);
+            var d2 = TableRowDef.Defaults(ProfileKind.Pesok);
+            Assert.Equal(HeightSrc.RoadTop, d2[0].Src);
+            var d3 = TableRowDef.Defaults(ProfileKind.Truba);
+            Assert.Equal(HeightSrc.RoadTop, d3[0].Src);
+        }
+
+        [Fact]
+        public void EnsureCoverFirstPrependsRoadTop()
+        {
+            var old = new System.Collections.Generic.List<TableRowDef>
+            {
+                new TableRowDef { Type = SheetRowKind.Slope, Label = "Уклон, ‰", Show = true }
+            };
+            var got = TableRowDef.EnsureCoverFirst(ProfileKind.Truba, old);
+            Assert.Equal(HeightSrc.RoadTop, got[0].Src);
+            Assert.Equal(SheetRowKind.Slope, got[1].Type);
+            var already = TableRowDef.Defaults(ProfileKind.Pesok);
+            Assert.Same(already, TableRowDef.EnsureCoverFirst(ProfileKind.Pesok, already));
         }
 
         [Fact]

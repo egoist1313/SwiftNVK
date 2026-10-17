@@ -138,6 +138,7 @@ namespace Nvk.Core
                 case ProfileKind.Pesok:
                     return new List<SheetRow>
                     {
+                        SheetRow.H(HeightSrc.RoadTop, "Проектно-планировочное\\Pпокрытие, м"),
                         SheetRow.H(HeightSrc.SandTop, "Отметка верха\\Pпостели из песка, м"),
                         SheetRow.H(HeightSrc.TrenchBottom, "Отметка дна\\Pтраншеи, м"),
                         SheetRow.Len("Длина, м"),
@@ -147,6 +148,7 @@ namespace Nvk.Core
                 case ProfileKind.Truba:
                     return new List<SheetRow>
                     {
+                        SheetRow.H(HeightSrc.RoadTop, "Проектно-планировочное\\Pпокрытие, м"),
                         SheetRow.Slp("Уклон, ‰"),
                         SheetRow.H(HeightSrc.Invert, "Отметка низа\\Pили лотка трубы, м"),
                         SheetRow.Len("Длина, м"),

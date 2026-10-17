@@ -671,12 +671,14 @@ namespace Nvk.Cad
                     AddPline(ms, tr, layer, botAdoptFact, Aci(6), false, 18);
             }
 
-            if (pat != null && topPts.Count >= 2 && botPts.Count >= 2
+            if (kind == ProfileKind.Zasypka)
+                HatchBackfill(ms, tr, layer, sh, cfg, last, o, lSc, topPts, botPts, gapAtMh);
+            else if (pat != null && topPts.Count >= 2 && botPts.Count >= 2
                 && AvgY(topPts) > AvgY(botPts) + 1e-4)
             {
                 var col = hx != null ? CadColor.Of(hx) : Aci(8);
                 double sc = HatchPat.Scale(hx);
-                if (kind == ProfileKind.Zashita || kind == ProfileKind.Zasypka)
+                if (kind == ProfileKind.Zashita)
                 {
                     if (gapAtMh)
                         HatchPipesInner(ms, tr, last, o, lSc, topPts, botPts, pat, layer, col, sc);
@@ -2266,8 +2268,54 @@ namespace Nvk.Cad
                 ids.Add(pl.ObjectId);
                 h.AppendLoop(HatchLoopTypes.Outermost, ids);
                 h.EvaluateHatch(true);
+                NvkAnno.Apply(h);
             }
             catch (Exc) { }
+        }
+
+        static void HatchBackfill(BlockTableRecord ms, Transaction tr, string layer,
+            SheetStyle sh, SectionConfig cfg, DomainResult last, Point3d o, double lSc,
+            List<Point2d> topPts, List<Point2d> botPts, bool gapAtMh)
+        {
+            if (topPts == null || botPts == null || topPts.Count < 2 || botPts.Count < 2) return;
+            if (AvgY(topPts) <= AvgY(botPts) + 1e-4) return;
+            double total = last != null && last.Chain != null ? last.Chain.Total : 0.0;
+            var sheetHatch = sh != null ? sh.Hatch : null;
+            if (cfg == null || cfg.Zones == null || cfg.Zones.Count == 0 || total < 1e-6)
+            {
+                string zt = cfg != null ? cfg.ZoneType : null;
+                HatchFillBand(ms, tr, layer, last, o, lSc, topPts, botPts, gapAtMh,
+                    HatchPat.ForBackfill(sheetHatch, zt, cfg));
+                return;
+            }
+            double ch = 0.0;
+            while (ch < total - 1e-6)
+            {
+                string zt = cfg.ZoneAt(ch);
+                double ch2 = RoadZones.EndAt(ch, cfg.Zones, total);
+                if (ch2 <= ch + 1e-9) ch2 = total;
+                double x1 = o.X + ch * lSc;
+                double x2 = o.X + ch2 * lSc;
+                var top = ClipPts(topPts, x1, x2);
+                var bot = ClipPts(botPts, x1, x2);
+                HatchFillBand(ms, tr, layer, last, o, lSc, top, bot, gapAtMh,
+                    HatchPat.ForBackfill(sheetHatch, zt, cfg));
+                ch = ch2;
+            }
+        }
+
+        static void HatchFillBand(BlockTableRecord ms, Transaction tr, string layer,
+            DomainResult last, Point3d o, double lSc,
+            List<Point2d> top, List<Point2d> bot, bool gapAtMh, FillStyle hx)
+        {
+            if (hx == null || string.IsNullOrEmpty(hx.Pattern)) return;
+            if (top == null || bot == null || top.Count < 2 || bot.Count < 2) return;
+            var col = CadColor.Of(hx);
+            double sc = HatchPat.Scale(hx);
+            if (gapAtMh)
+                HatchPipesInner(ms, tr, last, o, lSc, top, bot, hx.Pattern, layer, col, sc);
+            else
+                Hatch(ms, tr, layer, Band(top, bot), hx.Pattern, sc, col);
         }
     }
 }

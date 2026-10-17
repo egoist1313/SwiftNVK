@@ -9,15 +9,18 @@ namespace Nvk.Core
         public LineStyle Cover { get; set; }
         public LineStyle Top { get; set; }
         public LineStyle Bot { get; set; }
+        /// <summary>Линии поперечника этого листа. По умолчанию ACI 129.</summary>
+        public LineStyle CsLine { get; set; } = LineStyle.Of(129, "Continuous", 30);
 
         public static SheetStyle Pesok()
         {
             return new SheetStyle
             {
-                Hatch = FillStyle.Rgb("ANSI31", 220, 200, 80, 1),
+                Hatch = FillStyle.Of("ANSI31", 5, 1),
                 Cover = LineStyle.Rgb(255, 0, 0, "DASHED", 18),
-                Top = LineStyle.Rgb(255, 200, 0, "Continuous", 30),
-                Bot = LineStyle.Rgb(255, 0, 0, "Continuous", 30)
+                Top = LineStyle.Of(5, "Continuous", 30),
+                Bot = LineStyle.Of(5, "Continuous", 30),
+                CsLine = LineStyle.Of(129, "Continuous", 30)
             };
         }
 
@@ -28,7 +31,8 @@ namespace Nvk.Core
                 Hatch = null,
                 Cover = LineStyle.Rgb(255, 0, 0, "DASHED", 18),
                 Top = LineStyle.Rgb(255, 0, 0, "Continuous", 30),
-                Bot = LineStyle.Rgb(255, 0, 0, "Continuous", 30)
+                Bot = LineStyle.Rgb(255, 0, 0, "Continuous", 30),
+                CsLine = LineStyle.Of(129, "Continuous", 30)
             };
         }
 
@@ -36,10 +40,11 @@ namespace Nvk.Core
         {
             return new SheetStyle
             {
-                Hatch = FillStyle.Rgb("AR-SAND", 210, 180, 80, 1),
+                Hatch = FillStyle.Of("AR-SAND", 5, 0.1),
                 Cover = LineStyle.Rgb(255, 0, 0, "DASHED", 18),
-                Top = LineStyle.Rgb(0, 160, 80, "Continuous", 30),
-                Bot = LineStyle.Rgb(255, 200, 0, "Continuous", 30)
+                Top = LineStyle.Of(1, "Continuous", 30),
+                Bot = LineStyle.Of(5, "Continuous", 30),
+                CsLine = LineStyle.Of(129, "Continuous", 30)
             };
         }
 
@@ -47,10 +52,11 @@ namespace Nvk.Core
         {
             return new SheetStyle
             {
-                Hatch = FillStyle.Rgb("DOTS", 140, 140, 140, 1),
+                Hatch = FillStyle.Of("DOTS", 5, 0.2),
                 Cover = LineStyle.Rgb(255, 0, 0, "DASHED", 18),
-                Top = LineStyle.Rgb(0, 180, 80, "Continuous", 30),
-                Bot = LineStyle.Rgb(0, 160, 80, "Continuous", 30)
+                Top = LineStyle.Of(1, "Continuous", 30),
+                Bot = LineStyle.Of(5, "Continuous", 30),
+                CsLine = LineStyle.Of(129, "Continuous", 30)
             };
         }
     }

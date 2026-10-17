@@ -260,6 +260,7 @@ namespace Nvk.Cad
                 ids.Add(pl.ObjectId);
                 h.AppendLoop(HatchLoopTypes.Outermost, ids);
                 h.EvaluateHatch(true);
+                NvkAnno.Apply(h);
             }
             catch (Exc) { }
         }

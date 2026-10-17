@@ -40,7 +40,7 @@ namespace Nvk.Cad
         readonly ComboBox _l1rl, _l1el, _l1bl;
         readonly TextBox _l1preset;
         readonly CheckBox _useBe, _l1mh;
-        readonly Button _btnRoad, _btnEarth, _btnBot, _btnHat, _btnPav;
+        readonly Button _btnRoad, _btnEarth, _btnBot, _btnHat, _btnPav, _btnCs;
         readonly ComboBox _cL0, _cL6;
         readonly SheetUi _s2, _s3, _s4, _s5;
         readonly CheckBox _useWall;
@@ -207,13 +207,14 @@ namespace Nvk.Cad
             _labRoad  = Num(pL1, "Подпись L0 покрытия", "Проектно-планировочное покрытие, м");
             _labEarth = Num(pL1, "Подпись L6 черной земли", "Отметка земли, м");
             _labBot   = Num(pL1, "Подпись L1 дна траншеи", "Отметка дна траншеи, м");
+            _btnCs    = ColorRow(pL1, "Линии сечения", AciToRgb(129));
             _btnRoad  = ColorRow(pL1, "L0 покрытие", Color.Red);
             _l1rl     = LtRow(pL1, "Тип линии L0", "Continuous");
             _btnEarth = ColorRow(pL1, "L6 черная земля", Color.Blue);
             _l1el     = LtRow(pL1, "Тип линии L6", "Continuous");
             _btnBot   = ColorRow(pL1, "L1 дно траншеи", Color.Red);
             _l1bl     = LtRow(pL1, "Тип линии L1", "Continuous");
-            _btnHat   = HatchRow(pL1, "Штриховка разработки", Color.Silver);
+            _btnHat   = HatchRow(pL1, "Штриховка разработки", Color.Blue);
             _btnPav   = HatchRow(pL1, "Штриховка одежды", Color.IndianRed);
             _l1preset = Num(pL1, "Пресет L1", "default");
             var pre = new FlowLayoutPanel { Width = 244, Height = 38, WrapContents = true, BackColor = Color.Transparent };
@@ -322,6 +323,7 @@ namespace Nvk.Cad
             _labEarth.Text   = string.IsNullOrEmpty(NvkUiState.LabelEarth)  ? "Отметка земли, м"     : NvkUiState.LabelEarth;
             _labBot.Text     = string.IsNullOrEmpty(NvkUiState.LabelBottom) ? "Отметка дна траншеи, м"               : NvkUiState.LabelBottom;
             var st = NvkSession.L1 ?? L1Style.Default();
+            PaintLine(_btnCs,    st.CsLine, AciToRgb(129));
             PaintLine(_btnRoad,  st.Road,   Color.Red);
             PaintLine(_btnEarth, st.Earth,  Color.Blue);
             PaintLine(_btnBot,   st.Bottom, Color.Red);
@@ -343,8 +345,8 @@ namespace Nvk.Cad
             _labTblL4.Text    = NvkUiState.TblL4Label ?? "";
             _labTblL5.Text    = NvkUiState.TblL5Label ?? "";
             _defsL1 = string.IsNullOrEmpty(NvkUiState.RowsL1) ? null : TableRowDef.DeserializeList(NvkUiState.RowsL1);
-            _defsL2 = string.IsNullOrEmpty(NvkUiState.RowsL2) ? null : TableRowDef.DeserializeList(NvkUiState.RowsL2);
-            _defsL3 = string.IsNullOrEmpty(NvkUiState.RowsL3) ? null : TableRowDef.DeserializeList(NvkUiState.RowsL3);
+            _defsL2 = string.IsNullOrEmpty(NvkUiState.RowsL2) ? null : TableRowDef.EnsureCoverFirst(ProfileKind.Pesok, TableRowDef.DeserializeList(NvkUiState.RowsL2));
+            _defsL3 = string.IsNullOrEmpty(NvkUiState.RowsL3) ? null : TableRowDef.EnsureCoverFirst(ProfileKind.Truba, TableRowDef.DeserializeList(NvkUiState.RowsL3));
             _defsL4 = string.IsNullOrEmpty(NvkUiState.RowsL4) ? null : TableRowDef.DeserializeList(NvkUiState.RowsL4);
             _defsL5 = string.IsNullOrEmpty(NvkUiState.RowsL5) ? null : TableRowDef.DeserializeList(NvkUiState.RowsL5);
             if (_defsL1 != null) RowScatter.ApplyLegacy(_defsL1, ProfileKind.Razrabotka);
@@ -463,10 +465,12 @@ namespace Nvk.Cad
             NvkSession.L1.Earth.Linetype = LtName(_l1el, "Continuous");
             if (NvkSession.L1.Bottom == null) NvkSession.L1.Bottom = LineStyle.Rgb(255,   0, 0, "Continuous", 30);
             NvkSession.L1.Bottom.Linetype = LtName(_l1bl, "Continuous");
+            if (NvkSession.L1.CsLine == null) NvkSession.L1.CsLine = LineStyle.Of(129, "Continuous", 30);
+            CopyRgb(_btnCs,    NvkSession.L1.CsLine);
             CopyRgb(_btnRoad,  NvkSession.L1.Road);
             CopyRgb(_btnEarth, NvkSession.L1.Earth  ?? (NvkSession.L1.Earth  = LineStyle.Rgb(  0,   0, 255, "Continuous", 30)));
             CopyRgb(_btnBot,   NvkSession.L1.Bottom ?? (NvkSession.L1.Bottom = LineStyle.Rgb(255,   0,   0, "Continuous", 30)));
-            CopyFill(_btnHat, NvkSession.L1.HatchExcavation ?? (NvkSession.L1.HatchExcavation = FillStyle.Rgb("ANSI31", 160, 160, 160, 1)));
+            CopyFill(_btnHat, NvkSession.L1.HatchExcavation ?? (NvkSession.L1.HatchExcavation = FillStyle.Of("ANSI31", 5, 1)));
             CopyFill(_btnPav, NvkSession.L1.HatchPavement   ?? (NvkSession.L1.HatchPavement   = FillStyle.Rgb("ANSI31", 200,  80,  80, 1)));
             NvkUiState.L1HatPat  = NvkSession.L1.HatchExcavation.Pattern;
             NvkUiState.L1PavPat  = NvkSession.L1.HatchPavement.Pattern;
@@ -520,9 +524,9 @@ namespace Nvk.Cad
             if (!string.IsNullOrEmpty(NvkUiState.RowsL1))
                 _defsL1 = TableRowDef.DeserializeList(NvkUiState.RowsL1);
             if (!string.IsNullOrEmpty(NvkUiState.RowsL2))
-                _defsL2 = TableRowDef.DeserializeList(NvkUiState.RowsL2);
+                _defsL2 = TableRowDef.EnsureCoverFirst(ProfileKind.Pesok, TableRowDef.DeserializeList(NvkUiState.RowsL2));
             if (!string.IsNullOrEmpty(NvkUiState.RowsL3))
-                _defsL3 = TableRowDef.DeserializeList(NvkUiState.RowsL3);
+                _defsL3 = TableRowDef.EnsureCoverFirst(ProfileKind.Truba, TableRowDef.DeserializeList(NvkUiState.RowsL3));
             if (!string.IsNullOrEmpty(NvkUiState.RowsL4))
                 _defsL4 = TableRowDef.DeserializeList(NvkUiState.RowsL4);
             if (!string.IsNullOrEmpty(NvkUiState.RowsL5))
@@ -1051,6 +1055,9 @@ namespace Nvk.Cad
                         ev.Bounds, ev.ForeColor,
                         TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
                 };
+                Color fillRgb = (fill.R == 0 && fill.G == 0 && fill.B == 0 && fill.Color > 0)
+                    ? AciToRgb(fill.Color)
+                    : Color.FromArgb(fill.R, fill.G, fill.B);
                 var col = new Button
                 {
                     Left      = 12,
@@ -1058,7 +1065,7 @@ namespace Nvk.Cad
                     Width     = 288,
                     Height    = 28,
                     FlatStyle = FlatStyle.Flat,
-                    BackColor = Color.FromArgb(fill.R, fill.G, fill.B),
+                    BackColor = fillRgb,
                     Text      = "цвет штриховки…"
                 };
                 col.FlatAppearance.BorderColor = C_BORDER;
@@ -1267,17 +1274,28 @@ namespace Nvk.Cad
 
         static Color AciToRgb(short aci)
         {
-            switch (aci)
+            try
             {
-                case 1: return Color.Red;
-                case 2: return Color.Yellow;
-                case 3: return Color.Lime;
-                case 4: return Color.Cyan;
-                case 5: return Color.Blue;
-                case 6: return Color.Magenta;
-                case 7: return Color.White;
-                case 8: return Color.Gray;
-                default: return Color.Gray;
+                var c = Autodesk.AutoCAD.Colors.Color.FromColorIndex(
+                    Autodesk.AutoCAD.Colors.ColorMethod.ByAci, aci);
+                var sys = c.ColorValue;
+                return Color.FromArgb(sys.R, sys.G, sys.B);
+            }
+            catch
+            {
+                switch (aci)
+                {
+                    case 1: return Color.Red;
+                    case 2: return Color.Yellow;
+                    case 3: return Color.Lime;
+                    case 4: return Color.Cyan;
+                    case 5: return Color.Blue;
+                    case 6: return Color.Magenta;
+                    case 7: return Color.White;
+                    case 8: return Color.Gray;
+                    case 129: return Color.FromArgb(0, 255, 191);
+                    default: return Color.Gray;
+                }
             }
         }
 
@@ -1468,7 +1486,7 @@ namespace Nvk.Cad
         sealed class SheetUi
         {
             public CheckBox Mh;
-            public Button Hatch, Cover, Top, Bot;
+            public Button Hatch, Cover, Top, Bot, Cs;
             public ComboBox CoverLt, TopLt, BotLt;
         }
 
@@ -1476,10 +1494,17 @@ namespace Nvk.Cad
         {
             var ui = new SheetUi();
             ui.Mh = Chk(p, "Показывать колодцы", st != null && st.ShowManholes);
+            ui.Cs = ColorRow(p, "Линии сечения", AciToRgb(129));
+            if (st != null) PaintLine(ui.Cs, st.CsLine, AciToRgb(129));
             if (hatch)
             {
-                var hCol = st != null && st.Hatch != null
-                    ? Color.FromArgb(st.Hatch.R, st.Hatch.G, st.Hatch.B) : Color.Silver;
+                Color hCol = Color.Blue;
+                if (st != null && st.Hatch != null)
+                {
+                    hCol = (st.Hatch.R == 0 && st.Hatch.G == 0 && st.Hatch.B == 0 && st.Hatch.Color > 0)
+                        ? AciToRgb(st.Hatch.Color)
+                        : Color.FromArgb(st.Hatch.R, st.Hatch.G, st.Hatch.B);
+                }
                 ui.Hatch = HatchRow(p, "Штриховка", hCol);
                 if (st != null && st.Hatch != null) PaintFill(ui.Hatch, st.Hatch);
             }
@@ -1487,12 +1512,12 @@ namespace Nvk.Cad
             if (st != null) PaintLine(ui.Cover, st.Cover, Color.Red);
             ui.CoverLt = LtRow(p, "Тип линии " + capCover,
                 st != null && st.Cover != null && !string.IsNullOrEmpty(st.Cover.Linetype) ? st.Cover.Linetype : "DASHED");
-            ui.Top = ColorRow(p, capTop, Color.Gold);
-            if (st != null) PaintLine(ui.Top, st.Top, Color.Gold);
+            ui.Top = ColorRow(p, capTop, Color.Blue);
+            if (st != null) PaintLine(ui.Top, st.Top, Color.Blue);
             ui.TopLt = LtRow(p, "Тип линии " + capTop,
                 st != null && st.Top != null && !string.IsNullOrEmpty(st.Top.Linetype) ? st.Top.Linetype : "Continuous");
-            ui.Bot = ColorRow(p, capBot, Color.OrangeRed);
-            if (st != null) PaintLine(ui.Bot, st.Bot, Color.OrangeRed);
+            ui.Bot = ColorRow(p, capBot, Color.Blue);
+            if (st != null) PaintLine(ui.Bot, st.Bot, Color.Blue);
             ui.BotLt = LtRow(p, "Тип линии " + capBot,
                 st != null && st.Bot != null && !string.IsNullOrEmpty(st.Bot.Linetype) ? st.Bot.Linetype : "Continuous");
             return ui;
@@ -1503,9 +1528,10 @@ namespace Nvk.Cad
             if (ui == null || st == null) return;
             ui.Mh.Checked = st.ShowManholes;
             if (ui.Hatch != null) PaintFill(ui.Hatch, st.Hatch);
+            PaintLine(ui.Cs,    st.CsLine, AciToRgb(129));
             PaintLine(ui.Cover, st.Cover, Color.Red);
-            PaintLine(ui.Top,   st.Top,   Color.Gold);
-            PaintLine(ui.Bot,   st.Bot,   Color.OrangeRed);
+            PaintLine(ui.Top,   st.Top,   Color.Blue);
+            PaintLine(ui.Bot,   st.Bot,   Color.Blue);
             SetLt(ui.CoverLt, st.Cover != null ? st.Cover.Linetype : "DASHED");
             SetLt(ui.TopLt,   st.Top   != null ? st.Top.Linetype   : "Continuous");
             SetLt(ui.BotLt,   st.Bot   != null ? st.Bot.Linetype   : "Continuous");
@@ -1519,15 +1545,17 @@ namespace Nvk.Cad
                 st.Hatch = null;
             else
             {
-                if (st.Hatch == null) st.Hatch = FillStyle.Rgb("ANSI31", 160, 160, 160, 1);
+                if (st.Hatch == null) st.Hatch = FillStyle.Of("ANSI31", 5, 1);
                 CopyFill(ui.Hatch, st.Hatch);
             }
             if (st.Cover == null) st.Cover = LineStyle.Rgb(255,   0,   0, "DASHED",     18);
-            if (st.Top   == null) st.Top   = LineStyle.Rgb(255, 200,   0, "Continuous", 30);
-            if (st.Bot   == null) st.Bot   = LineStyle.Rgb(255,   0,   0, "Continuous", 30);
+            if (st.Top   == null) st.Top   = LineStyle.Of(5, "Continuous", 30);
+            if (st.Bot   == null) st.Bot   = LineStyle.Of(5, "Continuous", 30);
+            if (st.CsLine == null) st.CsLine = LineStyle.Of(129, "Continuous", 30);
             CopyRgb(ui.Cover, st.Cover);
             CopyRgb(ui.Top,   st.Top);
             CopyRgb(ui.Bot,   st.Bot);
+            CopyRgb(ui.Cs,    st.CsLine);
             st.Cover.Linetype = LtName(ui.CoverLt, "DASHED");
             st.Top.Linetype   = LtName(ui.TopLt,   "Continuous");
             st.Bot.Linetype   = LtName(ui.BotLt,   "Continuous");

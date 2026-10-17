@@ -74,8 +74,10 @@ namespace Nvk.Core
         public LineStyle Road { get; set; } = LineStyle.Rgb(255, 0, 0, "Continuous", 40);
         public LineStyle Earth { get; set; } = LineStyle.Rgb(0, 0, 255, "Continuous", 30);
         public LineStyle Bottom { get; set; } = LineStyle.Rgb(255, 0, 0, "Continuous", 30);
+        /// <summary>Линии поперечника на листе L1. По умолчанию ACI 129.</summary>
+        public LineStyle CsLine { get; set; } = LineStyle.Of(129, "Continuous", 30);
 
-        public FillStyle HatchExcavation { get; set; } = FillStyle.Rgb("ANSI31", 160, 160, 160, 1.0);
+        public FillStyle HatchExcavation { get; set; } = FillStyle.Of("ANSI31", 5, 1.0);
         public FillStyle HatchPavement { get; set; } = FillStyle.Rgb("ANSI31", 200, 80, 80, 1.0);
 
         public static L1Style Default()

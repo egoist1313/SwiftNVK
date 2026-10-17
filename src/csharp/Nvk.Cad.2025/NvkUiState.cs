@@ -40,7 +40,7 @@ namespace Nvk.Cad
         public static string L1EarthLt = "Continuous";
         public static string L1BotLt = "Continuous";
         public static string L1HatPat = "ANSI31";
-        public static short L1HatCol = 8;
+        public static short L1HatCol = 5;
         public static string L1PavPat = "ANSI31";
         public static short L1PavCol = 8;
         public static string Joint = "SOCKET";
@@ -224,13 +224,16 @@ namespace Nvk.Cad
             if (s.Road == null) s.Road = LineStyle.Rgb(255, 0, 0, "DASHED", 30);
             if (s.Earth == null) s.Earth = LineStyle.Rgb(0, 0, 255, "Continuous", 30);
             if (s.Bottom == null) s.Bottom = LineStyle.Rgb(255, 0, 0, "Continuous", 30);
+            if (s.CsLine == null) s.CsLine = LineStyle.Of(129, "Continuous", 30);
             if (!string.IsNullOrEmpty(L1RoadLt)) s.Road.Linetype = L1RoadLt;
             if (!string.IsNullOrEmpty(L1EarthLt)) s.Earth.Linetype = L1EarthLt;
             if (!string.IsNullOrEmpty(L1BotLt)) s.Bottom.Linetype = L1BotLt;
-            if (s.HatchExcavation == null) s.HatchExcavation = FillStyle.Rgb("ANSI31", 160, 160, 160, 1);
+            if (s.HatchExcavation == null) s.HatchExcavation = FillStyle.Of("ANSI31", 5, 1);
             if (s.HatchPavement == null) s.HatchPavement = FillStyle.Rgb("ANSI31", 200, 80, 80, 1);
-            if (!string.IsNullOrEmpty(L1HatPat)) s.HatchExcavation.Pattern = L1HatPat;
-            if (!string.IsNullOrEmpty(L1PavPat)) s.HatchPavement.Pattern = L1PavPat;
+            if (string.IsNullOrEmpty(s.HatchExcavation.Pattern) && !string.IsNullOrEmpty(L1HatPat))
+                s.HatchExcavation.Pattern = L1HatPat;
+            if (string.IsNullOrEmpty(s.HatchPavement.Pattern) && !string.IsNullOrEmpty(L1PavPat))
+                s.HatchPavement.Pattern = L1PavPat;
             NvkSession.L1 = s;
         }
 
@@ -417,6 +420,7 @@ namespace Nvk.Cad
             Pair(rb, "FACT_PROF_L3", FactProfileHandleL3 ?? "");
             Pair(rb, "FACT_PROF_L4", FactProfileHandleL4 ?? "");
             Pair(rb, "FACT_PROF_L5", FactProfileHandleL5 ?? "");
+            WriteStyles(rb);
             return rb;
         }
 
@@ -424,13 +428,17 @@ namespace Nvk.Cad
         {
             if (args == null) return;
             var arr = args.AsArray();
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i + 1 < arr.Length; i += 2)
             {
                 string k = arr[i].Value as string;
                 string v = arr[i + 1].Value as string;
                 if (k == null || v == null) continue;
                 Apply(k, v);
+                map[k] = v;
             }
+            ApplyStyles(map);
+            EnsureCoverRows();
             HasPush = true;
         }
 
@@ -504,8 +512,11 @@ namespace Nvk.Cad
             if (!hasSlopeL) SlopeL = SlopeM;
             if (!hasSlopeR) SlopeR = SlopeM;
             MigratePlanLayers();
+            ApplyStyles(map);
+            EnsureCoverRows();
             HasPush = true;
             SyncL1();
+            ApplyStyles(map);
         }
 
         public static void ResetToDefaults()
@@ -538,7 +549,7 @@ namespace Nvk.Cad
             L1EarthLt = "Continuous";
             L1BotLt = "Continuous";
             L1HatPat = "ANSI31";
-            L1HatCol = 8;
+            L1HatCol = 5;
             L1PavPat = "ANSI31";
             L1PavCol = 8;
             Joint = "SOCKET";
@@ -610,6 +621,11 @@ namespace Nvk.Cad
             FactProfileHandleL1 = FactProfileHandleL2 = FactProfileHandleL3
                 = FactProfileHandleL4 = FactProfileHandleL5 = "";
             OshOverride = null;
+            NvkSession.L1 = L1Style.Default();
+            NvkSession.L2 = SheetStyle.Pesok();
+            NvkSession.L3 = SheetStyle.Truba();
+            NvkSession.L4 = SheetStyle.Zashita();
+            NvkSession.L5 = SheetStyle.Zasypka();
         }
 
         static void MigratePlanLayers()
@@ -776,6 +792,80 @@ namespace Nvk.Cad
                 case "FACT_PROF_L4": FactProfileHandleL4 = v; break;
                 case "FACT_PROF_L5": FactProfileHandleL5 = v; break;
             }
+        }
+
+        static void WriteStyles(ResultBuffer rb)
+        {
+            var l1 = NvkSession.L1 ?? L1Style.Default();
+            Pair(rb, "L1_CS", StylePack.Line(l1.CsLine));
+            Pair(rb, "L1_ROAD", StylePack.Line(l1.Road));
+            Pair(rb, "L1_EARTH", StylePack.Line(l1.Earth));
+            Pair(rb, "L1_BOTS", StylePack.Line(l1.Bottom));
+            Pair(rb, "L1_HAT", StylePack.Fill(l1.HatchExcavation));
+            Pair(rb, "L1_PAV", StylePack.Fill(l1.HatchPavement));
+            WriteSheet(rb, "L2", NvkSession.L2, true);
+            WriteSheet(rb, "L3", NvkSession.L3, false);
+            WriteSheet(rb, "L4", NvkSession.L4, true);
+            WriteSheet(rb, "L5", NvkSession.L5, true);
+        }
+
+        static void WriteSheet(ResultBuffer rb, string pfx, SheetStyle st, bool hatch)
+        {
+            if (st == null) return;
+            Pair(rb, pfx + "_COV", StylePack.Line(st.Cover));
+            Pair(rb, pfx + "_TOP", StylePack.Line(st.Top));
+            Pair(rb, pfx + "_BOT", StylePack.Line(st.Bot));
+            Pair(rb, pfx + "_CS", StylePack.Line(st.CsLine));
+            if (hatch) Pair(rb, pfx + "_HAT", StylePack.Fill(st.Hatch));
+        }
+
+        static void ApplyStyles(Dictionary<string, string> map)
+        {
+            if (map == null) return;
+            if (NvkSession.L1 == null) NvkSession.L1 = L1Style.Default();
+            string v;
+            if (TryMap(map, "L1_CS", out v)) NvkSession.L1.CsLine = StylePack.ParseLine(v, NvkSession.L1.CsLine);
+            if (TryMap(map, "L1_ROAD", out v)) NvkSession.L1.Road = StylePack.ParseLine(v, NvkSession.L1.Road);
+            if (TryMap(map, "L1_EARTH", out v)) NvkSession.L1.Earth = StylePack.ParseLine(v, NvkSession.L1.Earth);
+            if (TryMap(map, "L1_BOTS", out v)) NvkSession.L1.Bottom = StylePack.ParseLine(v, NvkSession.L1.Bottom);
+            if (TryMap(map, "L1_HAT", out v)) NvkSession.L1.HatchExcavation = StylePack.ParseFill(v, NvkSession.L1.HatchExcavation);
+            if (TryMap(map, "L1_PAV", out v)) NvkSession.L1.HatchPavement = StylePack.ParseFill(v, NvkSession.L1.HatchPavement);
+            ApplySheet(map, "L2", NvkSession.L2 ?? (NvkSession.L2 = SheetStyle.Pesok()), true);
+            ApplySheet(map, "L3", NvkSession.L3 ?? (NvkSession.L3 = SheetStyle.Truba()), false);
+            ApplySheet(map, "L4", NvkSession.L4 ?? (NvkSession.L4 = SheetStyle.Zashita()), true);
+            ApplySheet(map, "L5", NvkSession.L5 ?? (NvkSession.L5 = SheetStyle.Zasypka()), true);
+        }
+
+        static void ApplySheet(Dictionary<string, string> map, string pfx, SheetStyle st, bool hatch)
+        {
+            if (st == null) return;
+            string v;
+            if (TryMap(map, pfx + "_COV", out v)) st.Cover = StylePack.ParseLine(v, st.Cover);
+            if (TryMap(map, pfx + "_TOP", out v)) st.Top = StylePack.ParseLine(v, st.Top);
+            if (TryMap(map, pfx + "_BOT", out v)) st.Bot = StylePack.ParseLine(v, st.Bot);
+            if (TryMap(map, pfx + "_CS", out v)) st.CsLine = StylePack.ParseLine(v, st.CsLine);
+            if (hatch && TryMap(map, pfx + "_HAT", out v)) st.Hatch = StylePack.ParseFill(v, st.Hatch);
+        }
+
+        static bool TryMap(Dictionary<string, string> map, string key, out string v)
+        {
+            v = null;
+            if (map == null || string.IsNullOrEmpty(key)) return false;
+            if (!map.TryGetValue(key, out v)) return false;
+            return !string.IsNullOrEmpty(v);
+        }
+
+        static void EnsureCoverRows()
+        {
+            RowsL2 = PackCover(ProfileKind.Pesok, RowsL2);
+            RowsL3 = PackCover(ProfileKind.Truba, RowsL3);
+        }
+
+        static string PackCover(ProfileKind kind, string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            var list = TableRowDef.EnsureCoverFirst(kind, TableRowDef.DeserializeList(s));
+            return TableRowDef.SerializeList(list);
         }
 
         static void Pair(ResultBuffer rb, string k, string v)
