@@ -76,6 +76,25 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void MergeAllJoinsSameDiamIntoOneFormula()
+        {
+            var cfg = new SectionConfig { Bedding = 0.10, ThkZash = 0.30, Joint = JointType.Socket, SlopeM = 0.0 };
+            var a = VolumeCalc.All(OnePipe(), FlatSurf(102), cfg);
+            var b = VolumeCalc.All(OnePipe(), FlatSurf(102), cfg);
+            var m = VolumeCalc.MergeAll(new List<List<VolLevel>> { a, b });
+            VolLevel razr = null;
+            foreach (var lv in m)
+                if (lv.Kind == ProfileKind.Razrabotka) razr = lv;
+            Assert.NotNull(razr);
+            Assert.Single(razr.Rows);
+            Assert.Equal(20.0, razr.Rows[0].Length, 6);
+            Assert.Equal(a[0].TotalVolume + b[0].TotalVolume, razr.TotalVolume, 6);
+            string txt = VolumeCalc.FormatLevel(razr, cfg);
+            Assert.Contains("на участке", txt);
+            Assert.DoesNotContain("Итого по", txt);
+        }
+
+        [Fact]
         public void SlopedSandWithoutGeomsIsNonZero()
         {
             var cfg = new SectionConfig { Bedding = 0.10, ThkZash = 0.30, Joint = JointType.Socket, SlopeM = 0.5 };

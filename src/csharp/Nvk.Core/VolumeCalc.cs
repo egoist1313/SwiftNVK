@@ -65,6 +65,128 @@ namespace Nvk.Core
             return list;
         }
 
+        /// <summary>Один набор уровней: строки одного диаметра склеиваются, формула общая.</summary>
+        public static List<VolLevel> MergeAll(IList<List<VolLevel>> sets)
+        {
+            var map = new Dictionary<ProfileKind, VolLevel>();
+            if (sets != null)
+            {
+                for (int i = 0; i < sets.Count; i++)
+                {
+                    var set = sets[i];
+                    if (set == null) continue;
+                    for (int j = 0; j < set.Count; j++)
+                        MergeInto(map, set[j]);
+                }
+            }
+            var list = new List<VolLevel>();
+            AddIf(map, list, ProfileKind.Razrabotka);
+            AddIf(map, list, ProfileKind.Pesok);
+            AddIf(map, list, ProfileKind.Truba);
+            AddIf(map, list, ProfileKind.Zashita);
+            AddIf(map, list, ProfileKind.Zasypka);
+            return list;
+        }
+
+        static void AddIf(Dictionary<ProfileKind, VolLevel> map, List<VolLevel> list, ProfileKind kind)
+        {
+            VolLevel lv;
+            if (map.TryGetValue(kind, out lv) && lv != null) list.Add(lv);
+        }
+
+        static void MergeInto(Dictionary<ProfileKind, VolLevel> map, VolLevel src)
+        {
+            if (src == null) return;
+            VolLevel dst;
+            if (!map.TryGetValue(src.Kind, out dst) || dst == null)
+            {
+                map[src.Kind] = CloneLevel(src);
+                return;
+            }
+            dst.TotalVolume += src.TotalVolume;
+            if (src.Rows == null) return;
+            if (dst.Rows == null) dst.Rows = new List<VolRow>();
+            foreach (var row in src.Rows)
+            {
+                if (row == null) continue;
+                int hit = -1;
+                for (int i = 0; i < dst.Rows.Count; i++)
+                {
+                    if (SameRow(dst.Rows[i], row)) { hit = i; break; }
+                }
+                if (hit < 0) dst.Rows.Add(CloneRow(row));
+                else MergeRow(dst.Rows[hit], row);
+            }
+            dst.Rows.Sort(CompareRows);
+        }
+
+        static bool SameRow(VolRow a, VolRow b)
+        {
+            if (a == null || b == null) return false;
+            if (TableLayout.DiamMm(a.Diam) != TableLayout.DiamMm(b.Diam)) return false;
+            if (a.Fill.HasValue != b.Fill.HasValue) return false;
+            if (a.Fill.HasValue && a.Fill.Value != b.Fill.Value) return false;
+            return true;
+        }
+
+        static void MergeRow(VolRow a, VolRow b)
+        {
+            double l0 = a.Length, l1 = b.Length;
+            a.Length = l0 + l1;
+            a.Area += b.Area;
+            a.Volume += b.Volume;
+            a.PipeVol += b.PipeVol;
+            if (l0 + l1 > 1e-9)
+                a.Width = (a.Width * l0 + b.Width * l1) / (l0 + l1);
+            if (b.Terms != null && b.Terms.Count > 0)
+            {
+                if (a.Terms == null) a.Terms = new List<VolTerm>();
+                a.Terms.AddRange(b.Terms);
+            }
+        }
+
+        static VolLevel CloneLevel(VolLevel src)
+        {
+            var rows = new List<VolRow>();
+            if (src.Rows != null)
+            {
+                for (int i = 0; i < src.Rows.Count; i++)
+                    if (src.Rows[i] != null) rows.Add(CloneRow(src.Rows[i]));
+            }
+            return new VolLevel
+            {
+                Kind = src.Kind,
+                Title = src.Title,
+                Rows = rows,
+                TotalVolume = src.TotalVolume
+            };
+        }
+
+        static VolRow CloneRow(VolRow src)
+        {
+            var terms = new List<VolTerm>();
+            if (src.Terms != null)
+            {
+                for (int i = 0; i < src.Terms.Count; i++)
+                {
+                    var t = src.Terms[i];
+                    if (t == null) continue;
+                    terms.Add(new VolTerm { A0 = t.A0, A1 = t.A1, DL = t.DL, Average = t.Average });
+                }
+            }
+            return new VolRow
+            {
+                Diam = src.Diam,
+                Length = src.Length,
+                Area = src.Area,
+                Volume = src.Volume,
+                Width = src.Width,
+                PipeVol = src.PipeVol,
+                Fill = src.Fill,
+                Terms = terms
+            };
+        }
+
         static void Add(List<VolLevel> list, Chain chain, IList<AxisPt> axis, SectionConfig cfg,
             IList<SectionGeom> geoms, ProfileKind kind, string title)
         {

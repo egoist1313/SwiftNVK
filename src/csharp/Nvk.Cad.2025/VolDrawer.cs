@@ -97,58 +97,32 @@ namespace Nvk.Cad
             double y = origin.Y;
             double gap = th * 1.5;
             double kindGap = th * 12.0;
-            var sumKind = new Dictionary<ProfileKind, double>();
+            var sets = new List<List<VolLevel>>();
             foreach (var pack in packed)
-            {
-                foreach (var lv in pack.Levels)
-                {
-                    double acc;
-                    sumKind.TryGetValue(lv.Kind, out acc);
-                    sumKind[lv.Kind] = acc + lv.TotalVolume;
-                }
-            }
+                if (pack.Levels != null) sets.Add(pack.Levels);
+            var merged = VolumeCalc.MergeAll(sets);
+            var cfg0 = packed[0].Cfg;
+            if (keep == null && packed[0].Run != null)
+                NvkSession.Last = packed[0].Run;
 
             bool coordDone = false;
             foreach (var kind in Kinds)
             {
                 double yTop = y;
                 var win = new SheetWin();
-                foreach (var pack in packed)
+                VolLevel lv = null;
+                foreach (var item in merged)
+                    if (item.Kind == kind) { lv = item; break; }
+                if (lv != null)
                 {
-                    NvkSession.Last = pack.Run;
-                    if (nRun > 1)
+                    string txt = VolumeCalc.FormatLevel(lv, cfg0);
+                    if (!string.IsNullOrEmpty(txt))
                     {
-                        string head = SiteLabel(pack)
-                            + (string.IsNullOrEmpty(pack.Run.NetName) ? "" : "  " + pack.Run.NetName)
-                            + "  L=" + pack.Run.Chain.Total.ToString("0.00") + " м";
-                        AccText(ms, tr, win, origin.X, y, th, wrapW, head);
-                        y -= th * 2.0 + gap * 0.3;
-                        count++;
-                    }
-                    VolLevel lv = null;
-                    foreach (var item in pack.Levels)
-                        if (item.Kind == kind) { lv = item; break; }
-                    if (lv == null) continue;
-                    string txt = VolumeCalc.FormatLevel(lv, pack.Cfg);
-                    if (string.IsNullOrEmpty(txt)) continue;
-                    NvkLog.Write("[НВК] VOL " + lv.Title + " V=" + lv.TotalVolume.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
-                        + " м³");
-                    NvkLog.Write(txt.Replace("\\P", " | "));
-                    AccText(ms, tr, win, origin.X, y, th, wrapW, txt);
-                    y -= EstimateHeight(txt, th) + gap;
-                    count++;
-                }
-                if (nRun > 1)
-                {
-                    double v;
-                    if (sumKind.TryGetValue(kind, out v))
-                    {
-                        var sb = new System.Text.StringBuilder();
-                        sb.Append("Итого по ").Append(nRun).Append(" участкам:\\P");
-                        AppendSum(sb, sumKind, kind, SumName(kind));
-                        string tot = sb.ToString();
-                        AccText(ms, tr, win, origin.X, y, th, wrapW, tot);
-                        y -= EstimateHeight(tot, th) + gap;
+                        NvkLog.Write("[НВК] VOL " + lv.Title + " V=" + lv.TotalVolume.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
+                            + " м³");
+                        NvkLog.Write(txt.Replace("\\P", " | "));
+                        AccText(ms, tr, win, origin.X, y, th, wrapW, txt);
+                        y -= EstimateHeight(txt, th) + gap;
                         count++;
                     }
                 }
@@ -204,26 +178,6 @@ namespace Nvk.Cad
             public int Index;
         }
 
-        static string SiteLabel(RunVol pack)
-        {
-            if (pack == null || pack.Run == null) return "Участок";
-            var s = NvkSites.ById(pack.Run.SegId);
-            if (s != null && !string.IsNullOrEmpty(s.Name)) return s.Name;
-            return "Участок " + pack.Index;
-        }
-
-        static string SumName(ProfileKind kind)
-        {
-            switch (kind)
-            {
-                case ProfileKind.Razrabotka: return "разработка";
-                case ProfileKind.Pesok: return "песчаное основание";
-                case ProfileKind.Truba: return "труба";
-                case ProfileKind.Zashita: return "защитный слой";
-                default: return "обратная засыпка";
-            }
-        }
-
         static void AccText(BlockTableRecord ms, Transaction tr, SheetWin win,
             double x, double y, double th, double w, string txt)
         {
@@ -244,15 +198,6 @@ namespace Nvk.Cad
                 win.Union(ext.MinPoint.X, ext.MinPoint.Y, ext.MaxPoint.X, ext.MaxPoint.Y);
             }
             catch { }
-        }
-
-        static void AppendSum(System.Text.StringBuilder sb, Dictionary<ProfileKind, double> map,
-            ProfileKind kind, string name)
-        {
-            double v;
-            if (!map.TryGetValue(kind, out v)) return;
-            sb.Append(name).Append(": ").Append(v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))
-              .Append(" м³\\P");
         }
 
         static double EstimateHeight(string txt, double th)
