@@ -91,7 +91,7 @@ namespace Nvk.Core
         public LineStyle CsLine { get; set; } = LineStyle.Of(129, "Continuous", 30);
 
         public FillStyle HatchExcavation { get; set; } = FillStyle.Of("ANSI31", 5, 1.0);
-        public FillStyle HatchPavement { get; set; } = FillStyle.Rgb("ANSI31", 200, 80, 80, 1.0);
+        public FillStyle HatchPavement { get; set; } = FillStyle.Of("ANSI31", 5, 1.0);
 
         public static L1Style Default()
         {

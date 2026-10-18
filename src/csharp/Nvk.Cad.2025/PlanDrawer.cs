@@ -392,7 +392,7 @@ namespace Nvk.Cad
                 var h = new Hatch();
                 h.SetDatabaseDefaults();
                 h.Layer = PlanView.LayerSit;
-                h.Color = Aci(1);
+                h.Color = Aci(5);
                 h.HatchStyle = HatchStyle.Ignore;
                 ms.AppendEntity(h);
                 tr.AddNewlyCreatedDBObject(h, true);

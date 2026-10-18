@@ -16,7 +16,7 @@ namespace Nvk.Cad
 
         public static AcadColor Of(FillStyle st)
         {
-            if (st == null) return Aci(8);
+            if (st == null) return Aci(5);
             if (st.Color > 0 && st.R == 0 && st.G == 0 && st.B == 0)
                 return Aci(st.Color);
             return AcadColor.FromRgb(st.R, st.G, st.B);

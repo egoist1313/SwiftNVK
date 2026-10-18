@@ -234,7 +234,7 @@ namespace Nvk.Cad
             if (hatchTop.Count >= 2 && bot.Count >= 2)
             {
                 var hx = HatchPat.ForKind(ProfileKind.Razrabotka, st, null)
-                    ?? FillStyle.Of("ANSI31", 8, 1);
+                    ?? FillStyle.Of("ANSI31", 5, 1);
                 double hxSc = HatchPat.Scale(hx);
                 if (gapAtMh)
                     HatchBandGapped(ms, tr, layer, hatchTop, bot, last, o, lSc, hx.Pattern, hxSc, CadColor.Of(hx));
@@ -676,7 +676,7 @@ namespace Nvk.Cad
             else if (pat != null && topPts.Count >= 2 && botPts.Count >= 2
                 && AvgY(topPts) > AvgY(botPts) + 1e-4)
             {
-                var col = hx != null ? CadColor.Of(hx) : Aci(8);
+                var col = hx != null ? CadColor.Of(hx) : Aci(5);
                 double sc = HatchPat.Scale(hx);
                 if (kind == ProfileKind.Zashita)
                 {
@@ -1106,7 +1106,7 @@ namespace Nvk.Cad
         static void HatchDiamGroups(BlockTableRecord ms, Transaction tr, DomainResult last,
             Point3d o, double lSc, List<Point2d> top, List<Point2d> bot, string pat, string visLayer)
         {
-            HatchDiamGroups(ms, tr, last, o, lSc, top, bot, pat, visLayer, Aci(8),
+            HatchDiamGroups(ms, tr, last, o, lSc, top, bot, pat, visLayer, Aci(5),
                 HatchPat.Scale(FillStyle.Of(pat, 8, 1)));
         }
 
@@ -1140,7 +1140,7 @@ namespace Nvk.Cad
         static void HatchPipesInner(BlockTableRecord ms, Transaction tr, DomainResult last,
             Point3d o, double lSc, List<Point2d> top, List<Point2d> bot, string pat, string visLayer)
         {
-            HatchPipesInner(ms, tr, last, o, lSc, top, bot, pat, visLayer, Aci(8),
+            HatchPipesInner(ms, tr, last, o, lSc, top, bot, pat, visLayer, Aci(5),
                 HatchPat.Scale(FillStyle.Of(pat, 8, 1)));
         }
 

@@ -152,6 +152,11 @@ namespace Nvk.Core.Tests
             Assert.Equal(129, SheetStyle.Pesok().CsLine.Color);
             Assert.Equal(129, L1Style.Default().CsLine.Color);
             Assert.Equal(5, L1Style.Default().HatchExcavation.Color);
+            Assert.Equal(5, L1Style.Default().HatchPavement.Color);
+            Assert.Equal(5, SheetStyle.Zashita().Hatch.Color);
+            Assert.Equal(5, SheetStyle.Zasypka().Hatch.Color);
+            Assert.Equal(5, SheetStyle.Zasypka().HatchSand.Color);
+            Assert.Equal(5, SheetStyle.Zasypka().HatchSoil.Color);
             var sand = HatchPat.ForBackfill(SheetStyle.Zasypka(), "ASPH", null);
             Assert.Equal("AR-SAND", sand.Pattern);
             Assert.Equal(0.1, HatchPat.Scale(sand), 6);

@@ -545,7 +545,7 @@ namespace Nvk.Cad
             CopyRgb(_btnEarth, NvkSession.L1.Earth  ?? (NvkSession.L1.Earth  = LineStyle.Rgb(  0,   0, 255, "Continuous", 30)));
             CopyRgb(_btnBot,   NvkSession.L1.Bottom ?? (NvkSession.L1.Bottom = LineStyle.Rgb(255,   0,   0, "Continuous", 30)));
             CopyFill(_btnHat, NvkSession.L1.HatchExcavation ?? (NvkSession.L1.HatchExcavation = FillStyle.Of("ANSI31", 5, 1)));
-            CopyFill(_btnPav, NvkSession.L1.HatchPavement   ?? (NvkSession.L1.HatchPavement   = FillStyle.Rgb("ANSI31", 200,  80,  80, 1)));
+            CopyFill(_btnPav, NvkSession.L1.HatchPavement   ?? (NvkSession.L1.HatchPavement   = FillStyle.Of("ANSI31", 5, 1)));
             NvkUiState.L1HatPat  = NvkSession.L1.HatchExcavation.Pattern;
             NvkUiState.L1PavPat  = NvkSession.L1.HatchPavement.Pattern;
             NvkUiState.HasPush   = true;

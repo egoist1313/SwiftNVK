@@ -42,7 +42,7 @@ namespace Nvk.Cad
         public static string L1HatPat = "ANSI31";
         public static short L1HatCol = 5;
         public static string L1PavPat = "ANSI31";
-        public static short L1PavCol = 8;
+        public static short L1PavCol = 5;
         public static string Joint = "SOCKET";
         public static double SlopeM = 0.0;
         public static double SlopeL = 0.0;
@@ -235,7 +235,7 @@ namespace Nvk.Cad
             if (!string.IsNullOrEmpty(L1EarthLt)) s.Earth.Linetype = L1EarthLt;
             if (!string.IsNullOrEmpty(L1BotLt)) s.Bottom.Linetype = L1BotLt;
             if (s.HatchExcavation == null) s.HatchExcavation = FillStyle.Of("ANSI31", 5, 1);
-            if (s.HatchPavement == null) s.HatchPavement = FillStyle.Rgb("ANSI31", 200, 80, 80, 1);
+            if (s.HatchPavement == null) s.HatchPavement = FillStyle.Of("ANSI31", 5, 1);
             if (string.IsNullOrEmpty(s.HatchExcavation.Pattern) && !string.IsNullOrEmpty(L1HatPat))
                 s.HatchExcavation.Pattern = L1HatPat;
             if (string.IsNullOrEmpty(s.HatchPavement.Pattern) && !string.IsNullOrEmpty(L1PavPat))
@@ -561,7 +561,7 @@ namespace Nvk.Cad
             L1HatPat = "ANSI31";
             L1HatCol = 5;
             L1PavPat = "ANSI31";
-            L1PavCol = 8;
+            L1PavCol = 5;
             Joint = "SOCKET";
             SlopeM = 0.0;
             SlopeL = 0.0;

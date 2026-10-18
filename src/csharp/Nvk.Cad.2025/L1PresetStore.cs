@@ -60,7 +60,7 @@ namespace Nvk.Cad
                 if (st.Bottom == null) st.Bottom = LineStyle.Of(1, "Continuous", 30);
                 if (st.CsLine == null) st.CsLine = LineStyle.Of(129, "Continuous", 30);
                 if (st.HatchExcavation == null) st.HatchExcavation = FillStyle.Of("ANSI31", 5, 1);
-                if (st.HatchPavement == null) st.HatchPavement = FillStyle.Of("ANSI31", 8, 1);
+                if (st.HatchPavement == null) st.HatchPavement = FillStyle.Of("ANSI31", 5, 1);
                 return st;
             }
             catch (Exc)
