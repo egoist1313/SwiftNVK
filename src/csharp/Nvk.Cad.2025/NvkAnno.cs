@@ -190,6 +190,13 @@ namespace Nvk.Cad
             catch (Exc) { }
         }
 
+        /// <summary>Выноска: флаг аннотативности и масштабы листов, иначе на ВЭ другого масштаба её не видно.</summary>
+        public static void ApplyLeader(Entity e)
+        {
+            Apply(e);
+            EnsureVisible(e);
+        }
+
         /// <summary>
         /// Если объект аннотативный — повесить масштабы листов (CS/EP/план)
         /// и текущий CANNOSCALE, иначе на вкладке 1:200 его не видно

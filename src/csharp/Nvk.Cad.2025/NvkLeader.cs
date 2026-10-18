@@ -321,7 +321,6 @@ namespace Nvk.Cad
                 }
                 catch (Exc) { }
                 ml.ContentType = ContentType.MTextContent;
-                try { ml.Annotative = AnnotativeStates.False; } catch (Exc) { }
 
                 double thIgn = 2.5, aszIgn = 1.25;
                 ObjectId txtSt = ObjectId.Null;
@@ -397,6 +396,7 @@ namespace Nvk.Cad
                 }
                 catch (Exc) { }
                 NvkTag.Stamp(tr, ml);
+                NvkAnno.ApplyLeader(ml);
                 return ml;
             }
             catch (Exc ex)
@@ -439,6 +439,7 @@ namespace Nvk.Cad
                 if (!string.IsNullOrEmpty(layer)) vla.Layer = layer;
                 try { vla.TextBackgroundFill = true; } catch (Exc) { }
                 try { vla.TextRotation = rot; } catch (Exc) { }
+                try { vla.Annotative = true; } catch (Exc) { }
                 return true;
             }
             catch (Exc ex)
@@ -462,7 +463,9 @@ namespace Nvk.Cad
                 btr.AppendEntity(ld);
                 tr.AddNewlyCreatedDBObject(ld, true);
                 NvkTag.Stamp(tr, ld);
-                NvkText.Make(btr, tr, layer, text.X, text.Y, contents, 2.5, AttachmentPoint.MiddleLeft, rot);
+                NvkAnno.ApplyLeader(ld);
+                var mt = NvkText.Make(btr, tr, layer, text.X, text.Y, contents, 2.5, AttachmentPoint.MiddleLeft, rot);
+                if (mt != null) NvkAnno.ApplyLeader(mt);
                 _lastErr = (_lastErr ?? "") + " → LEADER";
                 return true;
             }
@@ -487,16 +490,6 @@ namespace Nvk.Cad
             catch (Exc) { }
         }
 
-        static void ApplyAnno(Entity e, Database db, Transaction tr)
-        {
-            if (db == null || tr == null || db.MLeaderstyle.IsNull) return;
-            try
-            {
-                var st = tr.GetObject(db.MLeaderstyle, OpenMode.ForRead) as MLeaderStyle;
-                if (st != null && st.Annotative == AnnotativeStates.True)
-                    NvkAnno.Apply(e);
-            }
-            catch (Exc) { }
-        }
+
     }
 }

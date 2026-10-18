@@ -2209,6 +2209,7 @@ namespace Nvk.Cad
             }
             catch (Exc) { }
             NvkTag.Stamp(tr, ml);
+            NvkAnno.ApplyLeader(ml);
         }
 
         static void AddPline(BlockTableRecord btr, Transaction tr, string layer,
