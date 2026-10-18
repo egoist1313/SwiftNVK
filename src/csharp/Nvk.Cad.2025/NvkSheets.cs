@@ -634,6 +634,7 @@ namespace Nvk.Cad
             NvkLayers.EnsureAll(db);
             using (var tr = db.TransactionManager.StartTransaction())
             {
+                NvkLayers.EnsureVpLayer(db, tr);
                 var layout = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
                 var ps = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForWrite);
                 DropStaleEpVps(tr, have, specs, kind);
@@ -648,6 +649,7 @@ namespace Nvk.Cad
                     ps.AppendEntity(vp);
                     tr.AddNewlyCreatedDBObject(vp, true);
                     try { vp.On = true; } catch { }
+                    StyleVp(vp);
                     NvkTag.StampVp(tr, vp, s.Key);
                     have[s.Key] = vp.ObjectId;
                     nAdd++;
@@ -703,6 +705,7 @@ namespace Nvk.Cad
             NvkLog.Write("[НВК] лист " + name + " вид из модели " + specs.Count.ToString());
             using (var tr = db.TransactionManager.StartTransaction())
             {
+                NvkLayers.EnsureVpLayer(db, tr);
                 foreach (var s in specs)
                 {
                     ObjectId id;
@@ -714,9 +717,19 @@ namespace Nvk.Cad
                     try { vp.Height = s.H; } catch { }
                     try { vp.CenterPoint = new Point3d(s.Cx, s.Cy, 0.0); } catch { }
                     try { vp.On = true; } catch { }
+                    StyleVp(vp);
                     AimVp(vp, s.Win, s.ScaleN, s.Key, s.TwistDeg);
                     if (s.Key != null && s.Key.StartsWith("PLAN:", StringComparison.Ordinal))
                         ApplyPlanLayers(tr, vp, kind);
+                }
+                var layout2 = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
+                var ps2 = (BlockTableRecord)tr.GetObject(layout2.BlockTableRecordId, OpenMode.ForRead);
+                foreach (ObjectId id in ps2)
+                {
+                    var vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
+                    if (vp == null || vp.IsErased) continue;
+                    if (vp.Number == 1) continue;
+                    StyleVp(vp);
                 }
                 tr.Commit();
             }
@@ -867,6 +880,13 @@ namespace Nvk.Cad
                     : "EP:" + ((int)kind).ToString() + ":" + cell.Index.ToString();
                 place(cell.Win, nEp, key, 0.0);
             }
+        }
+
+        static void StyleVp(Viewport vp)
+        {
+            if (vp == null || vp.IsErased) return;
+            try { vp.Layer = NvkLayers.VpLayer; } catch (Exc) { }
+            try { vp.Transparency = NvkLayers.Alpha(NvkLayers.VpTransPct); } catch (Exc) { }
         }
 
         static void AimVp(Viewport vp, SheetWin win, int scaleN, string key, double twistDeg)

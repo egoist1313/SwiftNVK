@@ -1,3 +1,4 @@
+using System;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Colors;
 
@@ -6,6 +7,9 @@ namespace Nvk.Cad
     /// <summary>Слои NVK-* и AppID NVK. Бывший nvk-sloi.lsp.</summary>
     static class NvkLayers
     {
+        public const string VpLayer = "NVK-VP";
+        public const int VpTransPct = 90;
+
         static readonly (string Name, short Color, bool NoPlot, bool Off)[] Specs =
         {
             ("NVK-INS",      7, false, false),
@@ -29,6 +33,7 @@ namespace Nvk.Cad
             ("NVK-HATCHBND", 8, true,  true),
             ("NVK-DATA",     8, true,  true),
             ("NVK-SHEET",    7, false, false),
+            (VpLayer,        8, true,  false),
         };
 
         public static void EnsureAll(Database db)
@@ -39,8 +44,29 @@ namespace Nvk.Cad
                 EnsureApp(db, tr);
                 foreach (var s in Specs)
                     EnsureLayer(db, tr, s.Name, s.Color, s.NoPlot, s.Off);
+                EnsureVpLayer(db, tr);
                 tr.Commit();
             }
+        }
+
+        /// <summary>
+        /// Рамка видового: слой не печатается, прозрачность 90%.
+        /// Содержимое модели печатается как обычно.
+        /// </summary>
+        public static void EnsureVpLayer(Database db, Transaction tr)
+        {
+            EnsureLayer(db, tr, VpLayer, 8, true, false, true, VpTransPct);
+        }
+
+        /// <summary>AutoCAD: 0% непрозрачно, 90% максимум «стекла». Alpha 255 = непрозрачно.</summary>
+        public static Transparency Alpha(int pct)
+        {
+            if (pct < 0) pct = 0;
+            if (pct > 90) pct = 90;
+            int a = (int)Math.Round(255.0 * (100 - pct) / 100.0);
+            if (a < 0) a = 0;
+            if (a > 255) a = 255;
+            return new Transparency((byte)a);
         }
 
         public static void EnsureApp(Database db, Transaction tr)
@@ -61,18 +87,39 @@ namespace Nvk.Cad
 
         static void EnsureLayer(Database db, Transaction tr, string name, short color, bool noplot, bool off)
         {
+            EnsureLayer(db, tr, name, color, noplot, off, false, -1);
+        }
+
+        static void EnsureLayer(Database db, Transaction tr, string name, short color,
+            bool noplot, bool off, bool force, int transPct)
+        {
             var lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
-            if (lt.Has(name)) return;
+            if (lt.Has(name))
+            {
+                if (!force) return;
+                var rec = (LayerTableRecord)tr.GetObject(lt[name], OpenMode.ForWrite);
+                rec.IsPlottable = !noplot;
+                rec.IsOff = off;
+                if (transPct >= 0)
+                {
+                    try { rec.Transparency = Alpha(transPct); } catch { }
+                }
+                return;
+            }
             lt.UpgradeOpen();
-            var rec = new LayerTableRecord
+            var neu = new LayerTableRecord
             {
                 Name = name,
                 Color = Color.FromColorIndex(ColorMethod.ByAci, color),
                 IsPlottable = !noplot,
                 IsOff = off
             };
-            lt.Add(rec);
-            tr.AddNewlyCreatedDBObject(rec, true);
+            if (transPct >= 0)
+            {
+                try { neu.Transparency = Alpha(transPct); } catch { }
+            }
+            lt.Add(neu);
+            tr.AddNewlyCreatedDBObject(neu, true);
         }
     }
 }
