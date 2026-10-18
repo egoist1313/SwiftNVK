@@ -474,18 +474,13 @@ namespace Nvk.Cad
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return null;
-            string net = "";
-            if (NvkSession.Last != null && !string.IsNullOrEmpty(NvkSession.Last.NetName))
-                net = NvkSession.Last.NetName;
-            string seg = "";
-            var site = NvkSites.Current;
-            if (site != null && !string.IsNullOrEmpty(site.Name))
-                seg = site.Name;
+            string net, seg, tol, type;
+            NvkCodes.Collect(out net, out seg, out tol, out type);
             try
             {
                 using (var tr = doc.TransactionManager.StartTransaction())
                 {
-                    var msg = NvkCodes.Apply(doc.Database, tr, net, seg);
+                    var msg = NvkCodes.Apply(doc.Database, tr, net, seg, tol, type);
                     tr.Commit();
                     NvkLog.Write(msg);
                     return msg;

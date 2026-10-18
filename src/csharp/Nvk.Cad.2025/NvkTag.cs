@@ -19,6 +19,7 @@ namespace Nvk.Cad
     static class NvkTag
     {
         public const string App = "NVK";
+        public const string TplKey = "TPL=";
 
         public static void StampVp(Transaction tr, Entity e, string key)
         {
@@ -169,23 +170,83 @@ namespace Nvk.Cad
 
         public static string Get(Entity e)
         {
-            if (e == null || e.XData == null) return null;
+            string s = Get1000(e, "SEG=");
+            return s;
+        }
+
+        /// <summary>1000 NVK с префиксом, без сноса остальных (SEG=/EP=/VP=/TPL=).</summary>
+        public static string Get1000(DBObject obj, string prefix)
+        {
+            if (obj == null || obj.XData == null || string.IsNullOrEmpty(prefix)) return null;
             try
             {
                 string app = null;
-                foreach (TypedValue v in e.XData)
+                foreach (TypedValue v in obj.XData)
                 {
                     if (v.TypeCode == 1001) app = v.Value as string;
-                    if (v.TypeCode == 1000 && app == App)
+                    else if (v.TypeCode == 1000 && app == App)
                     {
                         string s = v.Value as string;
-                        if (s != null && s.StartsWith("SEG="))
-                            return s.Substring(4);
+                        if (s != null && s.StartsWith(prefix, StringComparison.Ordinal))
+                            return s.Substring(prefix.Length);
                     }
                 }
             }
             catch (Exc) { }
             return null;
+        }
+
+        public static void Put1000(Transaction tr, DBObject obj, string prefix, string value)
+        {
+            if (obj == null || tr == null || string.IsNullOrEmpty(prefix)) return;
+            try
+            {
+                EnsureApp(tr, obj.Database);
+                var keep = new List<TypedValue>();
+                bool inApp = false;
+                bool replaced = false;
+                if (obj.XData != null)
+                {
+                    foreach (TypedValue v in obj.XData)
+                    {
+                        if (v.TypeCode == 1001)
+                        {
+                            inApp = string.Equals(v.Value as string, App, StringComparison.Ordinal);
+                            continue;
+                        }
+                        if (!inApp) continue;
+                        if (v.TypeCode == 1000)
+                        {
+                            string s = v.Value as string;
+                            if (s != null && s.StartsWith(prefix, StringComparison.Ordinal))
+                            {
+                                keep.Add(new TypedValue(1000, Clip1000(prefix, value)));
+                                replaced = true;
+                                continue;
+                            }
+                        }
+                        keep.Add(v);
+                    }
+                }
+                if (!replaced)
+                    keep.Add(new TypedValue(1000, Clip1000(prefix, value)));
+                var rb = new ResultBuffer();
+                rb.Add(new TypedValue(1001, App));
+                for (int i = 0; i < keep.Count; i++)
+                    rb.Add(keep[i]);
+                if (!obj.IsWriteEnabled) obj.UpgradeOpen();
+                obj.XData = rb;
+            }
+            catch (Exc) { }
+        }
+
+        static string Clip1000(string prefix, string value)
+        {
+            string v = value ?? "";
+            int max = 255 - prefix.Length;
+            if (max < 0) max = 0;
+            if (v.Length > max) v = v.Substring(0, max);
+            return prefix + v;
         }
 
         public static bool Matches(Entity e, string seg)

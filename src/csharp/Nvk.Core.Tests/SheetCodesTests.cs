@@ -54,5 +54,61 @@ namespace Nvk.Core.Tests
             Assert.False(SheetCodes.HasCode("43-44-46"));
             Assert.False(SheetCodes.HasCode(null));
         }
+
+        [Fact]
+        public void JoinPartsTwoSitesWithSemicolon()
+        {
+            Assert.Equal("40-41-42; 67-68",
+                SheetCodes.JoinParts(new[] { "40-41-42", "67-68" }));
+        }
+
+        [Fact]
+        public void JoinPartsSkipsDupAndBlank()
+        {
+            Assert.Equal("40-41-42; 67-68",
+                SheetCodes.JoinParts(new[] { "40-41-42", " 67-68 ", "40-41-42", "", null }));
+            Assert.Equal("", SheetCodes.JoinParts(null));
+            Assert.Equal("", SheetCodes.JoinParts(new string[0]));
+        }
+
+        [Fact]
+        public void ToFieldTextBindsCustomDp()
+        {
+            string t = SheetCodes.ToFieldText("уч. %%SEG%% сеть %%NET%%");
+            Assert.Contains("CustomDP.NVK_SEG", t);
+            Assert.Contains("CustomDP.NVK_NET", t);
+            Assert.Contains("%<", t);
+            Assert.DoesNotContain("%%SEG%%", t);
+            Assert.DoesNotContain("%%NET%%", t);
+        }
+
+        [Fact]
+        public void HasFieldDetectsCustomDp()
+        {
+            Assert.True(SheetCodes.HasField("%<\\AcVar CustomDP.NVK_SEG>%"));
+            Assert.False(SheetCodes.HasField("%%SEG%%"));
+            Assert.False(SheetCodes.HasField(null));
+        }
+
+        [Fact]
+        public void TypeNameManyMixedWaterAndSewer()
+        {
+            Assert.Equal("водоснабжения", SheetCodes.TypeNameMany(new[] { "В1", "В2" }));
+            Assert.Equal("канализации", SheetCodes.TypeNameMany(new[] { "К1" }));
+            Assert.Equal("водоснабжения; канализации",
+                SheetCodes.TypeNameMany(new[] { "В1", "К1" }));
+            Assert.Equal("", SheetCodes.TypeNameMany(new[] { "Т1" }));
+        }
+
+        [Fact]
+        public void TolTextManyMixedConcatenates()
+        {
+            string both = SheetCodes.TolTextMany(new[] { "В1", "К1" });
+            Assert.Contains("Напорные", both);
+            Assert.Contains("лотков", both);
+            Assert.Contains("\\P\\P", both);
+            Assert.Contains("Напорные", SheetCodes.TolTextMany(new[] { "В1" }));
+            Assert.DoesNotContain("лотков", SheetCodes.TolTextMany(new[] { "В1" }));
+        }
     }
 }

@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 
 namespace Nvk.Core
 {
     /// <summary>
-    /// Коды-заполнители штампа/рамки, как ТРУБКОДЫ в PipeBuild.
-    /// Рамку не рисуем: подставляем в уже лежащие TEXT/MTEXT/атрибуты.
+    /// Коды штампа: %%NET%% %%SEG%% %%TOL%% %%TYPE%%.
+    /// Шаблон хранится, на листе — поле CustomDP, значения обновляются каждый прогон.
+    /// Несколько участков: «40-41-42; 67-68».
     /// </summary>
     public static class SheetCodes
     {
@@ -12,6 +14,28 @@ namespace Nvk.Core
         public const string Seg = "%%SEG%%";
         public const string Tol = "%%TOL%%";
         public const string Type = "%%TYPE%%";
+
+        public const string PropNet = "NVK_NET";
+        public const string PropSeg = "NVK_SEG";
+        public const string PropTol = "NVK_TOL";
+        public const string PropType = "NVK_TYPE";
+
+        public static string FieldCode(string prop)
+        {
+            if (string.IsNullOrEmpty(prop)) return "";
+            return "%<\\AcVar CustomDP." + prop + ">%";
+        }
+
+        public static string ToFieldText(string template)
+        {
+            if (string.IsNullOrEmpty(template)) return template ?? "";
+            string t = template;
+            t = ReplaceAll(t, Net, FieldCode(PropNet));
+            t = ReplaceAll(t, Seg, FieldCode(PropSeg));
+            t = ReplaceAll(t, Tol, FieldCode(PropTol));
+            t = ReplaceAll(t, Type, FieldCode(PropType));
+            return t;
+        }
 
         public static string Subst(string text, string net, string seg, string tol, string type)
         {
@@ -31,6 +55,68 @@ namespace Nvk.Core
                 || text.IndexOf(Seg, StringComparison.Ordinal) >= 0
                 || text.IndexOf(Tol, StringComparison.Ordinal) >= 0
                 || text.IndexOf(Type, StringComparison.Ordinal) >= 0;
+        }
+
+        public static bool HasField(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            return text.IndexOf("CustomDP.NVK_", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>Уникальные имена через «; ». Пример: 40-41-42; 67-68.</summary>
+        public static string JoinParts(IList<string> parts)
+        {
+            if (parts == null || parts.Count == 0) return "";
+            var seen = new List<string>();
+            for (int i = 0; i < parts.Count; i++)
+            {
+                string s = parts[i];
+                if (string.IsNullOrWhiteSpace(s)) continue;
+                s = s.Trim();
+                bool dup = false;
+                for (int j = 0; j < seen.Count; j++)
+                {
+                    if (string.Equals(seen[j], s, StringComparison.OrdinalIgnoreCase))
+                    { dup = true; break; }
+                }
+                if (!dup) seen.Add(s);
+            }
+            if (seen.Count == 0) return "";
+            return string.Join("; ", seen.ToArray());
+        }
+
+        public static string TypeNameMany(IList<string> nets)
+        {
+            bool water = false, sewer = false;
+            if (nets != null)
+            {
+                for (int i = 0; i < nets.Count; i++)
+                {
+                    if (IsWater(nets[i])) water = true;
+                    if (IsSewer(nets[i])) sewer = true;
+                }
+            }
+            if (water && sewer) return "водоснабжения; канализации";
+            if (water) return "водоснабжения";
+            if (sewer) return "канализации";
+            return "";
+        }
+
+        public static string TolTextMany(IList<string> nets)
+        {
+            bool water = false, sewer = false;
+            if (nets != null)
+            {
+                for (int i = 0; i < nets.Count; i++)
+                {
+                    if (IsWater(nets[i])) water = true;
+                    if (IsSewer(nets[i])) sewer = true;
+                }
+            }
+            if (water && !sewer) return TolText("В1");
+            if (sewer && !water) return TolText("К1");
+            if (water && sewer) return TolText("В1") + "\\P\\P" + TolText("К1");
+            return "";
         }
 
         public static string TypeName(string net)

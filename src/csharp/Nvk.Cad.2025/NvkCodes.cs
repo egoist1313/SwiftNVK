@@ -1,18 +1,23 @@
 using System;
+using System.Collections.Generic;
 using Autodesk.AutoCAD.DatabaseServices;
 using Nvk.Core;
 using Exc = System.Exception;
 
 namespace Nvk.Cad
 {
-    /// <summary>Подстановка %%NET%% %%SEG%% %%TOL%% %%TYPE%% в листах и модели. Рамку не рисуем.</summary>
+    /// <summary>
+    /// Коды штампа: шаблон в XData TPL=, на листе поле CustomDP.
+    /// Каждый прогон обновляет свойства и пересчитывает поля.
+    /// Рамку не рисуем.
+    /// </summary>
     static class NvkCodes
     {
-        public static string Apply(Database db, Transaction tr, string net, string seg)
+        public static string Apply(Database db, Transaction tr,
+            string net, string seg, string tol, string type)
         {
             if (db == null || tr == null) return "[НВК] коды: нет чертежа";
-            string tol = SheetCodes.TolText(net);
-            string type = SheetCodes.TypeName(net);
+            PutProps(db, net, seg, tol, type);
             int n = 0, nLay = 0;
             var dict = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
             foreach (DBDictionaryEntry e in dict)
@@ -25,13 +30,36 @@ namespace Nvk.Cad
                 nLay++;
                 n += WalkSpace(tr, layout.BlockTableRecordId, net, seg, tol, type);
             }
+            try { db.EvaluateFields(); }
+            catch (Exc) { }
             string msg = "[НВК] коды net=\"" + (net ?? "") + "\" seg=\"" + (seg ?? "")
                 + "\"  листов " + nLay.ToString()
-                + "  заменено " + n.ToString();
+                + "  полей " + n.ToString();
             return msg;
         }
 
-        static int WalkSpace(Transaction tr, ObjectId btrId, string net, string seg, string tol, string type)
+        static void PutProps(Database db, string net, string seg, string tol, string type)
+        {
+            DatabaseSummaryInfoBuilder b;
+            try { b = new DatabaseSummaryInfoBuilder(db.SummaryInfo); }
+            catch (Exc) { b = new DatabaseSummaryInfoBuilder(); }
+            var table = b.CustomPropertyTable;
+            PutProp(table, SheetCodes.PropNet, net);
+            PutProp(table, SheetCodes.PropSeg, seg);
+            PutProp(table, SheetCodes.PropTol, tol);
+            PutProp(table, SheetCodes.PropType, type);
+            db.SummaryInfo = b.ToDatabaseSummaryInfo();
+        }
+
+        static void PutProp(System.Collections.IDictionary table, string key, string val)
+        {
+            if (table == null || string.IsNullOrEmpty(key)) return;
+            if (table.Contains(key)) table.Remove(key);
+            table.Add(key, val ?? "");
+        }
+
+        static int WalkSpace(Transaction tr, ObjectId btrId,
+            string net, string seg, string tol, string type)
         {
             if (btrId.IsNull) return 0;
             BlockTableRecord btr;
@@ -64,7 +92,8 @@ namespace Nvk.Cad
             return n;
         }
 
-        static int WalkAttribs(Transaction tr, BlockReference br, string net, string seg, string tol, string type)
+        static int WalkAttribs(Transaction tr, BlockReference br,
+            string net, string seg, string tol, string type)
         {
             int n = 0;
             AttributeCollection col;
@@ -86,20 +115,129 @@ namespace Nvk.Cad
         static int Put(Transaction tr, DBObject obj, string old, Action<string> set,
             string net, string seg, string tol, string type)
         {
-            if (obj == null || !SheetCodes.HasCode(old)) return 0;
-            string neu = SheetCodes.Subst(old, net, seg, tol, type);
-            if (string.Equals(neu, old, StringComparison.Ordinal)) return 0;
+            if (obj == null) return 0;
+            string tpl = NvkTag.Get1000(obj, NvkTag.TplKey);
+            if (SheetCodes.HasCode(old))
+                tpl = old;
+            if (string.IsNullOrEmpty(tpl))
+            {
+                if (!SheetCodes.HasField(old)) return 0;
+                try
+                {
+                    if (!obj.IsWriteEnabled) obj.UpgradeOpen();
+                    EvalField(tr, obj);
+                }
+                catch (Exc) { }
+                return 1;
+            }
+            try { NvkTag.Put1000(tr, obj, NvkTag.TplKey, tpl); }
+            catch (Exc ex) { NvkLog.Write("[НВК] коды TPL: " + ex.Message); }
+
+            string fieldText = SheetCodes.ToFieldText(tpl);
+            string neu = SheetCodes.Subst(tpl, net, seg, tol, type);
             try
             {
                 if (!obj.IsWriteEnabled) obj.UpgradeOpen();
-                set(neu);
-                return 1;
+                if (TrySetField(obj, fieldText, set))
+                    return 1;
+                if (!string.Equals(neu, old, StringComparison.Ordinal))
+                {
+                    set(neu);
+                    return 1;
+                }
+                return 0;
             }
             catch (Exc ex)
             {
                 NvkLog.Write("[НВК] коды: " + ex.Message);
                 return 0;
             }
+        }
+
+        static void EvalField(Transaction tr, DBObject obj)
+        {
+            if (obj == null || tr == null) return;
+            ObjectId fid;
+            try { fid = obj.GetField(); }
+            catch (Exc) { return; }
+            if (fid.IsNull) return;
+            Field f;
+            try { f = tr.GetObject(fid, OpenMode.ForWrite, false) as Field; }
+            catch (Exc) { return; }
+            if (f == null) return;
+            try { f.Evaluate(); }
+            catch (Exc) { }
+        }
+
+        static bool TrySetField(DBObject obj, string fieldText, Action<string> set)
+        {
+            if (string.IsNullOrEmpty(fieldText)
+                || fieldText.IndexOf("%<", StringComparison.Ordinal) < 0)
+                return false;
+            try
+            {
+                set(fieldText);
+                var f = new Field(fieldText);
+                obj.SetField(f);
+                try { f.Evaluate(); }
+                catch (Exc) { }
+                return true;
+            }
+            catch (Exc)
+            {
+                try
+                {
+                    set(fieldText);
+                    return true;
+                }
+                catch (Exc) { return false; }
+            }
+        }
+
+        public static void Collect(out string net, out string seg, out string tol, out string type)
+        {
+            var names = new List<string>();
+            var nets = new List<string>();
+            var sites = NvkSites.All;
+            if (sites != null)
+            {
+                for (int i = 0; i < sites.Count; i++)
+                {
+                    var s = sites[i];
+                    if (s == null) continue;
+                    if (!string.IsNullOrEmpty(s.Name))
+                        names.Add(s.Name);
+                    if (s.Runs == null) continue;
+                    for (int j = 0; j < s.Runs.Count; j++)
+                    {
+                        var r = s.Runs[j];
+                        if (r != null && !string.IsNullOrEmpty(r.NetName))
+                            nets.Add(r.NetName);
+                    }
+                }
+            }
+            if (names.Count == 0 && NvkSites.Current != null
+                && !string.IsNullOrEmpty(NvkSites.Current.Name))
+                names.Add(NvkSites.Current.Name);
+            if (nets.Count == 0)
+            {
+                var runs = NvkSession.AllRuns();
+                if (runs != null)
+                {
+                    for (int i = 0; i < runs.Count; i++)
+                    {
+                        if (runs[i] != null && !string.IsNullOrEmpty(runs[i].NetName))
+                            nets.Add(runs[i].NetName);
+                    }
+                }
+            }
+            if (nets.Count == 0 && NvkSession.Last != null
+                && !string.IsNullOrEmpty(NvkSession.Last.NetName))
+                nets.Add(NvkSession.Last.NetName);
+            net = SheetCodes.JoinParts(nets);
+            seg = SheetCodes.JoinParts(names);
+            type = SheetCodes.TypeNameMany(nets);
+            tol = SheetCodes.TolTextMany(nets);
         }
     }
 }
