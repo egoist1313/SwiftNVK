@@ -69,7 +69,7 @@ namespace Nvk.Core
             return s;
         }
 
-        /// <summary>Подпись колодца на плане / в таблице: скобки снимаются по флагу.</summary>
+        /// <summary>Подпись колодца на плане и в таблице. Скобки не снимаются.</summary>
         public static string Label(string raw, bool stripParen)
         {
             if (string.IsNullOrWhiteSpace(raw)) return raw ?? "";

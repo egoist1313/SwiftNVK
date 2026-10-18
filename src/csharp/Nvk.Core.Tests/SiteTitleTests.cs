@@ -131,5 +131,13 @@ namespace Nvk.Core.Tests
             Assert.Equal("Участок 1", SiteTitle.CleanTitle("Участок 1", true));
             Assert.Equal("12(1)-13", SiteTitle.CleanTitle("12(1)-13", false));
         }
+
+        [Fact]
+        public void StampStripsParenDrawingKeeps()
+        {
+            Assert.Equal("ГП12-ГП13",
+                SiteTitle.CleanTitle("ГП12(1)-ГП13(2)", true));
+            Assert.Equal("ГП12(1)", SiteTitle.Label("ГП12(1)", false));
+        }
     }
 }

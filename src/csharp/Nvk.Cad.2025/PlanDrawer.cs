@@ -464,7 +464,7 @@ namespace Nvk.Cad
         {
             string raw = atStart ? s.StartName : s.EndName;
             if (string.IsNullOrEmpty(raw)) return;
-            string name = SiteTitle.Label(raw, NvkUiState.MhStripParen);
+            string name = SiteTitle.Label(raw, false);
             double x = atStart ? s.X0 : s.X1;
             double y = atStart ? s.Y0 : s.Y1;
             double r = atStart ? s.StartR : s.EndR;

@@ -80,7 +80,7 @@ namespace Nvk.Cad
             foreach (var pack in packed)
             {
                 NvkSession.Last = pack.Run;
-                foreach (var p in PlanPoints.Manholes(pack.Run.Chain, NvkUiState.MhStripParen))
+                foreach (var p in PlanPoints.Manholes(pack.Run.Chain, false))
                 {
                     string key = p.X.ToString("0.00") + "," + p.Y.ToString("0.00");
                     if (!mhSeen.Add(key)) continue;
