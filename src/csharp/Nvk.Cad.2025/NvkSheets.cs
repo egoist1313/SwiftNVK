@@ -40,6 +40,49 @@ namespace Nvk.Cad
             if (x1 > MaxX) MaxX = x1;
             if (y1 > MaxY) MaxY = y1;
         }
+
+        public void Union(WinBox b)
+        {
+            Union(b.MinX, b.MinY, b.MaxX, b.MaxY);
+        }
+
+        public WinBox ToBox()
+        {
+            return new WinBox(MinX, MinY, MaxX, MaxY);
+        }
+
+        public bool Overlaps(SheetWin other, double gap)
+        {
+            if (other == null || !Valid || !other.Valid) return false;
+            return ToBox().Overlaps(other.ToBox(), gap);
+        }
+
+        public bool Overlaps(WinBox other, double gap)
+        {
+            if (!Valid) return false;
+            return ToBox().Overlaps(other, gap);
+        }
+
+        public SheetWin CloneWin()
+        {
+            var w = new SheetWin();
+            if (!Any) return w;
+            w.Union(MinX, MinY, MaxX, MaxY);
+            return w;
+        }
+
+        /// <summary>
+        /// Таблица профиля под графикой (NVK-TBL), подписи слева.
+        /// Не расширять влево на шаг CS→EP (80 м), иначе влезет сетка сечений.
+        /// </summary>
+        public void ExpandEpForTable()
+        {
+            if (!Valid) return;
+            MinY -= Math.Max(80.0, 0.8 * Height);
+            MinX -= 25.0;
+            MaxX += 5.0;
+            MaxY += 5.0;
+        }
     }
 
     sealed class CsCell
@@ -146,16 +189,16 @@ namespace Nvk.Cad
 
                 foreach (var kind in Kinds)
                 {
-                    SheetWin ep = null;
+                    List<CsCell> epCells = null;
                     List<CsCell> cells = null;
                     SheetWin vol = null;
-                    if (NvkSession.EpWins != null)
-                        NvkSession.EpWins.TryGetValue(kind, out ep);
+                    if (NvkSession.EpCells != null)
+                        NvkSession.EpCells.TryGetValue(kind, out epCells);
                     if (NvkSession.CsCells != null)
                         NvkSession.CsCells.TryGetValue(kind, out cells);
                     if (NvkUiState.DoVol && NvkSession.VolWins != null)
                         NvkSession.VolWins.TryGetValue(kind, out vol);
-                    bool hasEp = ep != null && ep.Valid;
+                    bool hasEp = AnyCell(epCells);
                     bool hasCs = cells != null && cells.Count > 0;
                     bool hasVol = vol != null && vol.Valid;
                     bool hasCoord = NvkUiState.DoVol && NvkSession.CoordWin != null && NvkSession.CoordWin.Valid;
@@ -174,7 +217,7 @@ namespace Nvk.Cad
                     try
                     {
                         int added = MakeLevel(db, lm, have ?? want, have == null, kind,
-                            hasEp ? ep : null, cells);
+                            hasEp ? epCells : null, cells);
                         if (have == null) existing.Add(want);
                         if (added > 0) nNew++;
                         else nKeep++;
@@ -284,20 +327,34 @@ namespace Nvk.Cad
             return n;
         }
 
+        static bool AnyCell(List<CsCell> cells)
+        {
+            if (cells == null) return false;
+            for (int i = 0; i < cells.Count; i++)
+            {
+                if (cells[i] != null && cells[i].Win != null && cells[i].Win.Valid)
+                    return true;
+            }
+            return false;
+        }
+
         static void RefineWins(Database db, Transaction tr)
         {
             foreach (var m in EpLayers)
             {
-                double x0, y0, x1, y1;
-                if (TryLayerExtents(db, tr, m.Layer, out x0, out y0, out x1, out y1))
-                    NvkSession.AddEpWin(m.Kind, x0, y0, x1, y1);
-                SheetWin w;
-                if (NvkSession.EpWins != null
-                    && NvkSession.EpWins.TryGetValue(m.Kind, out w)
-                    && w != null && w.Valid)
+                SplitEpWins(db, tr, m.Kind, m.Layer);
+                List<CsCell> cells;
+                if (NvkSession.EpCells == null
+                    || !NvkSession.EpCells.TryGetValue(m.Kind, out cells)
+                    || cells == null)
+                    continue;
+                for (int i = 0; i < cells.Count; i++)
                 {
+                    var w = cells[i] != null ? cells[i].Win : null;
+                    if (w == null || !w.Valid) continue;
                     UnionNearby(db, tr, w, new[] { "NVK-TBL", "NVK-MARK", "NVK-HATCH" });
                     NvkLog.Write("[НВК] EP окно " + m.Kind
+                        + " #" + cells[i].Index.ToString()
                         + "  L=" + w.MinX.ToString("0.0")
                         + " R=" + w.MaxX.ToString("0.0")
                         + " B=" + w.MinY.ToString("0.0")
@@ -346,6 +403,87 @@ namespace Nvk.Cad
                     + " B=" + p.MinY.ToString("0.0")
                     + " T=" + p.MaxY.ToString("0.0"));
             }
+        }
+
+        /// <summary>
+        /// Один слой NVK-EP-* — все профили этого уровня. Кластер по зазору
+        /// 100 м: два участка (разные вставки) → два окна, не один гигант.
+        /// RecordSheetWin текущего участка, если пересекается, сохраняет таблицу.
+        /// </summary>
+        static void SplitEpWins(Database db, Transaction tr, ProfileKind kind, string layer)
+        {
+            var recorded = new List<CsCell>();
+            List<CsCell> have;
+            if (NvkSession.EpCells != null
+                && NvkSession.EpCells.TryGetValue(kind, out have)
+                && have != null)
+            {
+                for (int i = 0; i < have.Count; i++)
+                {
+                    if (have[i] != null && have[i].Win != null && have[i].Win.Valid)
+                        recorded.Add(have[i]);
+                }
+            }
+            var boxes = CollectLayerBoxes(db, tr, layer);
+            var clusters = WinCluster.Cluster(boxes, WinCluster.EpGapM);
+            var cells = new List<CsCell>();
+            var used = new bool[recorded.Count];
+            for (int i = 0; i < clusters.Count; i++)
+            {
+                var cl = clusters[i];
+                int hit = -1;
+                for (int r = 0; r < recorded.Count; r++)
+                {
+                    if (used[r]) continue;
+                    if (recorded[r].Win.Overlaps(cl, WinCluster.EpGapM))
+                    {
+                        hit = r;
+                        break;
+                    }
+                }
+                var cell = new CsCell { Index = cells.Count };
+                if (hit >= 0)
+                {
+                    used[hit] = true;
+                    cell.Win = recorded[hit].Win.CloneWin();
+                }
+                else
+                {
+                    cell.Win.Union(cl);
+                    cell.Win.ExpandEpForTable();
+                }
+                cells.Add(cell);
+            }
+            for (int r = 0; r < recorded.Count; r++)
+            {
+                if (used[r]) continue;
+                var cell = new CsCell { Index = cells.Count };
+                cell.Win = recorded[r].Win.CloneWin();
+                cells.Add(cell);
+            }
+            if (NvkSession.EpCells == null)
+                NvkSession.EpCells = new Dictionary<ProfileKind, List<CsCell>>();
+            NvkSession.EpCells[kind] = cells;
+        }
+
+        static List<WinBox> CollectLayerBoxes(Database db, Transaction tr, string layer)
+        {
+            var boxes = new List<WinBox>();
+            var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+            var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+            foreach (ObjectId id in ms)
+            {
+                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null || ent.IsErased) continue;
+                if (!string.Equals(ent.Layer, layer, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                Extents3d ext;
+                try { ext = ent.GeometricExtents; }
+                catch { continue; }
+                var box = new WinBox(ext.MinPoint.X, ext.MinPoint.Y, ext.MaxPoint.X, ext.MaxPoint.Y);
+                if (box.Valid) boxes.Add(box);
+            }
+            return boxes;
         }
 
         static void UnionNearby(Database db, Transaction tr, SheetWin win, string[] layers)
@@ -412,7 +550,7 @@ namespace Nvk.Cad
         }
 
         static int MakeLevel(Database db, LayoutManager lm, string name, bool createdNew,
-            ProfileKind kind, SheetWin ep, List<CsCell> cells)
+            ProfileKind kind, List<CsCell> epCells, List<CsCell> cells)
         {
             string stayOn = "Model";
             try
@@ -489,7 +627,7 @@ namespace Nvk.Cad
             if (usableW < 40.0) usableW = 40.0;
             SheetWin coord = NvkUiState.DoVol ? NvkSession.CoordWin : null;
             SheetWin samp = (NvkUiState.DoVol && kind != ProfileKind.Truba) ? NvkSession.SampWin : null;
-            var specs = PackSpecs(kind, ep, vol, plan, coord, samp, cells, nEp, nCs, nPlan,
+            var specs = PackSpecs(kind, epCells, vol, plan, coord, samp, cells, nEp, nCs, nPlan,
                 margin, gap, titleBand, usableW, paperH);
 
             int nAdd = 0;
@@ -498,6 +636,7 @@ namespace Nvk.Cad
             {
                 var layout = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
                 var ps = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForWrite);
+                DropStaleEpVps(tr, have, specs, kind);
                 foreach (var s in specs)
                 {
                     if (have.ContainsKey(s.Key)) continue;
@@ -594,7 +733,59 @@ namespace Nvk.Cad
             return nAdd > 0 ? nAdd : specs.Count;
         }
 
-        static List<VpSpec> PackSpecs(ProfileKind kind, SheetWin ep, SheetWin vol, SheetWin plan,
+        static int DropStaleEpVps(Transaction tr, Dictionary<string, ObjectId> have,
+            List<VpSpec> specs, ProfileKind kind)
+        {
+            if (have == null || have.Count == 0) return 0;
+            var want = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            if (specs != null)
+            {
+                for (int i = 0; i < specs.Count; i++)
+                {
+                    if (!string.IsNullOrEmpty(specs[i].Key))
+                        want[specs[i].Key] = true;
+                }
+            }
+            var kill = new List<string>();
+            foreach (var kv in have)
+            {
+                if (!IsEpKey(kind, kv.Key)) continue;
+                if (want.ContainsKey(kv.Key)) continue;
+                kill.Add(kv.Key);
+            }
+            int n = 0;
+            for (int i = 0; i < kill.Count; i++)
+            {
+                ObjectId id;
+                if (!have.TryGetValue(kill[i], out id) || id.IsNull) continue;
+                try
+                {
+                    var vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
+                    if (vp != null && !vp.IsErased)
+                    {
+                        vp.Erase();
+                        n++;
+                        NvkLog.Write("[НВК] VP снят " + kill[i]);
+                    }
+                }
+                catch (Exc ex)
+                {
+                    NvkLog.Write("[НВК] VP снять " + kill[i] + " " + ex.Message);
+                }
+                have.Remove(kill[i]);
+            }
+            return n;
+        }
+
+        static bool IsEpKey(ProfileKind kind, string key)
+        {
+            if (string.IsNullOrEmpty(key)) return false;
+            string p = "EP:" + ((int)kind).ToString();
+            if (string.Equals(key, p, StringComparison.OrdinalIgnoreCase)) return true;
+            return key.StartsWith(p + ":", StringComparison.OrdinalIgnoreCase);
+        }
+
+        static List<VpSpec> PackSpecs(ProfileKind kind, List<CsCell> epCells, SheetWin vol, SheetWin plan,
             SheetWin coord, SheetWin samp, List<CsCell> cells, int nEp, int nCs, int nPlan,
             double margin, double gap, double titleBand, double usableW, double paperH)
         {
@@ -628,7 +819,7 @@ namespace Nvk.Cad
                 if (h > rowH) rowH = h;
             };
 
-            place(ep, nEp, "EP:" + ((int)kind).ToString(), 0.0);
+            PlaceEpCells(epCells, kind, nEp, place);
             place(vol, nEp, "VOL:" + ((int)kind).ToString(), 0.0);
             place(coord, nEp, "COORD", 0.0);
             place(samp, nEp, "SAMP", 0.0);
@@ -653,6 +844,29 @@ namespace Nvk.Cad
                 }
             }
             return specs;
+        }
+
+        static void PlaceEpCells(List<CsCell> epCells, ProfileKind kind, int nEp,
+            Action<SheetWin, int, string, double> place)
+        {
+            if (epCells == null || epCells.Count == 0 || place == null) return;
+            var ordered = new List<CsCell>(epCells);
+            ordered.Sort((a, b) => a.Index.CompareTo(b.Index));
+            int nWin = 0;
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                var c = ordered[i];
+                if (c != null && c.Win != null && c.Win.Valid) nWin++;
+            }
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                var cell = ordered[i];
+                if (cell == null || cell.Win == null || !cell.Win.Valid) continue;
+                string key = nWin <= 1
+                    ? "EP:" + ((int)kind).ToString()
+                    : "EP:" + ((int)kind).ToString() + ":" + cell.Index.ToString();
+                place(cell.Win, nEp, key, 0.0);
+            }
         }
 
         static void AimVp(Viewport vp, SheetWin win, int scaleN, string key, double twistDeg)

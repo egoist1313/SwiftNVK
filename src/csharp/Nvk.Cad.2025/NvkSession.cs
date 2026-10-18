@@ -49,7 +49,7 @@ namespace Nvk.Cad
 
     static class NvkSession
     {
-        public const string Version = "0.199";
+        public const string Version = "0.200";
         public static int RunId;
         public static DomainResult Last;
         public static List<DomainResult> Runs = new List<DomainResult>();
@@ -99,7 +99,7 @@ namespace Nvk.Cad
         public static readonly bool[] EpHas = new bool[5];
         public static readonly Point3d[] CsLvl = new Point3d[5];
         public static readonly bool[] CsHas = new bool[5];
-        public static Dictionary<ProfileKind, SheetWin> EpWins = new Dictionary<ProfileKind, SheetWin>();
+        public static Dictionary<ProfileKind, List<CsCell>> EpCells = new Dictionary<ProfileKind, List<CsCell>>();
         public static Dictionary<ProfileKind, List<CsCell>> CsCells = new Dictionary<ProfileKind, List<CsCell>>();
         public static Dictionary<ProfileKind, SheetWin> VolWins = new Dictionary<ProfileKind, SheetWin>();
         public static SheetWin PlanWin = new SheetWin();
@@ -135,8 +135,8 @@ namespace Nvk.Cad
 
         public static void ClearSheetWins()
         {
-            if (EpWins == null) EpWins = new Dictionary<ProfileKind, SheetWin>();
-            else EpWins.Clear();
+            if (EpCells == null) EpCells = new Dictionary<ProfileKind, List<CsCell>>();
+            else EpCells.Clear();
             if (CsCells == null) CsCells = new Dictionary<ProfileKind, List<CsCell>>();
             else CsCells.Clear();
             if (VolWins == null) VolWins = new Dictionary<ProfileKind, SheetWin>();
@@ -148,14 +148,28 @@ namespace Nvk.Cad
 
         public static void AddEpWin(ProfileKind kind, double x0, double y0, double x1, double y1)
         {
-            if (EpWins == null) EpWins = new Dictionary<ProfileKind, SheetWin>();
-            SheetWin w;
-            if (!EpWins.TryGetValue(kind, out w) || w == null)
+            if (EpCells == null) EpCells = new Dictionary<ProfileKind, List<CsCell>>();
+            List<CsCell> list;
+            if (!EpCells.TryGetValue(kind, out list) || list == null)
             {
-                w = new SheetWin();
-                EpWins[kind] = w;
+                list = new List<CsCell>();
+                EpCells[kind] = list;
             }
-            w.Union(x0, y0, x1, y1);
+            var box = new SheetWin();
+            box.Union(x0, y0, x1, y1);
+            if (!box.Valid) return;
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i] == null || list[i].Win == null) continue;
+                if (list[i].Win.Overlaps(box, WinCluster.EpGapM))
+                {
+                    list[i].Win.Union(x0, y0, x1, y1);
+                    return;
+                }
+            }
+            var cell = new CsCell { Index = list.Count };
+            cell.Win.Union(x0, y0, x1, y1);
+            list.Add(cell);
         }
 
         public static void AddCsCell(ProfileKind kind, int index, double x0, double y0, double x1, double y1)
