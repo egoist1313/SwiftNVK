@@ -626,6 +626,7 @@ namespace Nvk.Cad
                     + "  (чужие не трогаем)");
                 tr.Commit();
             }
+            var keepPaper = new HashSet<string>(have.Keys, StringComparer.OrdinalIgnoreCase);
             if (paperW + 1.0 < paperH)
             {
                 double t = paperW; paperW = paperH; paperH = t;
@@ -727,9 +728,15 @@ namespace Nvk.Cad
                     var vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
                     if (vp == null || vp.IsErased) continue;
                     try { vp.Locked = false; } catch { }
-                    try { vp.Width = s.W; } catch { }
-                    try { vp.Height = s.H; } catch { }
-                    try { vp.CenterPoint = new Point3d(s.Cx, s.Cy, 0.0); } catch { }
+                    bool keep = keepPaper.Contains(s.Key);
+                    if (!keep)
+                    {
+                        try { vp.Width = s.W; } catch { }
+                        try { vp.Height = s.H; } catch { }
+                        try { vp.CenterPoint = new Point3d(s.Cx, s.Cy, 0.0); } catch { }
+                    }
+                    else
+                        NvkLog.Write("[НВК] VP бумага как стоит " + s.Key);
                     StyleVp(vp);
                     AimVp(vp, s.Win, s.ScaleN, s.Key, s.TwistDeg);
                     if (s.Key != null && s.Key.StartsWith("PLAN:", StringComparison.Ordinal))
