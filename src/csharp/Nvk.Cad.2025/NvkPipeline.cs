@@ -54,6 +54,7 @@ namespace Nvk.Cad
                 else Skip("PLAN", ref skip);
                 if (NvkUiState.DoSheets) Step("SHEETS", StageSheets, ref ok, ref skip, ref fail);
                 else Skip("SHEETS", ref skip);
+                Step("CODES", StageCodes, ref ok, ref skip, ref fail);
 
                 string done = "[НВК] ========== готово   OK " + ok
                     + "  SKIP " + skip + "  FAIL " + fail + " ==========";
@@ -465,6 +466,34 @@ namespace Nvk.Cad
             {
                 NvkLog.Write("[НВК] ЛИСТЫ FAIL " + ex.Message);
                 doc.Editor.WriteMessage("\n[НВК] ЛИСТЫ: " + ex.Message);
+                return null;
+            }
+        }
+
+        public static string StageCodes()
+        {
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return null;
+            string net = "";
+            if (NvkSession.Last != null && !string.IsNullOrEmpty(NvkSession.Last.NetName))
+                net = NvkSession.Last.NetName;
+            string seg = "";
+            var site = NvkSites.Current;
+            if (site != null && !string.IsNullOrEmpty(site.Name))
+                seg = site.Name;
+            try
+            {
+                using (var tr = doc.TransactionManager.StartTransaction())
+                {
+                    var msg = NvkCodes.Apply(doc.Database, tr, net, seg);
+                    tr.Commit();
+                    NvkLog.Write(msg);
+                    return msg;
+                }
+            }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] коды FAIL " + ex.Message);
                 return null;
             }
         }
