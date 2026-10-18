@@ -21,6 +21,7 @@ namespace Nvk.Cad
     {
         public static readonly List<NvkSite> All = new List<NvkSite>();
         public static int Index;
+        public static SiteLayout InsertTemplate;
 
         public static NvkSite Current
         {
@@ -54,6 +55,7 @@ namespace Nvk.Cad
             All.Clear();
             Index = 0;
             All.Add(Make("U1", "Участок 1"));
+            InsertTemplate = null;
         }
 
         static NvkSite Make(string id, string name)
@@ -302,6 +304,78 @@ namespace Nvk.Cad
             NvkPalette.Reload();
         }
 
+        public static void RememberInsertTemplate()
+        {
+            var t = FromSession();
+            if (t != null && t.Any)
+                InsertTemplate = t;
+        }
+
+        public static void ClearInsertTemplate()
+        {
+            InsertTemplate = null;
+        }
+
+        public static SiteLayout FromSession()
+        {
+            var t = new SiteLayout();
+            if (NvkSession.CsInsHas) t.SetCs(NvkSession.CsIns.X, NvkSession.CsIns.Y);
+            if (NvkSession.EpInsHas) t.SetEp(NvkSession.EpIns.X, NvkSession.EpIns.Y);
+            if (NvkSession.VolInsHas) t.SetVol(NvkSession.VolIns.X, NvkSession.VolIns.Y);
+            for (int i = 0; i < 5; i++)
+            {
+                if (NvkSession.CsHas != null && NvkSession.CsHas[i])
+                    t.SetCsLvl(i, NvkSession.CsLvl[i].X, NvkSession.CsLvl[i].Y);
+                if (NvkSession.EpHas != null && NvkSession.EpHas[i])
+                    t.SetEpLvl(i, NvkSession.EpLvl[i].X, NvkSession.EpLvl[i].Y);
+            }
+            t.ResolveOrigin();
+            return t;
+        }
+
+        public static void ToSession(SiteLayout t)
+        {
+            if (t == null) return;
+            if (t.HasCs)
+            {
+                NvkSession.CsIns = new Autodesk.AutoCAD.Geometry.Point3d(t.CsX, t.CsY, 0.0);
+                NvkSession.CsInsHas = true;
+            }
+            if (t.HasEp)
+            {
+                NvkSession.EpIns = new Autodesk.AutoCAD.Geometry.Point3d(t.EpX, t.EpY, 0.0);
+                NvkSession.EpInsHas = true;
+            }
+            if (t.HasVol)
+            {
+                NvkSession.VolIns = new Autodesk.AutoCAD.Geometry.Point3d(t.VolX, t.VolY, 0.0);
+                NvkSession.VolInsHas = true;
+            }
+            for (int i = 0; i < 5; i++)
+            {
+                if (t.CsL[i])
+                {
+                    NvkSession.CsLvl[i] = new Autodesk.AutoCAD.Geometry.Point3d(t.CsLx[i], t.CsLy[i], 0.0);
+                    NvkSession.CsHas[i] = true;
+                }
+                if (t.EpL[i])
+                {
+                    NvkSession.EpLvl[i] = new Autodesk.AutoCAD.Geometry.Point3d(t.EpLx[i], t.EpLy[i], 0.0);
+                    NvkSession.EpHas[i] = true;
+                }
+            }
+        }
+
+        /// <summary>Вставка по точке: раскладка как у шаблона (участок 43-44-46 и т.п.).</summary>
+        public static bool PlaceInsertsAt(double x, double y)
+        {
+            var src = InsertTemplate;
+            if (src == null || !src.Any) src = new SiteLayout();
+            var at = src.At(x, y);
+            ToSession(at);
+            return at.Any;
+        }
+
         public static void AddFromCommand()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -309,6 +383,7 @@ namespace Nvk.Cad
             var ed = doc.Editor;
             NvkPalette.Flush();
             Capture();
+            RememberInsertTemplate();
             var recs = Recs();
             var n = Make(SitePack.NextId(recs), SitePack.NextName(recs));
             n.State = FreshClone(Current.State);

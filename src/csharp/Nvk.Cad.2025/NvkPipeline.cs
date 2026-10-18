@@ -274,8 +274,15 @@ namespace Nvk.Cad
             {
                 var p = doc.Editor.GetPoint("\n[НВК] CS-DRAW точка: ");
                 if (p.Status != PromptStatus.OK) return null;
-                NvkSession.CsIns = p.Value;
-                NvkSession.CsInsHas = true;
+                NvkSites.PlaceInsertsAt(p.Value.X, p.Value.Y);
+                if (!NvkSession.CsInsHas)
+                {
+                    NvkSession.CsIns = p.Value;
+                    NvkSession.CsInsHas = true;
+                }
+                NvkLog.Write("[НВК] вставка по точке  CS=" + FmtPt(NvkSession.CsInsHas, NvkSession.CsIns)
+                    + "  EP=" + FmtPt(NvkSession.EpInsHas, NvkSession.EpIns)
+                    + "  VOL=" + FmtPt(NvkSession.VolInsHas, NvkSession.VolIns));
             }
             ApplyTable();
             CaptureCannoscale();
@@ -491,6 +498,7 @@ namespace Nvk.Cad
                 NvkSession.EpHas[i] = false;
                 NvkSession.CsHas[i] = false;
             }
+            NvkSites.ClearInsertTemplate();
             NvkSession.CacheScatter = null;
             NvkSession.CacheScatter2 = null;
             NvkSession.CacheScatter3 = null;
