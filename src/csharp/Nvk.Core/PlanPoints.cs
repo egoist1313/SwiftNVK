@@ -37,7 +37,7 @@ namespace Nvk.Core
             string key = x.ToString("0.00") + "," + y.ToString("0.00");
             if (seen.Contains(key)) return;
             seen.Add(key);
-            if (string.IsNullOrEmpty(name) && r < 0.05) return;
+            if (r < 0.05) return;
             rows.Add(new NamedXy
             {
                 Name = string.IsNullOrEmpty(name) ? "—" : name,

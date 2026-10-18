@@ -1034,26 +1034,25 @@ namespace Nvk.Cad
             var seen = new HashSet<string>();
             for (int i = 0; i <= n; i++)
             {
-                double r, sump, pipeD;
+                double r, sump;
                 string nm;
                 if (i == 0)
                 {
-                    r = segs[0].StartR; sump = segs[0].StartSump; nm = segs[0].StartName; pipeD = segs[0].Diam;
+                    r = segs[0].ShaftR(true); sump = segs[0].StartSump; nm = segs[0].StartName;
                 }
                 else if (i == n)
                 {
-                    r = segs[n - 1].EndR; sump = segs[n - 1].EndSump; nm = segs[n - 1].EndName;
-                    pipeD = segs[n - 1].Diam; ch = last.Chain.Total;
+                    r = segs[n - 1].ShaftR(false); sump = segs[n - 1].EndSump; nm = segs[n - 1].EndName;
+                    ch = last.Chain.Total;
                 }
                 else
                 {
-                    r = segs[i - 1].EndR; sump = segs[i - 1].EndSump; nm = segs[i - 1].EndName;
-                    pipeD = segs[i - 1].Diam;
+                    r = segs[i - 1].ShaftR(false); sump = segs[i - 1].EndSump; nm = segs[i - 1].EndName;
                 }
                 string key = (nm ?? "") + "@" + ch.ToString("0.00");
                 if (seen.Contains(key)) { if (i < n) ch += segs[i].Length2d; continue; }
                 seen.Add(key);
-                if (r < 0.05) r = Math.Max(0.5, pipeD > 0 ? pipeD : 0.5);
+                if (r < 0.05) { if (i < n) ch += segs[i].Length2d; continue; }
                 double xL, xR;
                 if (i == 0) { xL = o.X + ch * lSc; xR = o.X + (ch + r) * lSc; }
                 else if (i == n) { xL = o.X + (ch - r) * lSc; xR = o.X + ch * lSc; }
@@ -2033,14 +2032,10 @@ namespace Nvk.Cad
             return sh == null || sh.ShowManholes;
         }
 
-        /// <summary>Радиус колодца как на чертеже: если Civil не дал Ø, берём max(0.5, Øтрубы).</summary>
+        /// <summary>Разрыв профиля только у шахты с Ø. Нулевой колодец — без зазора.</summary>
         static double GapR(PipeSeg s, bool start)
         {
-            if (s == null) return 0.0;
-            double r = start ? s.StartR : s.EndR;
-            if (r > 0.05) return r;
-            double d = s.Diam;
-            return Math.Max(0.5, d > 0.0 ? d : 0.5);
+            return s == null ? 0.0 : s.ShaftR(start);
         }
 
         // netStarts/netEnds: внутренние стенки, тот же радиус что у разрыва линии и прямоугольника колодца.

@@ -35,11 +35,18 @@ namespace Nvk.Core
             get { return Math.Max(0.0, Length2d - StartR - EndR); }
         }
 
-        /// <summary>Радиус колодца на начале/конце. 0 если сооружения нет.</summary>
-        public double ManholeR(bool start)
+        /// <summary>Шахта на чертеже: сырой R из Civil. 0 если Ø нет.</summary>
+        public double ShaftR(bool start)
         {
             double r = start ? StartR : EndR;
-            if (r > 0.05) return r;
+            return r > 0.05 ? r : 0.0;
+        }
+
+        /// <summary>Стык труб: шахта, иначе по имени max(0.5, Ø). Не для чертежа.</summary>
+        public double ManholeR(bool start)
+        {
+            double r = ShaftR(start);
+            if (r > 0.0) return r;
             string n = start ? StartName : EndName;
             if (!string.IsNullOrEmpty(n))
                 return Math.Max(0.5, Diam > 0.0 ? Diam : 0.5);

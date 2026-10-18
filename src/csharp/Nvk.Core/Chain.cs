@@ -180,10 +180,10 @@ namespace Nvk.Core
             {
                 double len = s.Length2d;
                 double end = ch + len;
-                double rs = s.ManholeR(true);
+                double rs = s.ShaftR(true);
                 if (rs > 1e-9 && station >= ch - 1e-6 && station < ch + rs - 1e-6)
                     return true;
-                double re = s.ManholeR(false);
+                double re = s.ShaftR(false);
                 if (re > 1e-9 && station > end - re + 1e-6 && station <= end + 1e-6)
                     return true;
                 ch = end;
@@ -199,7 +199,7 @@ namespace Nvk.Core
             {
                 double len = s.Length2d;
                 double end = ch + len;
-                double rs = s.ManholeR(true);
+                double rs = s.ShaftR(true);
                 if (rs > 1e-9)
                 {
                     bool hit = interior
@@ -207,7 +207,7 @@ namespace Nvk.Core
                         : (station >= ch - 1e-6 && station <= ch + rs + 1e-6);
                     if (hit) return rs;
                 }
-                double re = s.ManholeR(false);
+                double re = s.ShaftR(false);
                 if (re > 1e-9)
                 {
                     bool hit = interior

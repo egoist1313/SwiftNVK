@@ -34,6 +34,25 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void ManholesSkipZeroRadiusEvenIfNamed()
+        {
+            var chain = Chain.Sort(new List<PipeSeg>
+            {
+                new PipeSeg
+                {
+                    X0 = 0, Y0 = 0, X1 = 40, Y1 = 0,
+                    InvertStart = 100, InvertEnd = 99.6, Diam = 0.3,
+                    StartName = "Выпуск", StartR = 0,
+                    EndName = "К2", EndR = 0.8
+                }
+            });
+            var rows = PlanPoints.Manholes(chain);
+            Assert.Single(rows);
+            Assert.Equal("К2", rows[0].Name);
+            Assert.Equal(40.0, rows[0].X, 6);
+        }
+
+        [Fact]
         public void SamplesSkipNearManholeAndNumberFromT1()
         {
             var chain = PipeWithMh();

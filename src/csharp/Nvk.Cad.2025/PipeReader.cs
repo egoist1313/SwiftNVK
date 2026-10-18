@@ -83,8 +83,6 @@ namespace Nvk.Cad
                 dv = Safe.Meters(dv);
                 r = dv * 0.5;
             }
-            if (r < 0.05)
-                r = Math.Max(0.5, pipeDiam > 0 ? pipeDiam : 0.5);
             double sv = Safe.PropDouble(st, "SumpElevation", invert);
             if (sv > 1.0 && sv < 10000.0) sump = sv;
             else

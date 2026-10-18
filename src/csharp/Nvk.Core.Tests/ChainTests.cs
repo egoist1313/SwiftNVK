@@ -46,6 +46,32 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void ShaftRZeroWhenNoDiameterEvenIfNamed()
+        {
+            var s = Seg("A", 0, 0, 10, 0, 100, 99, 0.2);
+            s.StartName = "Выпуск";
+            s.EndName = "64а";
+            s.EndR = 0.6;
+            Assert.Equal(0.0, s.ShaftR(true), 6);
+            Assert.Equal(0.6, s.ShaftR(false), 6);
+            Assert.True(s.ManholeR(true) > 0.05);
+        }
+
+        [Fact]
+        public void InManholeIgnoresNamedZeroShaft()
+        {
+            var s = Seg("A", 0, 0, 10, 0, 100, 99, 0.2);
+            s.StartName = "Выпуск";
+            s.EndName = "64а";
+            s.EndR = 0.6;
+            var chain = Chain.Sort(new List<PipeSeg> { s });
+            Assert.False(chain.InManhole(0.0));
+            Assert.True(chain.InManhole(10.0));
+            Assert.Equal(0.0, chain.ManholeRAt(0.0, false), 6);
+            Assert.Equal(0.6, chain.ManholeRAt(10.0, false), 6);
+        }
+
+        [Fact]
         public void LocateMidAndEnd()
         {
             var a = Seg("A", 0, 0, 10, 0, 100, 99, 0.3);

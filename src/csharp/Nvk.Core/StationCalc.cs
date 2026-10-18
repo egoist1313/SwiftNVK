@@ -130,14 +130,14 @@ namespace Nvk.Core
             double ch = 0.0;
             foreach (var seg in chain.Segs)
             {
-                double rs = seg.ManholeR(true);
+                double rs = seg.ShaftR(true);
                 if (rs > 1e-6 && ch > g0 + 1e-6 && ch < g1 - 1e-6)
                 {
                     AddTrenchStation(stations, ch - rs, chain);
                     AddTrenchStation(stations, ch + rs, chain);
                 }
                 ch += seg.Length2d;
-                double re = seg.ManholeR(false);
+                double re = seg.ShaftR(false);
                 if (re > 1e-6 && ch > g0 + 1e-6 && ch < g1 - 1e-6)
                 {
                     AddTrenchStation(stations, ch - re, chain);
