@@ -166,6 +166,25 @@ namespace Nvk.Cad
             return false;
         }
 
+        public static bool TryKind(string name, out ProfileKind kind)
+        {
+            kind = ProfileKind.Razrabotka;
+            if (string.IsNullOrEmpty(name)) return false;
+            if (string.Equals(name, "Model", StringComparison.OrdinalIgnoreCase))
+                return false;
+            for (int i = 0; i < Kinds.Length; i++)
+            {
+                var k = Kinds[i];
+                if (string.Equals(name, NameOf(k), StringComparison.OrdinalIgnoreCase)
+                    || MatchesKind(k, name))
+                {
+                    kind = k;
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public static string Build(Document doc)
         {
             if (doc == null) return "[НВК] ЛИСТЫ: нет документа";
@@ -643,6 +662,7 @@ namespace Nvk.Cad
             var specs = PackSpecs(kind, epCells, vol, plan, coord, samp, cells, nEp, nCs, nPlan,
                 xLeft, topY, gap, usableW);
             FitSpecs(specs, xLeft, py0 + pad, px1 - pad, py1 - pad);
+            ApplySnapPaper(kind, specs);
             if (SpecsOverflow(specs, px0, py0, px1, py1))
                 NvkLog.Write("[НВК] лист " + name + " видовые крупнее области печати, рамки 1:N");
 
@@ -689,7 +709,8 @@ namespace Nvk.Cad
                         break;
                     }
                 }
-                if (titleEnt == null)
+                bool titleNew = titleEnt == null;
+                if (titleNew)
                 {
                     NvkLayers.EnsureOne(db, tr, TitleLayer, 7, false, false);
                     var title = new MText();
@@ -702,12 +723,16 @@ namespace Nvk.Cad
                     title.Layer = TitleLayer;
                     ps.AppendEntity(title);
                     tr.AddNewlyCreatedDBObject(title, true);
+                    titleEnt = title;
+                    SheetSnapStore.PlaceTitle(titleEnt, kind);
                 }
                 else
                 {
                     titleEnt.UpgradeOpen();
                     titleEnt.Contents = titleTxt;
                 }
+                if (createdNew)
+                    SheetSnapStore.Spawn(db, tr, ps, kind);
                 tr.Commit();
             }
 
@@ -807,6 +832,28 @@ namespace Nvk.Cad
             string p = "EP:" + ((int)kind).ToString();
             if (string.Equals(key, p, StringComparison.OrdinalIgnoreCase)) return true;
             return key.StartsWith(p + ":", StringComparison.OrdinalIgnoreCase);
+        }
+
+        static void ApplySnapPaper(ProfileKind kind, List<VpSpec> specs)
+        {
+            var lay = SheetSnapStore.LayoutOf(kind);
+            if (lay == null || specs == null) return;
+            int n = 0;
+            for (int i = 0; i < specs.Count; i++)
+            {
+                var s = specs[i];
+                double cx, cy, w, h;
+                if (!SheetSnap.TryVp(lay, s.Key, out cx, out cy, out w, out h))
+                    continue;
+                specs[i] = new VpSpec(cx, cy, w, h, s.Win, s.ScaleN, s.Key, s.TwistDeg);
+                n++;
+                NvkLog.Write("[НВК] VP снимок " + s.Key
+                    + "  бумага " + w.ToString("0.0") + "x" + h.ToString("0.0")
+                    + " @ " + cx.ToString("0.0") + "," + cy.ToString("0.0"));
+            }
+            if (n > 0)
+                NvkLog.Write("[НВК] лист снимок " + kind.ToString()
+                    + " экранов " + n.ToString());
         }
 
         static List<VpSpec> PackSpecs(ProfileKind kind, List<CsCell> epCells, SheetWin vol, SheetWin plan,

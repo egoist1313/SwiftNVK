@@ -129,7 +129,7 @@ namespace Nvk.Cad
             _stations = Num(pRun, "Станции (AUTO или пикеты)", "AUTO");
 
             pRun.Controls.Add(Head("Действия"));
-            var btns = new FlowLayoutPanel { Width = 244, Height = 164, WrapContents = true, BackColor = Color.Transparent };
+            var btns = new FlowLayoutPanel { Width = 244, Height = 206, WrapContents = true, BackColor = Color.Transparent };
             btns.Controls.Add(Btn("Построить",    Build,                                   118, true));
             btns.Controls.Add(Btn("Обновить",     Build,                                   118));
             btns.Controls.Add(Btn("Трубы",        () => Send("НВК-ВВОД "),                 118));
@@ -138,6 +138,7 @@ namespace Nvk.Cad
             btns.Controls.Add(Btn("Сброс точек",  () => Send("НВК-СБРОС "),                118));
             btns.Controls.Add(Btn("Двигать",      () => Send("НВК-ДВИГАТЬ "),              118));
             btns.Controls.Add(Btn("Листы",        () => Send("НВК-ЛИСТЫ "),                118));
+            btns.Controls.Add(Btn("Снимок листа", () => Send("НВК-ЛИСТ-СНЯТЬ "),           118));
             pRun.Controls.Add(btns);
 
             _status = new Label

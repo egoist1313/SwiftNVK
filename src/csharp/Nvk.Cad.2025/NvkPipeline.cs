@@ -566,6 +566,7 @@ namespace Nvk.Cad
             ed.WriteMessage("\n║  НВК-ПАНЕЛЬ     панель                       ║");
             ed.WriteMessage("\n║  НВК-ПОСТРОИТЬ  все этапы                    ║");
             ed.WriteMessage("\n║  НВК-ЛИСТЫ      вкладки + видовые экраны     ║");
+            ed.WriteMessage("\n║  НВК-ЛИСТ-СНЯТЬ снимок видовых/линий/текста  ║");
             ed.WriteMessage("\n║  НВК-ВВОД       трубы + TIN                  ║");
             ed.WriteMessage("\n║  лог    " + NvkLog.FilePath());
             ed.WriteMessage("\n╚══════════════════════════════════════════════╝");

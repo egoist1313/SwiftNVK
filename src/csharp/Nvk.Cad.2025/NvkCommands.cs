@@ -109,6 +109,18 @@ namespace Nvk.Cad
             NvkPipeline.SaveNod();
         }
 
+        [CommandMethod("НВК-ЛИСТ-СНЯТЬ")]
+        public void SheetSnapCmd()
+        {
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            string msg = SheetSnapStore.Capture(doc);
+            doc.Editor.WriteMessage("\n" + msg);
+        }
+
+        [CommandMethod("NVKSHEETSNAP")]
+        public void SheetSnapEn() { SheetSnapCmd(); }
+
         [CommandMethod("НВК-ОЧИСТИТЬ")]
         public void Clean() { NvkPipeline.Clean(); }
 
