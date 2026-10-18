@@ -129,6 +129,8 @@ namespace Nvk.Core
 
         /// <summary>Полуширина ситуационного коридора, м. PipeBuild: ±10 м от оси.</summary>
         public const double SitHalfM = 10.0;
+        /// <summary>Прореживание коридора: коллинеарные ближе этого (м) выкидываем.</summary>
+        public const double SitSimplifyM = 0.25;
 
         /// <summary>
         /// Вылет оси за крайние вершины (центры колодцев) на dist метров
@@ -198,6 +200,52 @@ namespace Nvk.Core
             {
                 r.Clear();
                 r.AddRange(pts);
+            }
+            return r;
+        }
+
+        /// <summary>
+        /// Замкнутый контур: выкинуть коллинеарные и дубли, углы оставить.
+        /// Плотная нарезка OFFSET (0.5 м) схлопывается до сторон коридора.
+        /// </summary>
+        public static List<PlanPt> SimplifyClosed(List<PlanPt> pts, double tol)
+        {
+            var r = new List<PlanPt>();
+            if (pts == null || pts.Count == 0) return r;
+            for (int i = 0; i < pts.Count; i++)
+            {
+                if (r.Count > 0)
+                {
+                    double dx = r[r.Count - 1].X - pts[i].X;
+                    double dy = r[r.Count - 1].Y - pts[i].Y;
+                    if (dx * dx + dy * dy < 1e-12) continue;
+                }
+                r.Add(pts[i]);
+            }
+            if (r.Count >= 2)
+            {
+                double dx = r[0].X - r[r.Count - 1].X;
+                double dy = r[0].Y - r[r.Count - 1].Y;
+                if (dx * dx + dy * dy < 1e-12)
+                    r.RemoveAt(r.Count - 1);
+            }
+            if (r.Count <= 3 || tol <= 0.0) return r;
+            bool dropped = true;
+            while (dropped && r.Count > 3)
+            {
+                dropped = false;
+                for (int i = 0; i < r.Count && r.Count > 3; )
+                {
+                    int n = r.Count;
+                    var prev = r[(i - 1 + n) % n];
+                    var next = r[(i + 1) % n];
+                    if (DistToSeg(prev, next, r[i]) <= tol)
+                    {
+                        r.RemoveAt(i);
+                        dropped = true;
+                    }
+                    else i++;
+                }
             }
             return r;
         }

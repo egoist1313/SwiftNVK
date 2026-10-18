@@ -458,6 +458,42 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void SimplifyClosedDropsDenseStraightKeepsCorners()
+        {
+            var dense = new List<PlanPt>();
+            void Seg(double x0, double y0, double x1, double y1)
+            {
+                for (int i = 0; i < 20; i++)
+                {
+                    double t = i / 20.0;
+                    dense.Add(new PlanPt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t));
+                }
+            }
+            Seg(0, 0, 40, 0);
+            Seg(40, 0, 40, 20);
+            Seg(40, 20, 0, 20);
+            Seg(0, 20, 0, 0);
+            var s = PlanGeom.SimplifyClosed(dense, PlanGeom.SitSimplifyM);
+            Assert.Equal(4, s.Count);
+        }
+
+        [Fact]
+        public void SimplifyClosedKeepsBend()
+        {
+            var pts = new List<PlanPt>
+            {
+                new PlanPt(0, 0),
+                new PlanPt(20, 0),
+                new PlanPt(20, 0.01),
+                new PlanPt(20, 15),
+                new PlanPt(0, 15),
+                new PlanPt(0, 0.01)
+            };
+            var s = PlanGeom.SimplifyClosed(pts, PlanGeom.SitSimplifyM);
+            Assert.Equal(4, s.Count);
+        }
+
+        [Fact]
         public void SimplifyDropsCollinearKeepsCorner()
         {
             var pts = new List<PlanPt>

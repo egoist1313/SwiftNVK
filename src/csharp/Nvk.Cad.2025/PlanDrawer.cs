@@ -213,11 +213,13 @@ namespace Nvk.Cad
                 var poly = obj as Polyline;
                 if (poly != null)
                 {
-                    for (int i = 0; i < poly.NumberOfVertices; i++)
-                    {
-                        var p = poly.GetPoint2dAt(i);
-                        pts.Add(new PlanPt(p.X, p.Y));
-                    }
+                    AddPoly(pts, poly);
+                    continue;
+                }
+                var arc = obj as Arc;
+                if (arc != null)
+                {
+                    AddArc(pts, arc);
                     continue;
                 }
                 var c = obj as Curve;
@@ -225,14 +227,76 @@ namespace Nvk.Cad
                 try
                 {
                     var sp = c.StartPoint;
-                    pts.Add(new PlanPt(sp.X, sp.Y));
+                    AddUnique(pts, sp.X, sp.Y);
                     var ep = c.EndPoint;
-                    if (Math.Abs(ep.X - sp.X) + Math.Abs(ep.Y - sp.Y) > 1e-9)
-                        pts.Add(new PlanPt(ep.X, ep.Y));
+                    AddUnique(pts, ep.X, ep.Y);
                 }
                 catch { }
             }
             return pts;
+        }
+
+        static void AddPoly(List<PlanPt> pts, Polyline poly)
+        {
+            int n = poly.NumberOfVertices;
+            if (n < 1) return;
+            int last = poly.Closed ? n : n - 1;
+            for (int i = 0; i < n; i++)
+            {
+                var p = poly.GetPoint2dAt(i);
+                AddUnique(pts, p.X, p.Y);
+                if (i >= last) continue;
+                double bulge = 0.0;
+                try { bulge = poly.GetBulgeAt(i); } catch { }
+                if (Math.Abs(bulge) < 1e-6) continue;
+                int j = i + 1;
+                if (j >= n) j = 0;
+                var q = poly.GetPoint2dAt(j);
+                AddBulge(pts, p, q, bulge);
+            }
+        }
+
+        static void AddBulge(List<PlanPt> pts, Point2d p, Point2d q, double bulge)
+        {
+            double dx = q.X - p.X, dy = q.Y - p.Y;
+            double chord = Math.Sqrt(dx * dx + dy * dy);
+            if (chord < 1e-9) return;
+            double ang = 4.0 * Math.Atan(bulge);
+            double r = chord * (1.0 + bulge * bulge) / (4.0 * Math.Abs(bulge));
+            double half = 0.5 * chord;
+            double d = Math.Sqrt(Math.Max(0.0, r * r - half * half));
+            if (Math.Abs(bulge) > 1.0) d = -d;
+            double s = bulge > 0.0 ? 1.0 : -1.0;
+            double cx = 0.5 * (p.X + q.X) + s * (-dy / chord) * d;
+            double cy = 0.5 * (p.Y + q.Y) + s * (dx / chord) * d;
+            r = Math.Sqrt((p.X - cx) * (p.X - cx) + (p.Y - cy) * (p.Y - cy));
+            if (r < 1e-9) return;
+            double a0 = Math.Atan2(p.Y - cy, p.X - cx);
+            int segs = (int)Math.Ceiling(Math.Abs(ang) / (Math.PI / 12.0));
+            if (segs < 2) segs = 2;
+            for (int k = 1; k < segs; k++)
+            {
+                double a = a0 + ang * k / segs;
+                AddUnique(pts, cx + r * Math.Cos(a), cy + r * Math.Sin(a));
+            }
+        }
+
+        static void AddArc(List<PlanPt> pts, Arc arc)
+        {
+            double a0 = arc.StartAngle;
+            double sweep = arc.EndAngle - a0;
+            while (sweep <= 0.0) sweep += 2.0 * Math.PI;
+            int segs = (int)Math.Ceiling(sweep / (Math.PI / 12.0));
+            if (segs < 2) segs = 2;
+            double r = arc.Radius;
+            var c = arc.Center;
+            AddUnique(pts, arc.StartPoint.X, arc.StartPoint.Y);
+            for (int k = 1; k < segs; k++)
+            {
+                double a = a0 + sweep * k / segs;
+                AddUnique(pts, c.X + r * Math.Cos(a), c.Y + r * Math.Sin(a));
+            }
+            AddUnique(pts, arc.EndPoint.X, arc.EndPoint.Y);
         }
 
         static void DisposeCol(DBObjectCollection col)
@@ -250,16 +314,17 @@ namespace Nvk.Cad
         /// и выноска «Предъявляемый участок»: остриё 6 м, полка 14 м влево от оси.
         /// </summary>
         /// <summary>
-        /// Коридор ±10 м: ось на 10 м за крайние колодцы, OFFSET
-        /// с скруглением углов, иначе miter. Ось чуть упрощается,
-        /// чтобы стыки труб не давали зубцы.
+        /// Коридор ±10 м: ось на 10 м за крайние колодцы, OFFSET.
+        /// Вершины OFFSET как есть (не нарезка 0.5 м), потом прореживание
+        /// коллинеарных. Дуги/bulge — шаг ~15°.
         /// </summary>
         static List<PlanPt> SituationByOffset(List<PlanPt> axis)
         {
             var src = PlanGeom.Simplify(axis, 0.05);
             if (src == null || src.Count < 2) src = axis;
             src = PlanGeom.ExtendEnds(src, PlanGeom.SitHalfM);
-            var fallback = PlanGeom.SituationClosed(src, PlanGeom.SitHalfM);
+            var fallback = PlanGeom.SimplifyClosed(
+                PlanGeom.SituationClosed(src, PlanGeom.SitHalfM), PlanGeom.SitSimplifyM);
             object oldGap = null;
             try
             {
@@ -269,8 +334,10 @@ namespace Nvk.Cad
             catch { }
             try
             {
-                var acad = OffsetClosedDense(src, PlanGeom.SitHalfM, PlanGeom.SitHalfM, 0.5);
-                return acad.Count >= 4 ? acad : fallback;
+                var acad = OffsetClosed(src, PlanGeom.SitHalfM, PlanGeom.SitHalfM);
+                if (acad.Count < 4) return fallback;
+                var thin = PlanGeom.SimplifyClosed(acad, PlanGeom.SitSimplifyM);
+                return thin.Count >= 4 ? thin : acad;
             }
             finally
             {
@@ -280,81 +347,6 @@ namespace Nvk.Cad
                     catch { }
                 }
             }
-        }
-
-        static List<PlanPt> OffsetClosedDense(List<PlanPt> axis, double hwL, double hwR, double step)
-        {
-            var empty = new List<PlanPt>();
-            Polyline pl = null;
-            DBObjectCollection leftC = null, rightC = null;
-            try
-            {
-                pl = new Polyline(axis.Count);
-                for (int i = 0; i < axis.Count; i++)
-                    pl.AddVertexAt(i, new Point2d(axis[i].X, axis[i].Y), 0, 0, 0);
-                leftC = pl.GetOffsetCurves(hwL);
-                rightC = pl.GetOffsetCurves(-hwR);
-                var left = SampleCurves(leftC, step);
-                var right = SampleCurves(rightC, step);
-                if (left.Count < 2 || right.Count < 2) return empty;
-                var closed = new List<PlanPt>(left.Count + right.Count);
-                closed.AddRange(left);
-                for (int i = right.Count - 1; i >= 0; i--)
-                    closed.Add(right[i]);
-                return closed;
-            }
-            catch
-            {
-                return empty;
-            }
-            finally
-            {
-                DisposeCol(leftC);
-                DisposeCol(rightC);
-                if (pl != null) pl.Dispose();
-            }
-        }
-
-        static List<PlanPt> SampleCurves(DBObjectCollection col, double step)
-        {
-            var pts = new List<PlanPt>();
-            if (col == null) return pts;
-            foreach (DBObject obj in col)
-            {
-                var c = obj as Curve;
-                if (c == null) continue;
-                SampleCurve(pts, c, step);
-            }
-            return pts;
-        }
-
-        static void SampleCurve(List<PlanPt> pts, Curve c, double step)
-        {
-            try
-            {
-                double len = c.GetDistanceAtParameter(c.EndParam);
-                if (len < 1e-9)
-                {
-                    AddUnique(pts, c.StartPoint.X, c.StartPoint.Y);
-                    return;
-                }
-                double ds = step > 0.05 ? step : 0.5;
-                int n = (int)Math.Ceiling(len / ds);
-                if (n < 1) n = 1;
-                for (int i = 0; i <= n; i++)
-                {
-                    double d = len * i / n;
-                    Point3d p;
-                    try { p = c.GetPointAtDist(d); }
-                    catch
-                    {
-                        double t = c.StartParam + (c.EndParam - c.StartParam) * i / n;
-                        p = c.GetPointAtParameter(t);
-                    }
-                    AddUnique(pts, p.X, p.Y);
-                }
-            }
-            catch { }
         }
 
         static void AddUnique(List<PlanPt> pts, double x, double y)
