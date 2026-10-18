@@ -458,8 +458,9 @@ namespace Nvk.Cad
         static void AddMhLeader(BlockTableRecord ms, Transaction tr, PipeSeg s, bool atStart,
             Dictionary<string, LeaderPose> poses, double planDeg)
         {
-            string name = atStart ? s.StartName : s.EndName;
-            if (string.IsNullOrEmpty(name)) return;
+            string raw = atStart ? s.StartName : s.EndName;
+            if (string.IsNullOrEmpty(raw)) return;
+            string name = SiteTitle.Label(raw, NvkUiState.MhStripParen);
             double x = atStart ? s.X0 : s.X1;
             double y = atStart ? s.Y0 : s.Y1;
             double r = atStart ? s.StartR : s.EndR;

@@ -18,16 +18,16 @@ namespace Nvk.Core
         /// <summary>Полка выноски отбора сразу за бровкой дна котлована, м.</summary>
         public const double SampShelfOut = 0.5;
 
-        public static List<NamedXy> Manholes(Chain chain)
+        public static List<NamedXy> Manholes(Chain chain, bool stripParen = false)
         {
             var rows = new List<NamedXy>();
             if (chain == null || chain.Segs == null || chain.Segs.Count == 0)
                 return rows;
             var seen = new HashSet<string>();
             foreach (var s in chain.Segs)
-                AddMh(rows, seen, s.StartName, s.X0, s.Y0, s.StartR);
+                AddMh(rows, seen, SiteTitle.Label(s.StartName, stripParen), s.X0, s.Y0, s.StartR);
             var last = chain.Segs[chain.Segs.Count - 1];
-            AddMh(rows, seen, last.EndName, last.X1, last.Y1, last.EndR);
+            AddMh(rows, seen, SiteTitle.Label(last.EndName, stripParen), last.X1, last.Y1, last.EndR);
             return rows;
         }
 

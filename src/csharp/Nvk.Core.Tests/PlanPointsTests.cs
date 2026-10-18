@@ -55,6 +55,26 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void ManholesStripParenKeepsLetterPrefix()
+        {
+            var chain = Chain.Sort(new List<PipeSeg>
+            {
+                new PipeSeg
+                {
+                    X0 = 0, Y0 = 0, X1 = 40, Y1 = 0,
+                    InvertStart = 100, InvertEnd = 99.6, Diam = 0.3,
+                    StartName = "ГП12(1)", StartR = 0.8,
+                    EndName = "К2", EndR = 0.8
+                }
+            });
+            var rows = PlanPoints.Manholes(chain, true);
+            Assert.Equal(2, rows.Count);
+            Assert.Equal("ГП12", rows[0].Name);
+            Assert.Equal("К2", rows[1].Name);
+            Assert.Equal("ГП12(1)", PlanPoints.Manholes(chain, false)[0].Name);
+        }
+
+        [Fact]
         public void ManholesSkipUnnamedZeroRadius()
         {
             var chain = Chain.Sort(new List<PipeSeg>

@@ -1992,6 +1992,7 @@ namespace Nvk.Cad
                         string nm = i == 0 ? cs[0].StartName
                             : i == cs.Count ? cs[cs.Count - 1].EndName
                             : cs[i].StartName;
+                        nm = SiteTitle.Label(nm, NvkUiState.MhStripParen);
                         if (!string.IsNullOrEmpty(nm))
                             NvkText.Make(ms, tr, layer, o.X + mhCh * lSc, 0.5 * (y + yB),
                                 nm, th, AttachmentPoint.MiddleCenter, Math.PI * 0.5);

@@ -123,7 +123,7 @@ namespace Nvk.Cad
             _doPoper = Chk(pRun, "Таблица POPER", true);
             _doVol   = Chk(pRun, "Объёмы + колодцы", true);
             _volJoin = Chk(pRun, "Объёмы все участки вместе", true);
-            _mhStrip = Chk(pRun, "Колодцы без скобок  12(1)→12", false);
+            _mhStrip = Chk(pRun, "Колодцы без скобок  ГП12(1)→ГП12", false);
             _doPlan  = Chk(pRun, "План", true);
             _doSheets = Chk(pRun, "Листы + видовые экраны", true);
             _stations = Num(pRun, "Станции (AUTO или пикеты)", "AUTO");

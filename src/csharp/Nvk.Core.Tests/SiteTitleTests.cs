@@ -65,9 +65,30 @@ namespace Nvk.Core.Tests
             Assert.Equal("12", SiteTitle.StripParen("12(1)"));
             Assert.Equal("12", SiteTitle.StripParen("12 (2)"));
             Assert.Equal("К12", SiteTitle.StripParen("К12(1)"));
+            Assert.Equal("ГП12", SiteTitle.StripParen("ГП12(1)"));
             Assert.Equal("12", SiteTitle.Token("12(1)", true));
-            Assert.Equal("12", SiteTitle.Token("К12 (2)", true));
+            Assert.Equal("К12", SiteTitle.Token("К12 (2)", true));
+            Assert.Equal("ГП12", SiteTitle.Token("ГП12(1)", true));
+            Assert.Equal("Выпуск ГП 12", SiteTitle.Token("Выпуск ГП 12(4)", true));
             Assert.Equal("12(1)", SiteTitle.Token("12(1)", false));
+            Assert.Equal("ГП12", SiteTitle.Label("ГП12(1)", true));
+            Assert.Equal("ГП12(1)", SiteTitle.Label("ГП12(1)", false));
+        }
+
+        [Fact]
+        public void FromChainStripParenKeepsLetterPrefix()
+        {
+            var chain = Chain.Sort(new List<PipeSeg>
+            {
+                new PipeSeg
+                {
+                    X0 = 0, Y0 = 0, X1 = 10, Y1 = 0,
+                    InvertStart = 1, InvertEnd = 1, Diam = 0.3,
+                    StartName = "ГП12(1)", EndName = "ГП13(2)"
+                }
+            });
+            Assert.Equal("ГП12-ГП13", SiteTitle.FromChain(chain, true));
+            Assert.Equal("ГП12(1)-ГП13(2)", SiteTitle.FromChain(chain, false));
         }
 
         [Fact]

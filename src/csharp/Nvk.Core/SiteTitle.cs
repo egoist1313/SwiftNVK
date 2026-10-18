@@ -52,12 +52,13 @@ namespace Nvk.Core
         /// <summary>
         /// Номер колодца: «КК-3», «К3», «Колодец 3а» → «3» / «3а».
         /// Без цифр оставляем имя как есть.
+        /// stripParen: только скобки, префикс остаётся — «ГП12(1)» → «ГП12».
         /// </summary>
         public static string Token(string raw, bool stripParen = false)
         {
             if (string.IsNullOrWhiteSpace(raw)) return "";
             string s = raw.Trim();
-            if (stripParen) s = StripParen(s);
+            if (stripParen) return StripParen(s);
             if (s.Length == 0) return "";
             int i = s.Length - 1;
             while (i >= 0 && char.IsLetter(s[i])) i--;
@@ -66,6 +67,14 @@ namespace Nvk.Core
             if (last > i)
                 return s.Substring(i + 1).Trim();
             return s;
+        }
+
+        /// <summary>Подпись колодца на плане / в таблице: скобки снимаются по флагу.</summary>
+        public static string Label(string raw, bool stripParen)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return raw ?? "";
+            string s = raw.Trim();
+            return stripParen ? StripParen(s) : s;
         }
 
         /// <summary>«12(1)», «12 (2)» → «12». Несколько пар скобок снимаются.</summary>
