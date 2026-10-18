@@ -188,15 +188,74 @@ namespace Nvk.Cad
             if (e == null) return;
             try { e.Annotative = AnnotativeStates.True; }
             catch (Exc) { return; }
+            AddPaperScales(e);
+        }
+
+        /// <summary>
+        /// Если объект аннотативный — повесить масштабы листов (CS/EP/план)
+        /// и текущий CANNOSCALE, иначе на вкладке 1:200 его не видно
+        /// (создан при 1:100).
+        /// </summary>
+        public static void EnsureVisible(Entity e)
+        {
+            if (e == null) return;
             try
             {
-                var db = e.Database;
-                if (db == null) return;
-                var scale = db.Cannoscale;
-                if (scale == null) return;
-                e.AddContext(scale);
+                if (e.Annotative != AnnotativeStates.True) return;
+            }
+            catch (Exc) { return; }
+            AddPaperScales(e);
+        }
+
+        static void AddPaperScales(Entity e)
+        {
+            var db = e.Database;
+            if (db == null) return;
+            try
+            {
+                if (db.Cannoscale != null)
+                    e.AddContext(db.Cannoscale);
             }
             catch (Exc) { }
+            try
+            {
+                var ocm = db.ObjectContextManager;
+                if (ocm == null) return;
+                var coll = ocm.GetContextCollection("ACDB_ANNOTATION_SCALES");
+                if (coll == null) return;
+                foreach (ObjectContext oc in coll)
+                {
+                    var sc = oc as AnnotationScale;
+                    if (sc == null) continue;
+                    double den = 0.0;
+                    try
+                    {
+                        den = sc.DrawingUnits / (sc.PaperUnits < 1e-9 ? 1.0 : sc.PaperUnits);
+                    }
+                    catch (Exc) { continue; }
+                    if (!WantScale(den)) continue;
+                    try { e.AddContext(sc); } catch (Exc) { }
+                }
+            }
+            catch (Exc) { }
+        }
+
+        static bool WantScale(double den)
+        {
+            if (den < 1.0) return false;
+            if (Near(den, 100) || Near(den, 200) || Near(den, 500) || Near(den, 1000))
+                return true;
+            if (Near(den, NvkSession.Cannoscale)) return true;
+            if (Near(den, NvkUiState.VpScaleCs)) return true;
+            if (Near(den, NvkUiState.VpScaleEp)) return true;
+            if (Near(den, NvkUiState.VpScalePlan)) return true;
+            return false;
+        }
+
+        static bool Near(double a, double b)
+        {
+            if (b < 1.0) return false;
+            return Math.Abs(a - b) < 0.6;
         }
 
         /// <summary>

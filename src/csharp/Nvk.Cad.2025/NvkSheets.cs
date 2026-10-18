@@ -886,7 +886,7 @@ namespace Nvk.Cad
         {
             if (vp == null || vp.IsErased) return;
             try { vp.Layer = NvkLayers.VpLayer; } catch (Exc) { }
-            try { vp.Transparency = NvkLayers.Alpha(NvkLayers.VpTransPct); } catch (Exc) { }
+            try { vp.Transparency = NvkLayers.Alpha(0); } catch (Exc) { }
         }
 
         static void AimVp(Viewport vp, SheetWin win, int scaleN, string key, double twistDeg)
