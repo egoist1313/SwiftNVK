@@ -49,7 +49,7 @@ namespace Nvk.Cad
 
     static class NvkSession
     {
-        public const string Version = "0.218";
+        public const string Version = "0.219";
         public static int RunId;
         public static DomainResult Last;
         public static List<DomainResult> Runs = new List<DomainResult>();
@@ -272,6 +272,17 @@ namespace Nvk.Cad
                 var joined = NvkSites.JoinedRuns();
                 if (joined != null && joined.Count > 0) return joined;
             }
+            return AllRuns();
+        }
+
+        /// <summary>
+        /// План в модели общий: все участки, у которых есть домен.
+        /// Иначе после EraseLayer остаётся только активный.
+        /// </summary>
+        public static List<DomainResult> PlanRuns()
+        {
+            var joined = NvkSites.JoinedRuns();
+            if (joined != null && joined.Count > 0) return joined;
             return AllRuns();
         }
 

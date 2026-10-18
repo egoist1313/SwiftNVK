@@ -20,15 +20,18 @@ namespace Nvk.Cad
 
         public static string Draw(Database db, Transaction tr)
         {
-            var runs = NvkSession.AllRuns();
-            bool any = false;
+            var runs = NvkSession.PlanRuns();
+            bool any = false, anyPlan = false;
             foreach (var r in runs)
-                if (r != null && r.Chain != null) { any = true; break; }
+            {
+                if (r == null || r.Chain == null) continue;
+                any = true;
+                if (r.Cfg == null || r.Cfg.PlanEn) anyPlan = true;
+            }
             if (!any)
                 return "[НВК] PLAN: нет домена.";
-
             var cfg0 = (NvkSession.Last != null ? NvkSession.Last.Cfg : null) ?? new SectionConfig();
-            if (!cfg0.PlanEn)
+            if (!anyPlan)
                 return "[НВК] PLAN: выкл. (plan_en)";
             EnsureLayer(db, tr, Layer, 1);
             EnsureLayer(db, tr, PlanView.LayerMh, 6);
@@ -49,14 +52,15 @@ namespace Nvk.Cad
             var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
             var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
 
-            int nLead = NvkSites.SampleOffset(), nMh = 0, nRun = 0;
+            int nLead = 0, nMh = 0, nRun = 0;
             var keep = NvkSession.Last;
             foreach (var last in runs)
             {
                 if (last == null || last.Chain == null) continue;
+                var cfg = last.Cfg ?? cfg0;
+                if (last.Cfg != null && !last.Cfg.PlanEn) continue;
                 NvkSession.Last = last;
                 nRun++;
-                var cfg = last.Cfg ?? cfg0;
                 var axis = PlanGeom.Axis(last.Chain);
                 AddPline(ms, tr, axis, false, 1, 0);
                 var trench = TrenchByOffset(last.Chain, cfg);
