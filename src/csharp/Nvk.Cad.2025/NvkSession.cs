@@ -49,7 +49,7 @@ namespace Nvk.Cad
 
     static class NvkSession
     {
-        public const string Version = "0.213";
+        public const string Version = "0.214";
         public static int RunId;
         public static DomainResult Last;
         public static List<DomainResult> Runs = new List<DomainResult>();
@@ -238,6 +238,30 @@ namespace Nvk.Cad
             var one = new List<DomainResult>();
             if (Last != null) one.Add(Last);
             return one;
+        }
+
+        /// <summary>Труб во всех прогонах участка. Если домена нет — выбранные LastPipes.</summary>
+        public static int PipeSegCount()
+        {
+            int n = 0;
+            foreach (var r in AllRuns())
+            {
+                if (r != null && r.Chain != null && r.Chain.Segs != null)
+                    n += r.Chain.Segs.Count;
+            }
+            if (n > 0) return n;
+            return LastPipes != null ? LastPipes.Count : 0;
+        }
+
+        public static double PipeTotalLen()
+        {
+            double t = 0.0;
+            foreach (var r in AllRuns())
+            {
+                if (r != null && r.Chain != null)
+                    t += r.Chain.Total;
+            }
+            return t;
         }
 
         /// <summary>Домены для объёмов: все участки, если VOL_JOIN, иначе текущий.</summary>

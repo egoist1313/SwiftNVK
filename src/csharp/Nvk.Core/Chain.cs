@@ -6,7 +6,9 @@ namespace Nvk.Core
     /// <summary>
     /// Отсортированная цепочка труб. Алгоритм как pipebuild-sort-pipes:
     /// голова — труба, чьё начало не совпадает ни с чьим концом;
-    /// дальше жадно клеим по XY (tol=0.15), при необходимости переворачиваем.
+    /// дальше жадно клеим с хвоста и с головы. Стык — XY (tol=0.15)
+    /// или общий колодец: одно имя и расстояние ≤ R+R+tol
+    /// (Civil ставит концы на стенку, не в центр).
     /// </summary>
     public sealed class Chain
     {
@@ -55,7 +57,7 @@ namespace Nvk.Core
             PipeSeg first = null;
             foreach (var pd in remaining)
             {
-                if (!IsSomeonesEnd(pd.X0, pd.Y0, remaining, tol))
+                if (!IsSomeonesEnd(pd, remaining, tol))
                 {
                     first = pd;
                     break;
@@ -70,11 +72,13 @@ namespace Nvk.Core
             while (remaining.Count > 0 && iter < cap)
             {
                 var last = sorted[sorted.Count - 1];
+                var head = sorted[0];
                 PipeSeg found = null;
                 bool rev = false;
+                bool prepend = false;
                 foreach (var pd in remaining)
                 {
-                    if (pd.DistStartTo(last.X1, last.Y1) < tol)
+                    if (Joins(last, false, pd, true, tol))
                     {
                         found = pd;
                         break;
@@ -84,7 +88,7 @@ namespace Nvk.Core
                 {
                     foreach (var pd in remaining)
                     {
-                        if (pd.DistEndTo(last.X1, last.Y1) < tol)
+                        if (Joins(last, false, pd, false, tol))
                         {
                             found = pd;
                             rev = true;
@@ -93,19 +97,74 @@ namespace Nvk.Core
                     }
                 }
                 if (found == null)
+                {
+                    foreach (var pd in remaining)
+                    {
+                        if (Joins(head, true, pd, false, tol))
+                        {
+                            found = pd;
+                            prepend = true;
+                            break;
+                        }
+                    }
+                }
+                if (found == null)
+                {
+                    foreach (var pd in remaining)
+                    {
+                        if (Joins(head, true, pd, true, tol))
+                        {
+                            found = pd;
+                            rev = true;
+                            prepend = true;
+                            break;
+                        }
+                    }
+                }
+                if (found == null)
                     break;
-                sorted.Add(rev ? found.Reversed() : found);
+                var add = rev ? found.Reversed() : found;
+                if (prepend) sorted.Insert(0, add);
+                else sorted.Add(add);
                 remaining.Remove(found);
                 iter++;
             }
             return sorted;
         }
 
-        static bool IsSomeonesEnd(double x, double y, IList<PipeSeg> list, double tol)
+        /// <summary>
+        /// Стык двух концов: точки ближе tol, либо общий колодец
+        /// (одинаковое имя и dist ≤ R+R+tol). Без имени — только сырые R.
+        /// </summary>
+        internal static bool Joins(PipeSeg a, bool aAtStart, PipeSeg b, bool bAtStart, double tol)
+        {
+            if (a == null || b == null) return false;
+            double ax = aAtStart ? a.X0 : a.X1;
+            double ay = aAtStart ? a.Y0 : a.Y1;
+            double bx = bAtStart ? b.X0 : b.X1;
+            double by = bAtStart ? b.Y0 : b.Y1;
+            double dx = ax - bx, dy = ay - by;
+            double dist = Math.Sqrt(dx * dx + dy * dy);
+            if (dist < tol) return true;
+            string an = aAtStart ? a.StartName : a.EndName;
+            string bn = bAtStart ? b.StartName : b.EndName;
+            bool named = !string.IsNullOrEmpty(an) && !string.IsNullOrEmpty(bn)
+                && string.Equals(an.Trim(), bn.Trim(), StringComparison.OrdinalIgnoreCase);
+            double ra = a.ManholeR(aAtStart);
+            double rb = b.ManholeR(bAtStart);
+            if (named && dist <= ra + rb + tol) return true;
+            if (!string.IsNullOrEmpty(an) || !string.IsNullOrEmpty(bn)) return false;
+            double raRaw = aAtStart ? a.StartR : a.EndR;
+            double rbRaw = bAtStart ? b.StartR : b.EndR;
+            return raRaw > 0.05 && rbRaw > 0.05 && dist <= raRaw + rbRaw + tol;
+        }
+
+        static bool IsSomeonesEnd(PipeSeg self, IList<PipeSeg> list, double tol)
         {
             foreach (var pd in list)
             {
-                if (pd.DistEndTo(x, y) < tol)
+                if (ReferenceEquals(pd, self)) continue;
+                if (Joins(pd, false, self, true, tol))
                     return true;
             }
             return false;

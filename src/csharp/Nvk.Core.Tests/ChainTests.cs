@@ -70,6 +70,116 @@ namespace Nvk.Core.Tests
             Assert.Equal(4.0, d, 6);
             Assert.Equal(5.0, chain.Project(5.0, 4.0), 6);
         }
+
+        [Fact]
+        public void JoinsTwoPipesThroughNamedManhole()
+        {
+            // Civil: концы на стенке 64а, не в центре. 64а–Выпуск и 64а–64б*.
+            var a = new PipeSeg
+            {
+                Handle = "A",
+                X0 = 0, Y0 = 0, X1 = 7.237, Y1 = 0,
+                InvertStart = 204.7, InvertEnd = 204.8,
+                Diam = 0.110,
+                StartName = "64а", EndName = "Выпуск ГП 12(4)",
+                StartR = 0.6, EndR = 0
+            };
+            var b = new PipeSeg
+            {
+                Handle = "B",
+                X0 = 1.0, Y0 = 0, X1 = 28.096, Y1 = 0,
+                InvertStart = 204.5, InvertEnd = 204.2,
+                Diam = 0.200,
+                StartName = "64а", EndName = "64б*",
+                StartR = 0.6, EndR = 0.5
+            };
+            var all = Chain.Components(new List<PipeSeg> { a, b });
+            Assert.Single(all);
+            Assert.Equal(2, all[0].Segs.Count);
+            Assert.Equal(7.237 + 27.096, all[0].Total, 6);
+        }
+
+        [Fact]
+        public void SameManholeNameFarApartStaysSplit()
+        {
+            var a = new PipeSeg
+            {
+                Handle = "A", X0 = 0, Y0 = 0, X1 = 10, Y1 = 0,
+                InvertStart = 100, InvertEnd = 99, Diam = 0.3,
+                StartName = "12", StartR = 0.6
+            };
+            var b = new PipeSeg
+            {
+                Handle = "B", X0 = 100, Y0 = 0, X1 = 120, Y1 = 0,
+                InvertStart = 100, InvertEnd = 99, Diam = 0.3,
+                StartName = "12", StartR = 0.6
+            };
+            var all = Chain.Components(new List<PipeSeg> { a, b });
+            Assert.Equal(2, all.Count);
+        }
+
+        [Fact]
+        public void GrowsFromHeadWhenBothStartAtSameManhole()
+        {
+            var a = new PipeSeg
+            {
+                Handle = "A", X0 = 0, Y0 = 0, X1 = -10, Y1 = 0,
+                InvertStart = 100, InvertEnd = 99, Diam = 0.11,
+                StartName = "64а", EndName = "Выпуск", StartR = 0.6
+            };
+            var b = new PipeSeg
+            {
+                Handle = "B", X0 = 0.8, Y0 = 0, X1 = 20, Y1 = 0,
+                InvertStart = 100, InvertEnd = 99, Diam = 0.2,
+                StartName = "64а", EndName = "64б", StartR = 0.6
+            };
+            var chain = Chain.Sort(new List<PipeSeg> { a, b });
+            Assert.Equal(2, chain.Segs.Count);
+            string n0 = chain.Segs[0].StartName;
+            string nLast = chain.Segs[chain.Segs.Count - 1].EndName;
+            bool outToB = n0 == "Выпуск" && nLast == "64б";
+            bool bToOut = n0 == "64б" && nLast == "Выпуск";
+            Assert.True(outToB || bToOut);
+        }
+
+        [Fact]
+        public void DifferentManholeNamesNearbyStaySplit()
+        {
+            var a = new PipeSeg
+            {
+                Handle = "A", X0 = -10, Y0 = 0, X1 = 0, Y1 = 0,
+                InvertStart = 100, InvertEnd = 99, Diam = 0.3,
+                EndName = "64а", EndR = 0.6
+            };
+            var b = new PipeSeg
+            {
+                Handle = "B", X0 = 1.0, Y0 = 0, X1 = 20, Y1 = 0,
+                InvertStart = 100, InvertEnd = 99, Diam = 0.3,
+                StartName = "64б", StartR = 0.6
+            };
+            var all = Chain.Components(new List<PipeSeg> { a, b });
+            Assert.Equal(2, all.Count);
+        }
+
+        [Fact]
+        public void JoinsByInferredRadiusWhenStartRZero()
+        {
+            var a = new PipeSeg
+            {
+                Handle = "A", X0 = 0, Y0 = 0, X1 = 8, Y1 = 0,
+                InvertStart = 100, InvertEnd = 99, Diam = 0.11,
+                StartName = "64а", EndName = "Выпуск"
+            };
+            var b = new PipeSeg
+            {
+                Handle = "B", X0 = 1.0, Y0 = 0, X1 = 28, Y1 = 0,
+                InvertStart = 100, InvertEnd = 99, Diam = 0.2,
+                StartName = "64а", EndName = "64б"
+            };
+            var all = Chain.Components(new List<PipeSeg> { a, b });
+            Assert.Single(all);
+            Assert.Equal(2, all[0].Segs.Count);
+        }
     }
 
     public class StationCalcTests

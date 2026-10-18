@@ -15,7 +15,7 @@ namespace Nvk.Cad
 {
     public sealed class LispBridge
     {
-        const string PingOk = "NVK ok 0.213";
+        const string PingOk = "NVK ok 0.214";
 
         [LispFunction("NVK-PING")]
         public static ResultBuffer Ping(ResultBuffer args)
@@ -429,8 +429,8 @@ namespace Nvk.Cad
                     + "  ±" + hw.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " м"
                     + "  проб/ст=" + nSamp.ToString(System.Globalization.CultureInfo.InvariantCulture));
             }
-            return Text("труб " + last.Chain.Segs.Count
-                + "  длина " + last.Chain.Total.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) + " м");
+            return Text("труб " + NvkSession.PipeSegCount()
+                + "  длина " + NvkSession.PipeTotalLen().ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) + " м");
         }
 
         /// <summary>(nvk-layout-put ep1x ep1y ... ep5x ep5y cs1x cs1y ... cs5y). 1e20 = нет точки.</summary>

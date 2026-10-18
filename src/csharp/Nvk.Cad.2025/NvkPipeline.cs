@@ -559,8 +559,8 @@ namespace Nvk.Cad
             ed.WriteMessage("\n║  CS pt  " + FmtPt(NvkSession.CsInsHas, NvkSession.CsIns)
                 + "  EP pt " + FmtPt(NvkSession.EpInsHas, NvkSession.EpIns));
             if (last != null && last.Chain != null)
-                ed.WriteMessage("\n║  домен  труб " + last.Chain.Segs.Count
-                    + "  L=" + last.Chain.Total.ToString("0.0") + " м"
+                ed.WriteMessage("\n║  домен  труб " + NvkSession.PipeSegCount()
+                    + "  L=" + NvkSession.PipeTotalLen().ToString("0.0") + " м"
                     + "  CS=" + (last.Geoms == null ? 0 : last.Geoms.Count));
             ed.WriteMessage("\n╠══════════════════════════════════════════════╣");
             ed.WriteMessage("\n║  НВК-ПАНЕЛЬ     панель                       ║");
@@ -743,8 +743,8 @@ namespace Nvk.Cad
                     + "  ±" + hw.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " м"
                     + "  проб/ст=" + nSamp.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
-            return "труб " + last.Chain.Segs.Count
-                + "  длина " + last.Chain.Total.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) + " м";
+            return "труб " + NvkSession.PipeSegCount()
+                + "  длина " + NvkSession.PipeTotalLen().ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) + " м";
         }
 
         static void Step(string name, Func<string> fn, ref int ok, ref int skip, ref int fail)

@@ -617,7 +617,7 @@ namespace Nvk.Cad
         {
             var site = NvkSites.Current;
             string head = site != null && !string.IsNullOrEmpty(site.Name) ? site.Name : "Участок";
-            int nPipe = NvkSession.LastPipes != null ? NvkSession.LastPipes.Count : 0;
+            int nPipe = NvkSession.PipeSegCount();
             var last = NvkSession.Last;
             if (last == null || last.Chain == null)
             {
@@ -628,8 +628,8 @@ namespace Nvk.Cad
                     _info.Text = head + "\nНет труб. «+» или Трубы.";
                 return;
             }
-            _info.Text = head + "  труб " + last.Chain.Segs.Count
-                + "   L=" + last.Chain.Total.ToString("0.0") + " м"
+            _info.Text = head + "  труб " + nPipe
+                + "   L=" + NvkSession.PipeTotalLen().ToString("0.0") + " м"
                 + "\nTIN " + (last.SurfName ?? "-")
                 + "   сечений " + (last.Geoms == null ? 0 : last.Geoms.Count);
         }
