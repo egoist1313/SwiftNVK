@@ -121,6 +121,18 @@ namespace Nvk.Cad
         [CommandMethod("NVKSHEETSNAP")]
         public void SheetSnapEn() { SheetSnapCmd(); }
 
+        [CommandMethod("НВК-ЛИСТ-ПАРАМ")]
+        public void SheetPageCmd()
+        {
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            string msg = SheetSnapStore.ApplyDefaultToAll(doc);
+            doc.Editor.WriteMessage("\n" + msg);
+        }
+
+        [CommandMethod("NVKSHEETPAGE")]
+        public void SheetPageEn() { SheetPageCmd(); }
+
         [CommandMethod("НВК-ОЧИСТИТЬ")]
         public void Clean() { NvkPipeline.Clean(); }
 

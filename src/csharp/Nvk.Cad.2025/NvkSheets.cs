@@ -590,7 +590,9 @@ namespace Nvk.Cad
                     using (var trNew = db.TransactionManager.StartTransaction())
                     {
                         var layNew = (Layout)trNew.GetObject(layoutId, OpenMode.ForWrite);
-                        TrySetupA1(layNew, name);
+                        var page = SheetSnapStore.PageOf(kind);
+                        if (!SheetSnapStore.ApplyPage(layNew, page, name))
+                            TrySetupA1(layNew, name);
                         trNew.Commit();
                     }
                 }

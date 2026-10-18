@@ -68,7 +68,7 @@ namespace Nvk.Cad
         {
             if (doc == null) return "[НВК] снимок: нет документа";
             var db = doc.Database;
-            var file = new SheetSnapFile { Version = 1 };
+            var file = new SheetSnapFile { Version = 2 };
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 var dict = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
@@ -86,6 +86,7 @@ namespace Nvk.Cad
                 }
                 tr.Commit();
             }
+            FillDefaultPage(file);
             string path = PathOf();
             File.WriteAllText(path, JsonSerializer.Serialize(file, Opt), new UTF8Encoding(false));
             _mem = file;
@@ -98,15 +99,32 @@ namespace Nvk.Cad
             }
             string msg = "[НВК] снимок листа: вкладок " + file.Layouts.Count.ToString()
                 + "  видовых " + nVp.ToString()
-                + "  объектов " + nEnt.ToString()
-                + "  " + path;
+                + "  объектов " + nEnt.ToString();
+            if (SheetSnap.HasPage(file.Page))
+                msg += "  плот " + (file.Page.Device ?? "")
+                    + "  " + (file.Page.Media ?? "")
+                    + "  бумага " + file.Page.PaperW.ToString("0", Inv)
+                    + "x" + file.Page.PaperH.ToString("0", Inv);
+            msg += "  " + path;
             NvkLog.Write(msg);
             return msg;
+        }
+
+        static void FillDefaultPage(SheetSnapFile file)
+        {
+            if (file == null) return;
+            file.Page = SheetSnap.DefaultPage(file);
+        }
+
+        public static SheetSnapPage PageOf(ProfileKind kind)
+        {
+            return SheetSnap.PageOf(Load(), kind.ToString());
         }
 
         static SheetSnapLayout ReadLayout(Transaction tr, Layout layout, ProfileKind kind, string name)
         {
             var snap = new SheetSnapLayout { Kind = kind.ToString(), Name = name };
+            snap.Page = ReadPage(layout);
             var ps = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
             foreach (ObjectId id in ps)
             {
@@ -517,6 +535,211 @@ namespace Nvk.Cad
                 if (dt != null) dt.TextStyleId = sid;
             }
             catch { }
+        }
+
+        static SheetSnapPage ReadPage(Layout layout)
+        {
+            if (layout == null) return null;
+            var p = new SheetSnapPage();
+            try { p.Device = layout.PlotConfigurationName ?? ""; } catch { }
+            try { p.Media = layout.CanonicalMediaName ?? ""; } catch { }
+            try { p.Units = layout.PlotPaperUnits.ToString(); } catch { p.Units = "Millimeters"; }
+            try { p.PlotType = layout.PlotType.ToString(); } catch { p.PlotType = "Layout"; }
+            try { p.Rotation = layout.PlotRotation.ToString(); } catch { p.Rotation = "Degrees000"; }
+            try
+            {
+                Point2d o = layout.PlotOrigin;
+                p.Ox = o.X;
+                p.Oy = o.Y;
+            }
+            catch { }
+            try { p.StdScale = layout.UseStandardScale; } catch { p.StdScale = true; }
+            try { p.ScaleType = layout.StdScaleType.ToString(); } catch { }
+            try
+            {
+                CustomScale cs = layout.CustomPrintScale;
+                p.ScaleNum = cs.Numerator;
+                p.ScaleDen = cs.Denominator;
+            }
+            catch { }
+            try { p.Style = layout.CurrentStyleSheet ?? ""; } catch { }
+            try { p.PlotStyles = layout.PlotPlotStyles; } catch { }
+            try { p.ScaleLw = layout.ScaleLineweights; } catch { }
+            try { p.Centered = layout.PlotCentered; } catch { }
+            try { p.Lineweights = layout.PrintLineweights; } catch { }
+            try { p.VpBorders = layout.PlotViewportBorders; } catch { }
+            try
+            {
+                Point2d sz = layout.PlotPaperSize;
+                p.PaperW = sz.X;
+                p.PaperH = sz.Y;
+            }
+            catch { }
+            return SheetSnap.HasPage(p) ? p : null;
+        }
+
+        public static bool ApplyPage(Layout layout, SheetSnapPage page, string name)
+        {
+            if (layout == null || !SheetSnap.HasPage(page)) return false;
+            try
+            {
+                var psv = PlotSettingsValidator.Current;
+                psv.RefreshLists(layout);
+                string dev = PickDevice(psv, page.Device);
+                if (string.IsNullOrEmpty(dev)) return false;
+                string media = page.Media ?? "";
+                bool set = false;
+                if (!string.IsNullOrEmpty(media))
+                {
+                    try { psv.SetPlotConfigurationName(layout, dev, media); set = true; }
+                    catch { }
+                }
+                if (!set)
+                {
+                    try { psv.SetPlotConfigurationName(layout, dev, ""); set = true; }
+                    catch { }
+                }
+                if (!set) return false;
+                try { psv.RefreshLists(layout); } catch { }
+                if (!string.IsNullOrEmpty(media)
+                    && HasName(psv.GetCanonicalMediaNameList(layout), media))
+                {
+                    try { psv.SetCanonicalMediaName(layout, media); } catch { }
+                }
+                PlotPaperUnit units;
+                if (TryEnum(page.Units, PlotPaperUnit.Millimeters, out units))
+                    try { psv.SetPlotPaperUnits(layout, units); } catch { }
+                PlotType ptype;
+                if (TryEnum(page.PlotType, PlotType.Layout, out ptype))
+                    try { psv.SetPlotType(layout, ptype); } catch { }
+                PlotRotation rot;
+                if (TryEnum(page.Rotation, PlotRotation.Degrees000, out rot))
+                    try { psv.SetPlotRotation(layout, rot); } catch { }
+                try { psv.SetPlotCentered(layout, page.Centered); } catch { }
+                if (!page.Centered)
+                {
+                    try { psv.SetPlotOrigin(layout, new Point2d(page.Ox, page.Oy)); } catch { }
+                }
+                try { psv.SetUseStandardScale(layout, page.StdScale); } catch { }
+                if (page.StdScale)
+                {
+                    StdScaleType st;
+                    if (TryEnum(page.ScaleType, StdScaleType.StdScale1To1, out st))
+                        try { psv.SetStdScaleType(layout, st); } catch { }
+                }
+                else if (page.ScaleNum > 1e-9 && page.ScaleDen > 1e-9)
+                {
+                    try { psv.SetCustomPrintScale(layout, new CustomScale(page.ScaleNum, page.ScaleDen)); }
+                    catch { }
+                }
+                if (!string.IsNullOrEmpty(page.Style))
+                {
+                    try
+                    {
+                        if (HasName(psv.GetPlotStyleSheetList(), page.Style))
+                            psv.SetCurrentStyleSheet(layout, page.Style);
+                    }
+                    catch { }
+                }
+                try { layout.PlotPlotStyles = page.PlotStyles; } catch { }
+                try { layout.ScaleLineweights = page.ScaleLw; } catch { }
+                try { layout.PrintLineweights = page.Lineweights; } catch { }
+                try { layout.PlotViewportBorders = page.VpBorders; } catch { }
+                NvkLog.Write("[НВК] лист " + name + " плот " + dev
+                    + "  " + (layout.CanonicalMediaName ?? media));
+                return true;
+            }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] лист " + name + " плот: " + ex.Message);
+                return false;
+            }
+        }
+
+        public static string ApplyDefaultToAll(Document doc)
+        {
+            if (doc == null) return "[НВК] параметры листа: нет документа";
+            var db = doc.Database;
+            SheetSnapPage page = SheetSnap.DefaultPage(Load());
+            if (!SheetSnap.HasPage(page))
+            {
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    try
+                    {
+                        var lm = LayoutManager.Current;
+                        string cur = lm.CurrentLayout;
+                        if (!string.IsNullOrEmpty(cur)
+                            && !string.Equals(cur, "Model", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var lay = tr.GetObject(lm.GetLayoutId(cur), OpenMode.ForRead) as Layout;
+                            page = ReadPage(lay);
+                        }
+                    }
+                    catch { }
+                    tr.Commit();
+                }
+            }
+            if (!SheetSnap.HasPage(page))
+                return "[НВК] нет параметров листа. Сначала снимок или открой вкладку с нужным плотом.";
+
+            int nOk = 0, nFail = 0;
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var dict = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
+                foreach (DBDictionaryEntry e in dict)
+                {
+                    if (string.IsNullOrEmpty(e.Key)) continue;
+                    if (string.Equals(e.Key, "Model", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    Layout layout;
+                    try { layout = tr.GetObject(e.Value, OpenMode.ForWrite) as Layout; }
+                    catch { nFail++; continue; }
+                    if (layout == null) { nFail++; continue; }
+                    if (ApplyPage(layout, page, e.Key)) nOk++;
+                    else nFail++;
+                }
+                tr.Commit();
+            }
+            string msg = "[НВК] параметры листа всем: ок " + nOk.ToString();
+            if (nFail > 0) msg += "  сбой " + nFail.ToString();
+            msg += "  " + (page.Device ?? "") + "  " + (page.Media ?? "");
+            NvkLog.Write(msg);
+            return msg;
+        }
+
+        static string PickDevice(PlotSettingsValidator psv, string want)
+        {
+            System.Collections.Specialized.StringCollection have = null;
+            try { have = psv.GetPlotDeviceList(); } catch { }
+            if (HasName(have, want)) return want;
+            if (have == null) return want;
+            foreach (string d in have)
+            {
+                if (string.IsNullOrEmpty(d)) continue;
+                if (d.IndexOf("PDF", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return d;
+            }
+            return want;
+        }
+
+        static bool HasName(System.Collections.Specialized.StringCollection list, string name)
+        {
+            if (list == null || string.IsNullOrEmpty(name)) return false;
+            foreach (string s in list)
+            {
+                if (string.Equals(s, name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        static bool TryEnum<T>(string s, T fallback, out T value) where T : struct
+        {
+            if (!string.IsNullOrEmpty(s) && Enum.TryParse(s, true, out value))
+                return true;
+            value = fallback;
+            return true;
         }
     }
 }

@@ -70,5 +70,40 @@ namespace Nvk.Core.Tests
             Assert.Equal(8.0, t.X, 6);
             Assert.True(SheetSnap.IsSheetTitle(t));
         }
+
+        [Fact]
+        public void HasPageNeedsDevice()
+        {
+            Assert.False(SheetSnap.HasPage(null));
+            Assert.False(SheetSnap.HasPage(new SheetSnapPage()));
+            Assert.True(SheetSnap.HasPage(new SheetSnapPage { Device = "DWG To PDF.pc3" }));
+        }
+
+        [Fact]
+        public void DefaultPagePrefersFileThenRazrabotka()
+        {
+            var file = new SheetSnapFile
+            {
+                Layouts =
+                {
+                    new SheetSnapLayout
+                    {
+                        Kind = "Truba",
+                        Page = new SheetSnapPage { Device = "None" }
+                    },
+                    new SheetSnapLayout
+                    {
+                        Kind = "Razrabotka",
+                        Page = new SheetSnapPage { Device = "DWG To PDF.pc3", Media = "ISO_A1" }
+                    }
+                }
+            };
+            Assert.Equal("DWG To PDF.pc3", SheetSnap.DefaultPage(file).Device);
+            file.Page = new SheetSnapPage { Device = "PDF.pc3" };
+            Assert.Equal("PDF.pc3", SheetSnap.DefaultPage(file).Device);
+            Assert.Equal("DWG To PDF.pc3", SheetSnap.PageOf(file, "Razrabotka").Device);
+            Assert.Equal("None", SheetSnap.PageOf(file, "Truba").Device);
+            Assert.Equal("PDF.pc3", SheetSnap.PageOf(file, "Zasypka").Device);
+        }
     }
 }

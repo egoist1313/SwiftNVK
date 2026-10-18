@@ -10,13 +10,39 @@ namespace Nvk.Core
     public sealed class SheetSnapFile
     {
         public int Version { get; set; }
+        /// <summary>Параметры листа по умолчанию — на все вкладки.</summary>
+        public SheetSnapPage Page { get; set; }
         public List<SheetSnapLayout> Layouts { get; set; } = new List<SheetSnapLayout>();
+    }
+
+    public sealed class SheetSnapPage
+    {
+        public string Device { get; set; }
+        public string Media { get; set; }
+        public string Units { get; set; }
+        public string PlotType { get; set; }
+        public string Rotation { get; set; }
+        public double Ox { get; set; }
+        public double Oy { get; set; }
+        public bool StdScale { get; set; }
+        public string ScaleType { get; set; }
+        public double ScaleNum { get; set; }
+        public double ScaleDen { get; set; }
+        public string Style { get; set; }
+        public bool PlotStyles { get; set; }
+        public bool ScaleLw { get; set; }
+        public bool Centered { get; set; }
+        public bool Lineweights { get; set; }
+        public bool VpBorders { get; set; }
+        public double PaperW { get; set; }
+        public double PaperH { get; set; }
     }
 
     public sealed class SheetSnapLayout
     {
         public string Kind { get; set; }
         public string Name { get; set; }
+        public SheetSnapPage Page { get; set; }
         public List<SheetSnapVp> Vps { get; set; } = new List<SheetSnapVp>();
         public List<SheetSnapEnt> Ents { get; set; } = new List<SheetSnapEnt>();
     }
@@ -118,6 +144,33 @@ namespace Nvk.Core
             if (e == null) return false;
             return string.Equals(e.T, "MTEXT", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(e.Layer, "NVK-SHEET", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool HasPage(SheetSnapPage page)
+        {
+            return page != null && !string.IsNullOrWhiteSpace(page.Device);
+        }
+
+        /// <summary>Общий плот: поле файла, иначе Разработка, иначе первый лист со снимком.</summary>
+        public static SheetSnapPage DefaultPage(SheetSnapFile file)
+        {
+            if (HasPage(file != null ? file.Page : null)) return file.Page;
+            var raz = Find(file, "Razrabotka");
+            if (raz != null && HasPage(raz.Page)) return raz.Page;
+            if (file == null || file.Layouts == null) return null;
+            for (int i = 0; i < file.Layouts.Count; i++)
+            {
+                var lay = file.Layouts[i];
+                if (lay != null && HasPage(lay.Page)) return lay.Page;
+            }
+            return null;
+        }
+
+        public static SheetSnapPage PageOf(SheetSnapFile file, string kind)
+        {
+            var lay = Find(file, kind);
+            if (lay != null && HasPage(lay.Page)) return lay.Page;
+            return DefaultPage(file);
         }
     }
 }
