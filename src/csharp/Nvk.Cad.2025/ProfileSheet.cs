@@ -2305,6 +2305,7 @@ namespace Nvk.Cad
                 h.Color = col;
                 btr.AppendEntity(h);
                 tr.AddNewlyCreatedDBObject(h, true);
+                NvkAnno.HatchStart(h);
                 NvkTag.Stamp(tr, pl);
                 NvkTag.Stamp(tr, h);
                 try { h.SetHatchPattern(HatchPatternType.PreDefined, pat); }
@@ -2315,7 +2316,7 @@ namespace Nvk.Cad
                 ids.Add(pl.ObjectId);
                 h.AppendLoop(HatchLoopTypes.Outermost, ids);
                 h.EvaluateHatch(true);
-                NvkAnno.Apply(h);
+                NvkAnno.HatchEnd(h);
             }
             catch (Exc) { }
         }

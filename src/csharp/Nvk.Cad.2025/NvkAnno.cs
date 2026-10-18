@@ -187,12 +187,40 @@ namespace Nvk.Cad
             catch (Exc) { }
         }
 
+        static bool _hatchAnnoOnce;
+
         public static void Apply(Entity e)
         {
             if (e == null) return;
             try { e.Annotative = AnnotativeStates.True; }
             catch (Exc) { }
             EnsureVisible(e);
+        }
+
+        /// <summary>
+        /// Штриховка: Annotative до SetHatchPattern/EvaluateHatch,
+        /// иначе флаг не встаёт и OBJECTSCALE пустой.
+        /// </summary>
+        public static void HatchStart(Hatch h)
+        {
+            if (h == null) return;
+            TryHpAnnoOn();
+            ForceAnnotative(h);
+        }
+
+        /// <summary>
+        /// После EvaluateHatch снова Annotative и масштабы
+        /// 1:200 1:500 1:1000 1:5000 — геттер у Hatch врёт, не ждём его.
+        /// </summary>
+        public static void HatchEnd(Hatch h)
+        {
+            if (h == null) return;
+            ForceAnnotative(h);
+            try { h.EvaluateHatch(true); }
+            catch (Exc) { }
+            ForceAnnotative(h);
+            AddPaperScales(h);
+            LogHatchOnce(h);
         }
 
         /// <summary>Выноска: флаг аннотативности и масштабы листов, иначе на ВЭ другого масштаба её не видно.</summary>
@@ -220,6 +248,8 @@ namespace Nvk.Cad
 
         public static int EnsureDefaultScales(Database db)
         {
+            _hatchAnnoOnce = false;
+            TryHpAnnoOn();
             if (db == null) return 0;
             int n = 0;
             try
@@ -242,6 +272,74 @@ namespace Nvk.Cad
                 NvkLog.Write("[НВК] анно.масштабы + " + n.ToString(Inv)
                     + "  1:200 1:500 1:1000 1:5000");
             return n;
+        }
+
+        static void TryHpAnnoOn()
+        {
+            try { AcadApp.SetSystemVariable("HPANNOTATIVE", 1); }
+            catch (Exc) { }
+        }
+
+        static void ForceAnnotative(Entity e)
+        {
+            if (e == null) return;
+            try { e.Annotative = AnnotativeStates.True; }
+            catch (Exc ex)
+            {
+                if (!_hatchAnnoOnce)
+                    NvkLog.Write("[НВК] штриховка Annotative: " + ex.Message);
+            }
+            try
+            {
+                dynamic com = e.AcadObject;
+                if (com != null) com.Annotative = true;
+            }
+            catch (Exc)
+            {
+                try
+                {
+                    dynamic com = e.AcadObject;
+                    if (com != null) com.Annotative = 1;
+                }
+                catch (Exc) { }
+            }
+        }
+
+        static void LogHatchOnce(Hatch h)
+        {
+            if (_hatchAnnoOnce || h == null) return;
+            _hatchAnnoOnce = true;
+            try
+            {
+                bool ok = false;
+                try { ok = h.Annotative == AnnotativeStates.True; }
+                catch (Exc) { }
+                int n = 0;
+                try
+                {
+                    var db = h.Database;
+                    if (db != null && db.ObjectContextManager != null)
+                    {
+                        var coll = db.ObjectContextManager
+                            .GetContextCollection("ACDB_ANNOTATION_SCALES");
+                        if (coll != null)
+                        {
+                            foreach (ObjectContext oc in coll)
+                            {
+                                var sc = oc as AnnotationScale;
+                                if (sc == null) continue;
+                                if (!WantScale(DenOf(sc))) continue;
+                                try { if (h.HasContext(sc)) n++; } catch (Exc) { }
+                            }
+                        }
+                    }
+                }
+                catch (Exc) { }
+                NvkLog.Write("[НВК] штриховка анно=" + (ok ? "да" : "нет")
+                    + "  масштабов=" + n.ToString(Inv)
+                    + "  (1:200 1:500 1:1000 1:5000)");
+            }
+            catch (Exc) { }
         }
 
         static bool EnsureScale(ObjectContextCollection coll, double den)

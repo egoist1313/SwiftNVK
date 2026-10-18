@@ -396,6 +396,7 @@ namespace Nvk.Cad
                 h.HatchStyle = HatchStyle.Ignore;
                 ms.AppendEntity(h);
                 tr.AddNewlyCreatedDBObject(h, true);
+                NvkAnno.HatchStart(h);
                 h.SetHatchPattern(HatchPatternType.PreDefined, "ANSI31");
                 h.PatternScale = PlanGeom.SituationHatchScale(DimScale());
                 h.Associative = false;
@@ -408,7 +409,7 @@ namespace Nvk.Cad
                 }
                 h.AppendLoop(HatchLoopTypes.External, verts, bulges);
                 h.EvaluateHatch(true);
-                NvkAnno.Apply(h);
+                NvkAnno.HatchEnd(h);
                 NvkTag.Stamp(tr, h);
                 if (!loop.IsNull)
                 {

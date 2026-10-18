@@ -754,6 +754,7 @@ namespace Nvk.Cad
                 h.Color = color;
                 btr.AppendEntity(h);
                 tr.AddNewlyCreatedDBObject(h, true);
+                NvkAnno.HatchStart(h);
                 try { h.SetHatchPattern(HatchPatternType.PreDefined, pat); }
                 catch (Exc) { h.SetHatchPattern(HatchPatternType.PreDefined, "ANSI31"); }
                 h.PatternScale = patScale < 0.001 ? 0.001 : patScale;
@@ -765,7 +766,7 @@ namespace Nvk.Cad
                 inner.Add(cir.ObjectId);
                 h.AppendLoop(HatchLoopTypes.Default, inner);
                 h.EvaluateHatch(true);
-                NvkAnno.Apply(h);
+                NvkAnno.HatchEnd(h);
             }
             catch (Exc)
             {
@@ -794,6 +795,7 @@ namespace Nvk.Cad
                 h.Color = color;
                 btr.AppendEntity(h);
                 tr.AddNewlyCreatedDBObject(h, true);
+                NvkAnno.HatchStart(h);
                 h.SetHatchPattern(HatchPatternType.PreDefined, pat);
                 h.PatternScale = patScale < 0.001 ? 0.001 : patScale;
                 h.Associative = false;
@@ -801,7 +803,7 @@ namespace Nvk.Cad
                 ids.Add(pl.ObjectId);
                 h.AppendLoop(HatchLoopTypes.Outermost, ids);
                 h.EvaluateHatch(true);
-                NvkAnno.Apply(h);
+                NvkAnno.HatchEnd(h);
             }
             catch (Exc)
             {

@@ -253,6 +253,7 @@ namespace Nvk.Cad
                 h.Color = color;
                 btr.AppendEntity(h);
                 tr.AddNewlyCreatedDBObject(h, true);
+                NvkAnno.HatchStart(h);
                 h.SetHatchPattern(HatchPatternType.PreDefined, pat);
                 h.PatternScale = patScale < 0.05 ? 0.05 : patScale;
                 h.Associative = false;
@@ -260,7 +261,7 @@ namespace Nvk.Cad
                 ids.Add(pl.ObjectId);
                 h.AppendLoop(HatchLoopTypes.Outermost, ids);
                 h.EvaluateHatch(true);
-                NvkAnno.Apply(h);
+                NvkAnno.HatchEnd(h);
             }
             catch (Exc) { }
         }
