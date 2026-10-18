@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
+using Nvk.Core;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using Exc = System.Exception;
 
@@ -174,7 +175,10 @@ namespace Nvk.Cad
             try { dim.Dimexe = s.Exe; } catch (Exc) { }
             try { dim.Dimexo = s.Exo; } catch (Exc) { }
             if (s.Anno || s.AnnoSys)
+            {
                 Apply(dim);
+                EnsureVisible(dim);
+            }
             try
             {
                 if (!s.StyleId.IsNull)
@@ -213,10 +217,80 @@ namespace Nvk.Cad
             AddPaperScales(e);
         }
 
+        public static int EnsureDefaultScales(Database db)
+        {
+            if (db == null) return 0;
+            int n = 0;
+            try
+            {
+                var ocm = db.ObjectContextManager;
+                if (ocm == null) return 0;
+                var coll = ocm.GetContextCollection("ACDB_ANNOTATION_SCALES");
+                if (coll == null) return 0;
+                for (int i = 0; i < AnnoScales.Default.Length; i++)
+                {
+                    if (EnsureScale(coll, AnnoScales.Default[i]))
+                        n++;
+                }
+            }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] анно.масштабы: " + ex.Message);
+            }
+            if (n > 0)
+                NvkLog.Write("[НВК] анно.масштабы + " + n.ToString(Inv)
+                    + "  1:200 1:500 1:1000 1:5000");
+            return n;
+        }
+
+        static bool EnsureScale(ObjectContextCollection coll, double den)
+        {
+            if (coll == null || den < 1.0) return false;
+            string name = AnnoScales.NameOf(den);
+            try
+            {
+                if (coll.HasContext(name)) return false;
+            }
+            catch (Exc) { }
+            foreach (ObjectContext oc in coll)
+            {
+                var have = oc as AnnotationScale;
+                if (have == null) continue;
+                double d = DenOf(have);
+                if (d > 0.0 && Near(d, den)) return false;
+            }
+            try
+            {
+                var sc = new AnnotationScale();
+                sc.Name = name;
+                sc.PaperUnits = 1.0;
+                sc.DrawingUnits = den;
+                coll.AddContext(sc);
+                return true;
+            }
+            catch (Exc)
+            {
+                return false;
+            }
+        }
+
+        static double DenOf(AnnotationScale sc)
+        {
+            if (sc == null) return 0.0;
+            try
+            {
+                double p = sc.PaperUnits;
+                if (p < 1e-9) p = 1.0;
+                return sc.DrawingUnits / p;
+            }
+            catch (Exc) { return 0.0; }
+        }
+
         static void AddPaperScales(Entity e)
         {
             var db = e.Database;
             if (db == null) return;
+            EnsureDefaultScales(db);
             try
             {
                 if (db.Cannoscale != null)
@@ -233,12 +307,7 @@ namespace Nvk.Cad
                 {
                     var sc = oc as AnnotationScale;
                     if (sc == null) continue;
-                    double den = 0.0;
-                    try
-                    {
-                        den = sc.DrawingUnits / (sc.PaperUnits < 1e-9 ? 1.0 : sc.PaperUnits);
-                    }
-                    catch (Exc) { continue; }
+                    double den = DenOf(sc);
                     if (!WantScale(den)) continue;
                     try { e.AddContext(sc); } catch (Exc) { }
                 }
@@ -249,8 +318,8 @@ namespace Nvk.Cad
         static bool WantScale(double den)
         {
             if (den < 1.0) return false;
-            if (Near(den, 100) || Near(den, 200) || Near(den, 500) || Near(den, 1000))
-                return true;
+            if (AnnoScales.IsDefault(den)) return true;
+            if (Near(den, 100)) return true;
             if (Near(den, NvkSession.Cannoscale)) return true;
             if (Near(den, NvkUiState.VpScaleCs)) return true;
             if (Near(den, NvkUiState.VpScaleEp)) return true;

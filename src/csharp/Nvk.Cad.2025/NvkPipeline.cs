@@ -97,6 +97,7 @@ namespace Nvk.Cad
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return "нет документа";
             NvkLayers.EnsureAll(doc.Database);
+            NvkAnno.EnsureDefaultScales(doc.Database);
             ApplyTable();
             return "AppID NVK, слои NVK-*, таблица PoperSwift";
         }
