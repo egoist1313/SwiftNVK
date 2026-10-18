@@ -33,22 +33,20 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
-        public void TooTallScalesToPrintable()
+        public void TooTallKeepsSizePinsTop()
         {
             var cx = new[] { 50.0, 50.0 };
             var cy = new[] { 400.0, 50.0 };
             var w = new[] { 80.0, 80.0 };
             var h = new[] { 200.0, 200.0 };
             double s = SheetFit.Fit(cx, cy, w, h, 0, 0, 200, 300);
-            Assert.True(s < 1.0);
-            Assert.True(s > 0.05);
-            for (int i = 0; i < 2; i++)
-            {
-                Assert.True(cx[i] - w[i] * 0.5 >= -1e-6);
-                Assert.True(cy[i] - h[i] * 0.5 >= -1e-6);
-                Assert.True(cx[i] + w[i] * 0.5 <= 200.0 + 1e-6);
-                Assert.True(cy[i] + h[i] * 0.5 <= 300.0 + 1e-6);
-            }
+            Assert.Equal(1.0, s, 6);
+            Assert.Equal(80.0, w[0], 6);
+            Assert.Equal(200.0, h[0], 6);
+            Assert.Equal(80.0, w[1], 6);
+            Assert.Equal(200.0, h[1], 6);
+            double top = System.Math.Max(cy[0] + h[0] * 0.5, cy[1] + h[1] * 0.5);
+            Assert.Equal(300.0, top, 6);
         }
     }
 }

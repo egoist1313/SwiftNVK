@@ -641,9 +641,9 @@ namespace Nvk.Cad
             SheetWin samp = (NvkUiState.DoVol && kind != ProfileKind.Truba) ? NvkSession.SampWin : null;
             var specs = PackSpecs(kind, epCells, vol, plan, coord, samp, cells, nEp, nCs, nPlan,
                 xLeft, topY, gap, usableW);
-            double fit = FitSpecs(specs, xLeft, py0 + pad, px1 - pad, py1 - pad);
-            if (fit < 0.999)
-                NvkLog.Write("[НВК] лист " + name + " видовые в область печати  k=" + fit.ToString("0.###"));
+            FitSpecs(specs, xLeft, py0 + pad, px1 - pad, py1 - pad);
+            if (SpecsOverflow(specs, px0, py0, px1, py1))
+                NvkLog.Write("[НВК] лист " + name + " видовые крупнее области печати, рамки 1:N");
 
             int nAdd = 0;
             NvkLayers.EnsureAll(db);
@@ -900,11 +900,18 @@ namespace Nvk.Cad
         static void AimVp(Viewport vp, SheetWin win, int scaleN, string key, double twistDeg)
         {
             if (vp == null || win == null || !win.Valid) return;
-            double mm = MmPerM(scaleN);
             double cx = (win.MinX + win.MaxX) * 0.5;
             double cy = (win.MinY + win.MaxY) * 0.5;
             double twist = PlanView.TwistRad(twistDeg);
-            double viewH = vp.Height / mm;
+            double modelW, modelH;
+            if (Math.Abs(twistDeg) > 1e-9)
+                PlanView.RotatedSize(win.MinX, win.MinY, win.MaxX, win.MaxY, twistDeg, out modelW, out modelH);
+            else
+            {
+                modelW = win.Width;
+                modelH = win.Height;
+            }
+            double viewH = modelH * 1.08;
             if (viewH < 1e-9) viewH = 1.0;
             try { vp.Locked = false; } catch { }
             try { vp.PerspectiveOn = false; } catch { }
@@ -1021,6 +1028,20 @@ namespace Nvk.Cad
                 specs[i] = new VpSpec(cx[i], cy[i], w[i], h[i], s.Win, s.ScaleN, s.Key, s.TwistDeg);
             }
             return k;
+        }
+
+        static bool SpecsOverflow(List<VpSpec> specs, double x0, double y0, double x1, double y1)
+        {
+            if (specs == null || specs.Count == 0) return false;
+            for (int i = 0; i < specs.Count; i++)
+            {
+                var s = specs[i];
+                if (s.Cx - s.W * 0.5 < x0 - 1e-3) return true;
+                if (s.Cy - s.H * 0.5 < y0 - 1e-3) return true;
+                if (s.Cx + s.W * 0.5 > x1 + 1e-3) return true;
+                if (s.Cy + s.H * 0.5 > y1 + 1e-3) return true;
+            }
+            return false;
         }
 
         static void ReadPrintBox(Layout layout, string name,
