@@ -648,7 +648,6 @@ namespace Nvk.Cad
                     vp.Height = s.H;
                     ps.AppendEntity(vp);
                     tr.AddNewlyCreatedDBObject(vp, true);
-                    try { vp.On = true; } catch { }
                     StyleVp(vp);
                     NvkTag.StampVp(tr, vp, s.Key);
                     have[s.Key] = vp.ObjectId;
@@ -716,20 +715,10 @@ namespace Nvk.Cad
                     try { vp.Width = s.W; } catch { }
                     try { vp.Height = s.H; } catch { }
                     try { vp.CenterPoint = new Point3d(s.Cx, s.Cy, 0.0); } catch { }
-                    try { vp.On = true; } catch { }
                     StyleVp(vp);
                     AimVp(vp, s.Win, s.ScaleN, s.Key, s.TwistDeg);
                     if (s.Key != null && s.Key.StartsWith("PLAN:", StringComparison.Ordinal))
                         ApplyPlanLayers(tr, vp, kind);
-                }
-                var layout2 = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
-                var ps2 = (BlockTableRecord)tr.GetObject(layout2.BlockTableRecordId, OpenMode.ForRead);
-                foreach (ObjectId id in ps2)
-                {
-                    var vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
-                    if (vp == null || vp.IsErased) continue;
-                    if (vp.Number == 1) continue;
-                    StyleVp(vp);
                 }
                 tr.Commit();
             }
@@ -882,11 +871,16 @@ namespace Nvk.Cad
             }
         }
 
+        /// <summary>
+        /// Слой рамки NVK-VP (не печатается). Слой менять ДО On:
+        /// смена слоя после On гасит экран — модель в нём пропадает.
+        /// </summary>
         static void StyleVp(Viewport vp)
         {
             if (vp == null || vp.IsErased) return;
             try { vp.Layer = NvkLayers.VpLayer; } catch (Exc) { }
             try { vp.Transparency = NvkLayers.Alpha(0); } catch (Exc) { }
+            try { vp.On = true; } catch (Exc) { }
         }
 
         static void AimVp(Viewport vp, SheetWin win, int scaleN, string key, double twistDeg)
@@ -909,8 +903,11 @@ namespace Nvk.Cad
             {
                 NvkLog.Write("[НВК] VP twist " + key + ": " + ex.Message);
             }
+            try { vp.On = true; } catch { }
             double gotDeg = 0.0;
             try { gotDeg = vp.TwistAngle * 180.0 / Math.PI; } catch { }
+            bool on = false;
+            try { on = vp.On; } catch { }
             NvkLog.Write("[НВК] VP вид " + key
                 + "  1:" + scaleN.ToString()
                 + "  центр " + cx.ToString("0.0") + "," + cy.ToString("0.0")
@@ -918,7 +915,8 @@ namespace Nvk.Cad
                 + "  бумага " + vp.Width.ToString("0.0") + "x" + vp.Height.ToString("0.0")
                 + "  H=" + vp.ViewHeight.ToString("0.00")
                 + "  пск " + twistDeg.ToString("0.##")
-                + "  twist " + gotDeg.ToString("0.##"));
+                + "  twist " + gotDeg.ToString("0.##")
+                + "  On=" + (on ? "1" : "0"));
         }
 
         static void ApplyPlanLayers(Transaction tr, Viewport vp, ProfileKind kind)
@@ -936,8 +934,13 @@ namespace Nvk.Cad
                 {
                     var rec = (LayerTableRecord)tr.GetObject(id, OpenMode.ForRead);
                     if (rec.IsDependent) continue;
+                    if (string.Equals(rec.Name, NvkLayers.VpLayer, StringComparison.OrdinalIgnoreCase))
+                    {
+                        thaw.Add(id);
+                        continue;
+                    }
                     if (PlanView.IsOn(rec.Name, on, freezeSamp)) thaw.Add(id);
-                    else freeze.Add(id);
+                    else if (!rec.IsOff && !rec.IsFrozen) freeze.Add(id);
                 }
                 if (thaw.Count > 0)
                 {

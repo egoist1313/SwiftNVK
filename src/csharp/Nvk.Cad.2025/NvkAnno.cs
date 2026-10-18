@@ -187,8 +187,7 @@ namespace Nvk.Cad
         {
             if (e == null) return;
             try { e.Annotative = AnnotativeStates.True; }
-            catch (Exc) { return; }
-            AddPaperScales(e);
+            catch (Exc) { }
         }
 
         /// <summary>
