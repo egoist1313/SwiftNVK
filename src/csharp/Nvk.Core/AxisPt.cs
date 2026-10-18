@@ -93,6 +93,36 @@ namespace Nvk.Core
             return pts;
         }
 
+        /// <summary>
+        /// Сортировка по пикетажу с сохранением порядка вставки при равном Ch.
+        /// List.Sort нестабилен: перелив (входящий, затем исходящий лоток) иначе
+        /// разворачивается в Z-шип на профиле.
+        /// </summary>
+        public static void SortByCh(List<AxisPt> pts)
+        {
+            if (pts == null || pts.Count < 2) return;
+            int n = pts.Count;
+            var ord = new int[n];
+            for (int i = 0; i < n; i++) ord[i] = i;
+            Array.Sort(ord, (i, j) =>
+            {
+                int c = pts[i].Ch.CompareTo(pts[j].Ch);
+                return c != 0 ? c : i.CompareTo(j);
+            });
+            var copy = new AxisPt[n];
+            for (int i = 0; i < n; i++) copy[i] = pts[ord[i]];
+            for (int i = 0; i < n; i++) pts[i] = copy[i];
+        }
+
+        /// <summary>
+        /// Дубль вершины линии: тот же пикет и та же отметка.
+        /// Разная Z на одном пикете — ступенька (перелив, смена одежды), её оставляем.
+        /// </summary>
+        public static bool IsDupVertex(double ch, double z, double lastCh, double lastZ)
+        {
+            return Math.Abs(ch - lastCh) < 1e-6 && Math.Abs(z - lastZ) < 1e-6;
+        }
+
         static AxisPt FromHit(StationHit hit)
         {
             return new AxisPt

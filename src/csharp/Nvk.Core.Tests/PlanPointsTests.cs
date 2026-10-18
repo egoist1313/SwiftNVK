@@ -34,7 +34,7 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
-        public void ManholesSkipZeroRadiusEvenIfNamed()
+        public void ManholesIncludeNamedZeroRadius()
         {
             var chain = Chain.Sort(new List<PipeSeg>
             {
@@ -47,9 +47,29 @@ namespace Nvk.Core.Tests
                 }
             });
             var rows = PlanPoints.Manholes(chain);
+            Assert.Equal(2, rows.Count);
+            Assert.Equal("Выпуск", rows[0].Name);
+            Assert.Equal(0.0, rows[0].X, 6);
+            Assert.Equal("К2", rows[1].Name);
+            Assert.Equal(40.0, rows[1].X, 6);
+        }
+
+        [Fact]
+        public void ManholesSkipUnnamedZeroRadius()
+        {
+            var chain = Chain.Sort(new List<PipeSeg>
+            {
+                new PipeSeg
+                {
+                    X0 = 0, Y0 = 0, X1 = 40, Y1 = 0,
+                    InvertStart = 100, InvertEnd = 99.6, Diam = 0.3,
+                    StartName = "", StartR = 0,
+                    EndName = "К2", EndR = 0.8
+                }
+            });
+            var rows = PlanPoints.Manholes(chain);
             Assert.Single(rows);
             Assert.Equal("К2", rows[0].Name);
-            Assert.Equal(40.0, rows[0].X, 6);
         }
 
         [Fact]

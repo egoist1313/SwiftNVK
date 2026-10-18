@@ -1003,17 +1003,23 @@ namespace Nvk.Cad
             return pts;
         }
 
-        /// <summary>Линия по оси без дублей пикетажа (ступенька лотка не ломает землю).</summary>
+        /// <summary>
+        /// Линия по оси: одинаковые (пикет, Z) схлопываются, чтобы ступенька лотка
+        /// не ломала землю. Разная Z на одном пикете — вертикальный шаг (перелив).
+        /// </summary>
         static List<Point2d> SurfacePts(IList<AxisPt> axis, SectionConfig cfg, Point3d o, double lSc, double hSc, double osh, HeightSrc src)
         {
             var pts = new List<Point2d>();
             if (axis == null) return pts;
-            double lastCh = -1e9;
+            double lastCh = -1e9, lastZ = 0.0;
             foreach (var p in axis)
             {
-                if (Math.Abs(p.Ch - lastCh) < 1e-6) continue;
-                pts.Add(XY(o, lSc, hSc, osh, p.Ch, ProfileRows.ZAt(src, p, cfg)));
+                double z = ProfileRows.ZAt(src, p, cfg);
+                if (pts.Count > 0 && AxisBuilder.IsDupVertex(p.Ch, z, lastCh, lastZ))
+                    continue;
+                pts.Add(XY(o, lSc, hSc, osh, p.Ch, z));
                 lastCh = p.Ch;
+                lastZ = z;
             }
             return pts;
         }
@@ -1528,12 +1534,15 @@ namespace Nvk.Cad
         static List<ChZ> BuildSurfChZ(IList<AxisPt> axis, SectionConfig cfg, HeightSrc src)
         {
             var pts = new List<ChZ>();
-            double lastCh = -1e9;
+            double lastCh = -1e9, lastZ = 0.0;
             foreach (var p in axis)
             {
-                if (Math.Abs(p.Ch - lastCh) < 1e-6) continue;
-                pts.Add(new ChZ(p.Ch, ProfileRows.ZAt(src, p, cfg)));
+                double z = ProfileRows.ZAt(src, p, cfg);
+                if (pts.Count > 0 && AxisBuilder.IsDupVertex(p.Ch, z, lastCh, lastZ))
+                    continue;
+                pts.Add(new ChZ(p.Ch, z));
                 lastCh = p.Ch;
+                lastZ = z;
             }
             return pts;
         }

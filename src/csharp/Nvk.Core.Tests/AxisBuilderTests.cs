@@ -40,6 +40,41 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void SortByChKeepsIncomingInvertFirst()
+        {
+            var chain = Chain.Sort(new List<PipeSeg>
+            {
+                Seg(0, 10, 100, 99.9, 0.3),
+                Seg(10, 20, 99.5, 99.4, 0.3)
+            });
+            var pts = AxisBuilder.FromChain(chain, step: 5.0);
+            pts.Add(new AxisPt { Ch = 3.0, Invert = 99.97, Diam = 0.3 });
+            AxisBuilder.SortByCh(pts);
+            int jump = -1;
+            for (int i = 1; i < pts.Count; i++)
+            {
+                if (System.Math.Abs(pts[i].Ch - pts[i - 1].Ch) < 1e-6
+                    && System.Math.Abs(pts[i].Invert - pts[i - 1].Invert) > 0.01)
+                {
+                    jump = i;
+                    break;
+                }
+            }
+            Assert.True(jump > 0);
+            Assert.Equal(10.0, pts[jump].Ch, 6);
+            Assert.Equal(99.9, pts[jump - 1].Invert, 6);
+            Assert.Equal(99.5, pts[jump].Invert, 6);
+        }
+
+        [Fact]
+        public void IsDupVertexKeepsInvertStep()
+        {
+            Assert.True(AxisBuilder.IsDupVertex(27.096, 205.739, 27.096, 205.739));
+            Assert.False(AxisBuilder.IsDupVertex(27.096, 204.630, 27.096, 204.407));
+            Assert.False(AxisBuilder.IsDupVertex(29.096, 204.640, 27.096, 204.630));
+        }
+
+        [Fact]
         public void NamedLinesMoveForward()
         {
             var cfg = new SectionConfig { Bedding = 0.10, ThkZash = 0.30 };

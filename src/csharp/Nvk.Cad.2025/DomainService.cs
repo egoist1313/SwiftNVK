@@ -93,7 +93,7 @@ namespace Nvk.Cad
             }
             foreach (double s in stations)
                 AddEdge(tr, axis, chain, s, surfId, earthId, cfg);
-            axis.Sort((a, b) => a.Ch.CompareTo(b.Ch));
+            AxisBuilder.SortByCh(axis);
 
             int seed = NvkSession.FreshRandom ? Environment.TickCount : StableSeed(chain.Segs);
             int nSc = Scatter.DenseCount(chain.Total);

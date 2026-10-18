@@ -77,16 +77,18 @@ namespace Nvk.Cad
                 foreach (var s in last.Chain.Segs)
                 {
                     if (s.StartR > 0.05)
-                    {
                         AddCircle(ms, tr, s.X0, s.Y0, s.StartR);
+                    if (!string.IsNullOrEmpty(s.StartName))
+                    {
                         AddMhLeader(ms, tr, s, true, poses, planDeg);
                         nMh++;
                     }
                 }
                 var lastSeg = last.Chain.Segs[last.Chain.Segs.Count - 1];
                 if (lastSeg.EndR > 0.05)
-                {
                     AddCircle(ms, tr, lastSeg.X1, lastSeg.Y1, lastSeg.EndR);
+                if (!string.IsNullOrEmpty(lastSeg.EndName))
+                {
                     AddMhLeader(ms, tr, lastSeg, false, poses, planDeg);
                     nMh++;
                 }
