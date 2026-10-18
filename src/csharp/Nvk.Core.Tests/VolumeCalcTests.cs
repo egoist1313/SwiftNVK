@@ -492,6 +492,68 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void ExtendEndsGoesTenMetersPastManholes()
+        {
+            var axis = new List<PlanPt>
+            {
+                new PlanPt(0, 0),
+                new PlanPt(40, 0)
+            };
+            var ext = PlanGeom.ExtendEnds(axis, PlanGeom.SitHalfM);
+            Assert.Equal(2, ext.Count);
+            Assert.Equal(-10.0, ext[0].X, 6);
+            Assert.Equal(0.0, ext[0].Y, 6);
+            Assert.Equal(50.0, ext[1].X, 6);
+            Assert.Equal(0.0, ext[1].Y, 6);
+            Assert.Equal(0.0, axis[0].X, 6);
+            Assert.Equal(40.0, axis[1].X, 6);
+        }
+
+        [Fact]
+        public void ExtendEndsBentUsesOriginalEndTangents()
+        {
+            var axis = new List<PlanPt>
+            {
+                new PlanPt(0, 0),
+                new PlanPt(40, 0),
+                new PlanPt(40, 30)
+            };
+            var ext = PlanGeom.ExtendEnds(axis, PlanGeom.SitHalfM);
+            Assert.Equal(3, ext.Count);
+            Assert.Equal(-10.0, ext[0].X, 6);
+            Assert.Equal(0.0, ext[0].Y, 6);
+            Assert.Equal(40.0, ext[1].X, 6);
+            Assert.Equal(0.0, ext[1].Y, 6);
+            Assert.Equal(40.0, ext[2].X, 6);
+            Assert.Equal(40.0, ext[2].Y, 6);
+        }
+
+        [Fact]
+        public void SituationCorridorExtendsTenMetersPastEnds()
+        {
+            var axis = new List<PlanPt>
+            {
+                new PlanPt(0, 0),
+                new PlanPt(40, 0)
+            };
+            var sit = PlanGeom.SituationClosed(
+                PlanGeom.ExtendEnds(axis, PlanGeom.SitHalfM), PlanGeom.SitHalfM);
+            Assert.True(sit.Count >= 4);
+            double minX = sit[0].X, maxX = sit[0].X, minY = sit[0].Y, maxY = sit[0].Y;
+            for (int i = 1; i < sit.Count; i++)
+            {
+                if (sit[i].X < minX) minX = sit[i].X;
+                if (sit[i].X > maxX) maxX = sit[i].X;
+                if (sit[i].Y < minY) minY = sit[i].Y;
+                if (sit[i].Y > maxY) maxY = sit[i].Y;
+            }
+            Assert.Equal(-10.0, minX, 6);
+            Assert.Equal(50.0, maxX, 6);
+            Assert.Equal(-10.0, minY, 6);
+            Assert.Equal(10.0, maxY, 6);
+        }
+
+        [Fact]
         public void SituationLeaderAtMidLeftOfAxis()
         {
             var axis = new List<PlanPt>

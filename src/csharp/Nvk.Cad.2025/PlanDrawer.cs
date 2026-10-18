@@ -250,13 +250,15 @@ namespace Nvk.Cad
         /// и выноска «Предъявляемый участок»: остриё 6 м, полка 14 м влево от оси.
         /// </summary>
         /// <summary>
-        /// Коридор ±10 м: OFFSET оси с скруглением углов, иначе miter.
-        /// Ось чуть упрощается, чтобы стыки труб не давали зубцы.
+        /// Коридор ±10 м: ось на 10 м за крайние колодцы, OFFSET
+        /// с скруглением углов, иначе miter. Ось чуть упрощается,
+        /// чтобы стыки труб не давали зубцы.
         /// </summary>
         static List<PlanPt> SituationByOffset(List<PlanPt> axis)
         {
             var src = PlanGeom.Simplify(axis, 0.05);
             if (src == null || src.Count < 2) src = axis;
+            src = PlanGeom.ExtendEnds(src, PlanGeom.SitHalfM);
             var fallback = PlanGeom.SituationClosed(src, PlanGeom.SitHalfM);
             object oldGap = null;
             try

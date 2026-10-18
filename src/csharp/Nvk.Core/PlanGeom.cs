@@ -129,6 +129,43 @@ namespace Nvk.Core
 
         /// <summary>Полуширина ситуационного коридора, м. PipeBuild: ±10 м от оси.</summary>
         public const double SitHalfM = 10.0;
+
+        /// <summary>
+        /// Вылет оси за крайние вершины (центры колодцев) на dist метров
+        /// вдоль первого и последнего ребра. OFFSET открытой полилинии
+        /// без этого ставит торец коридора в колодец.
+        /// Направления берутся с исходной оси, чтобы 2-точечная трасса
+        /// не поехала после сдвига первой вершины.
+        /// </summary>
+        public static List<PlanPt> ExtendEnds(List<PlanPt> axis, double dist)
+        {
+            var r = new List<PlanPt>();
+            if (axis == null || axis.Count == 0) return r;
+            r.AddRange(axis);
+            if (r.Count < 2 || dist <= 0.0) return r;
+            double ux, uy;
+            if (Unit(axis[0], axis[1], out ux, out uy))
+                r[0] = new PlanPt(axis[0].X - ux * dist, axis[0].Y - uy * dist);
+            int last = axis.Count - 1;
+            if (Unit(axis[last - 1], axis[last], out ux, out uy))
+                r[r.Count - 1] = new PlanPt(axis[last].X + ux * dist, axis[last].Y + uy * dist);
+            return r;
+        }
+
+        static bool Unit(PlanPt a, PlanPt b, out double ux, out double uy)
+        {
+            double dx = b.X - a.X, dy = b.Y - a.Y;
+            double len = Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-12)
+            {
+                ux = 0.0;
+                uy = 0.0;
+                return false;
+            }
+            ux = dx / len;
+            uy = dy / len;
+            return true;
+        }
         /// <summary>Остриё выноски «Предъявляемый участок» от оси, м.</summary>
         public const double SitArrowM = 6.0;
         /// <summary>Полка выноски за границей коридора, м.</summary>
