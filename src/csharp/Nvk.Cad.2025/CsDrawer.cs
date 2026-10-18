@@ -12,7 +12,7 @@ namespace Nvk.Cad
     static class CsDrawer
     {
         const string LayerIns = "NVK-CS";
-        const string LayerTbl = "NVK-TBL";
+        const string LayerTbl = "NVK-CS-TBL";
 
         public static string Draw(Database db, Transaction tr, Point3d origin, double scale, double mSlope, bool asBlock)
         {
@@ -651,6 +651,7 @@ namespace Nvk.Cad
                 pl.AddVertexAt(i, pts[i], 0, 0, 0);
             btr.AppendEntity(pl);
             tr.AddNewlyCreatedDBObject(pl, true);
+            NvkTag.Stamp(tr, pl);
         }
 
         static void EnsureLinetype(Database db, Transaction tr, string name)
@@ -850,6 +851,9 @@ namespace Nvk.Cad
                     erase.Add(id);
                 else if (string.Equals(ent.Layer, LayerIns, StringComparison.OrdinalIgnoreCase)
                          && NvkTag.Matches(ent, seg))
+                    erase.Add(id);
+                else if (string.Equals(ent.Layer, LayerTbl, StringComparison.OrdinalIgnoreCase)
+                         && (NvkTag.Matches(ent, seg) || string.IsNullOrEmpty(NvkTag.Get(ent))))
                     erase.Add(id);
             }
             foreach (var id in erase)

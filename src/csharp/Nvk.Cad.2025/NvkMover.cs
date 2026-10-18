@@ -75,7 +75,8 @@ namespace Nvk.Cad
                     tr.Commit();
                     return true;
                 }
-                if (string.Equals(lay, "NVK-CS", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(lay, "NVK-CS", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(lay, "NVK-CS-TBL", StringComparison.OrdinalIgnoreCase))
                 {
                     group = "CS1";
                     from = NvkSession.CsHas[0] ? NvkSession.CsLvl[0] : pick;
@@ -140,7 +141,9 @@ namespace Nvk.Cad
                 if (br != null) { try { name = br.Name; } catch (Exc) { } }
                 if (name != null && name.StartsWith("NVK-CS-", StringComparison.OrdinalIgnoreCase))
                     return ParseL(name) == lv;
-                return string.Equals(ent.Layer, "NVK-CS", StringComparison.OrdinalIgnoreCase) && lv == 1;
+                if (lv != 1) return false;
+                return string.Equals(ent.Layer, "NVK-CS", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(ent.Layer, "NVK-CS-TBL", StringComparison.OrdinalIgnoreCase);
             }
             return false;
         }

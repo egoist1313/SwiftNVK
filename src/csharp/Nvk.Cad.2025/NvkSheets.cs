@@ -370,7 +370,7 @@ namespace Nvk.Cad
                     foreach (var cell in kv.Value)
                     {
                         if (cell == null || cell.Win == null || !cell.Win.Valid) continue;
-                        UnionNearby(db, tr, cell.Win, new[] { "NVK-CS", "NVK-TBL" });
+                        UnionNearby(db, tr, cell.Win, new[] { "NVK-CS", "NVK-CS-TBL", "NVK-TBL" });
                     }
                 }
             }

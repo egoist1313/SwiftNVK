@@ -10,6 +10,7 @@
     ("NVK-EP-ZASH"  6 nil nil)
     ("NVK-EP-ZAS"   3 nil nil)
     ("NVK-CS"       1 nil nil)
+    ("NVK-CS-TBL"   7 nil nil)
     ("NVK-POPER"    7 nil nil)
     ("NVK-PLAN"     1 nil nil)
     ("NVK-VOL"      7 nil nil)

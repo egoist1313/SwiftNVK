@@ -19,6 +19,7 @@ namespace Nvk.Cad
             ("NVK-EP-ZASH",  6, false, false),
             ("NVK-EP-ZAS",   3, false, false),
             ("NVK-CS",       1, false, false),
+            ("NVK-CS-TBL",   7, false, false),
             ("NVK-POPER",    7, false, false),
             ("NVK-TBL",      7, false, false),
             ("NVK-PLAN",     1, false, false),
