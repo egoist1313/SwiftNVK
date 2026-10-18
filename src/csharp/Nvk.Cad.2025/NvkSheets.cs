@@ -568,6 +568,19 @@ namespace Nvk.Cad
                 createdNew = true;
                 try
                 {
+                    using (var trNew = db.TransactionManager.StartTransaction())
+                    {
+                        var layNew = (Layout)trNew.GetObject(layoutId, OpenMode.ForWrite);
+                        TrySetupA1(layNew, name);
+                        trNew.Commit();
+                    }
+                }
+                catch (Exc ex)
+                {
+                    NvkLog.Write("[НВК] лист " + name + " плот A1: " + ex.Message);
+                }
+                try
+                {
                     if (!string.Equals(lm.CurrentLayout, stayOn, StringComparison.OrdinalIgnoreCase))
                         lm.CurrentLayout = stayOn;
                 }
@@ -586,15 +599,11 @@ namespace Nvk.Cad
 
             var have = new Dictionary<string, ObjectId>(StringComparer.OrdinalIgnoreCase);
             double paperW = 841.0, paperH = 594.0;
+            double px0 = 0.0, py0 = 0.0, px1 = 841.0, py1 = 594.0;
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 var layout = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
-                try
-                {
-                    Point2d sz = layout.PlotPaperSize;
-                    if (sz.X > 20 && sz.Y > 20) { paperW = sz.X; paperH = sz.Y; }
-                }
-                catch { }
+                ReadPrintBox(layout, name, out paperW, out paperH, out px0, out py0, out px1, out py1);
                 var ps = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
                 int nTagged = 0, nAlien = 0;
                 foreach (ObjectId id in ps)
@@ -622,13 +631,19 @@ namespace Nvk.Cad
                 double t = paperW; paperW = paperH; paperH = t;
             }
 
-            double margin = 12.0, gap = 6.0, titleBand = 10.0;
-            double usableW = paperW - 2.0 * margin;
+            double pad = 8.0, gap = 6.0, titleBand = 10.0;
+            double xLeft = px0 + pad;
+            double topY = py1 - pad - titleBand;
+            double usableW = (px1 - px0) - 2.0 * pad;
             if (usableW < 40.0) usableW = 40.0;
+            if (topY < py0 + pad + 40.0) topY = py1 - pad;
             SheetWin coord = NvkUiState.DoVol ? NvkSession.CoordWin : null;
             SheetWin samp = (NvkUiState.DoVol && kind != ProfileKind.Truba) ? NvkSession.SampWin : null;
             var specs = PackSpecs(kind, epCells, vol, plan, coord, samp, cells, nEp, nCs, nPlan,
-                margin, gap, titleBand, usableW, paperH);
+                xLeft, topY, gap, usableW);
+            double fit = FitSpecs(specs, xLeft, py0 + pad, px1 - pad, py1 - pad);
+            if (fit < 0.999)
+                NvkLog.Write("[НВК] лист " + name + " видовые в область печати  k=" + fit.ToString("0.###"));
 
             int nAdd = 0;
             NvkLayers.EnsureAll(db);
@@ -678,7 +693,7 @@ namespace Nvk.Cad
                     NvkLayers.EnsureOne(db, tr, TitleLayer, 7, false, false);
                     var title = new MText();
                     title.SetDatabaseDefaults();
-                    title.Location = new Point3d(margin, paperH - margin * 0.4, 0.0);
+                    title.Location = new Point3d(xLeft, py1 - pad * 0.4, 0.0);
                     title.Attachment = AttachmentPoint.TopLeft;
                     title.TextHeight = 7.0;
                     title.Width = usableW;
@@ -789,12 +804,11 @@ namespace Nvk.Cad
 
         static List<VpSpec> PackSpecs(ProfileKind kind, List<CsCell> epCells, SheetWin vol, SheetWin plan,
             SheetWin coord, SheetWin samp, List<CsCell> cells, int nEp, int nCs, int nPlan,
-            double margin, double gap, double titleBand, double usableW, double paperH)
+            double xLeft, double topY, double gap, double usableW)
         {
             var specs = new List<VpSpec>();
-            double xLeft = margin;
             double cursorX = xLeft;
-            double cursorY = paperH - margin - titleBand;
+            double cursorY = topY;
             double rowH = 0.0;
 
             Action<SheetWin, int, string, double> place = (win, scaleN, key, twist) =>
@@ -872,14 +886,14 @@ namespace Nvk.Cad
         }
 
         /// <summary>
-        /// Слой рамки NVK-VP (не печатается). Слой менять ДО On:
-        /// смена слоя после On гасит экран — модель в нём пропадает.
+        /// Слой рамки NVK-VP (не печатается), стекло 90 на объекте.
+        /// Слой менять ДО On: смена слоя после On гасит экран.
         /// </summary>
         static void StyleVp(Viewport vp)
         {
             if (vp == null || vp.IsErased) return;
             try { vp.Layer = NvkLayers.VpLayer; } catch (Exc) { }
-            try { vp.Transparency = NvkLayers.Alpha(0); } catch (Exc) { }
+            try { vp.Transparency = NvkLayers.Alpha(NvkLayers.VpTransPct); } catch (Exc) { }
             try { vp.On = true; } catch (Exc) { }
         }
 
@@ -983,6 +997,205 @@ namespace Nvk.Cad
             {
                 Id = id; Win = win; ScaleN = scaleN; Key = key;
             }
+        }
+
+        static double FitSpecs(List<VpSpec> specs, double x0, double y0, double x1, double y1)
+        {
+            if (specs == null || specs.Count == 0) return 1.0;
+            int n = specs.Count;
+            var cx = new double[n];
+            var cy = new double[n];
+            var w = new double[n];
+            var h = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                cx[i] = specs[i].Cx;
+                cy[i] = specs[i].Cy;
+                w[i] = specs[i].W;
+                h[i] = specs[i].H;
+            }
+            double k = SheetFit.Fit(cx, cy, w, h, x0, y0, x1, y1);
+            for (int i = 0; i < n; i++)
+            {
+                var s = specs[i];
+                specs[i] = new VpSpec(cx[i], cy[i], w[i], h[i], s.Win, s.ScaleN, s.Key, s.TwistDeg);
+            }
+            return k;
+        }
+
+        static void ReadPrintBox(Layout layout, string name,
+            out double paperW, out double paperH,
+            out double x0, out double y0, out double x1, out double y1)
+        {
+            paperW = 841.0;
+            paperH = 594.0;
+            x0 = 0.0;
+            y0 = 0.0;
+            x1 = paperW;
+            y1 = paperH;
+            if (layout == null) return;
+            try
+            {
+                Point2d sz = layout.PlotPaperSize;
+                if (sz.X > 20.0 && sz.Y > 20.0) { paperW = sz.X; paperH = sz.Y; }
+            }
+            catch { }
+            if (paperW + 1.0 < paperH)
+            {
+                double t = paperW; paperW = paperH; paperH = t;
+            }
+            double left = 0.0, bot = 0.0, right = 0.0, top = 0.0;
+            try
+            {
+                Extents2d m = layout.PlotPaperMargins;
+                left = m.MinPoint.X;
+                bot = m.MinPoint.Y;
+                right = m.MaxPoint.X;
+                top = m.MaxPoint.Y;
+            }
+            catch { }
+            if (left < 0.0) left = 0.0;
+            if (bot < 0.0) bot = 0.0;
+            if (right < 0.0) right = 0.0;
+            if (top < 0.0) top = 0.0;
+            double pw = paperW - left - right;
+            double ph = paperH - bot - top;
+            if (pw < 40.0) pw = paperW;
+            if (ph < 40.0) ph = paperH;
+            x0 = 0.0;
+            y0 = 0.0;
+            x1 = pw;
+            y1 = ph;
+            NvkLog.Write("[НВК] лист " + name
+                + " бумага " + paperW.ToString("0") + "x" + paperH.ToString("0")
+                + "  печать " + pw.ToString("0") + "x" + ph.ToString("0")
+                + "  поля " + left.ToString("0.#") + "/" + bot.ToString("0.#"));
+        }
+
+        static void TrySetupA1(Layout layout, string name)
+        {
+            if (layout == null) return;
+            var psv = PlotSettingsValidator.Current;
+            psv.RefreshLists(layout);
+            string[] devices =
+            {
+                "DWG To PDF.pc3",
+                "AutoCAD PDF (General Documentation).pc3",
+                "AutoCAD PDF (High Quality Print).pc3"
+            };
+            var order = new List<string>();
+            System.Collections.Specialized.StringCollection have = null;
+            try { have = psv.GetPlotDeviceList(); } catch { }
+            for (int i = 0; i < devices.Length; i++)
+            {
+                if (HasName(have, devices[i])) order.Add(devices[i]);
+            }
+            if (have != null)
+            {
+                foreach (string d in have)
+                {
+                    if (string.IsNullOrEmpty(d)) continue;
+                    if (d.IndexOf("PDF", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    if (!order.Contains(d)) order.Add(d);
+                }
+            }
+            try
+            {
+                string cur = layout.PlotConfigurationName;
+                if (!string.IsNullOrEmpty(cur) && !order.Contains(cur))
+                    order.Insert(0, cur);
+            }
+            catch { }
+
+            string[] mediaTry =
+            {
+                "ISO_A1_(841.00_x_594.00_MM)",
+                "ISO_full_bleed_A1_(841.00_x_594.00_MM)"
+            };
+            for (int i = 0; i < order.Count; i++)
+            {
+                string dev = order[i];
+                bool set = false;
+                for (int m = 0; m < mediaTry.Length && !set; m++)
+                {
+                    try { psv.SetPlotConfigurationName(layout, dev, mediaTry[m]); set = true; }
+                    catch { }
+                }
+                if (!set)
+                {
+                    try { psv.SetPlotConfigurationName(layout, dev, ""); set = true; }
+                    catch { }
+                }
+                if (!set) continue;
+                try { psv.RefreshLists(layout); } catch { }
+                string media = PickA1Media(psv, layout);
+                if (string.IsNullOrEmpty(media))
+                {
+                    for (int m = 0; m < mediaTry.Length; m++)
+                    {
+                        if (HasName(psv.GetCanonicalMediaNameList(layout), mediaTry[m]))
+                        { media = mediaTry[m]; break; }
+                    }
+                }
+                if (string.IsNullOrEmpty(media)) continue;
+                try
+                {
+                    psv.SetCanonicalMediaName(layout, media);
+                    psv.SetPlotPaperUnits(layout, PlotPaperUnit.Millimeters);
+                    psv.SetPlotType(layout, PlotType.Layout);
+                    psv.SetPlotRotation(layout, PlotRotation.Degrees000);
+                    psv.SetPlotOrigin(layout, Point2d.Origin);
+                    try { psv.SetUseStandardScale(layout, true); } catch { }
+                    try { psv.SetStdScaleType(layout, StdScaleType.StdScale1To1); } catch { }
+                    try { layout.PlotViewportBorders = false; } catch { }
+                    NvkLog.Write("[НВК] лист " + name + " плот " + dev + "  " + media);
+                    return;
+                }
+                catch (Exc ex)
+                {
+                    NvkLog.Write("[НВК] лист " + name + " плот " + dev + ": " + ex.Message);
+                }
+            }
+            NvkLog.Write("[НВК] лист " + name + " плот A1 не выставлен, поля как есть");
+        }
+
+        static bool HasName(System.Collections.Specialized.StringCollection list, string name)
+        {
+            if (list == null || string.IsNullOrEmpty(name)) return false;
+            foreach (string s in list)
+            {
+                if (string.Equals(s, name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        static string PickA1Media(PlotSettingsValidator psv, Layout layout)
+        {
+            System.Collections.Specialized.StringCollection names = null;
+            try { names = psv.GetCanonicalMediaNameList(layout); } catch { }
+            return PickA1From(names);
+        }
+
+        static string PickA1From(System.Collections.Specialized.StringCollection names)
+        {
+            if (names == null) return null;
+            string best = null;
+            foreach (string n in names)
+            {
+                if (string.IsNullOrEmpty(n)) continue;
+                string u = n.ToUpperInvariant();
+                bool a1 = u.IndexOf("A1", StringComparison.Ordinal) >= 0;
+                bool mm841 = u.IndexOf("841", StringComparison.Ordinal) >= 0;
+                bool mm594 = u.IndexOf("594", StringComparison.Ordinal) >= 0;
+                if (!a1 && !(mm841 && mm594)) continue;
+                int i841 = u.IndexOf("841", StringComparison.Ordinal);
+                int i594 = u.IndexOf("594", StringComparison.Ordinal);
+                bool land = i841 >= 0 && (i594 < 0 || i841 < i594);
+                if (land && (a1 || mm841)) return n;
+                if (best == null) best = n;
+            }
+            return best;
         }
 
         static int ScaleN(double v, int fallback)

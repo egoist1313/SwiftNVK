@@ -8,8 +8,8 @@ namespace Nvk.Cad
     static class NvkLayers
     {
         public const string VpLayer = "NVK-VP";
-        /// <summary>0 = непрозрачно. Прозрачность слоя/объекта VP гасит модель в экране.</summary>
-        public const int VpTransPct = 0;
+        /// <summary>Рамка VP: 90 = стекло. На слое 0 — иначе модель в экране бледнеет.</summary>
+        public const int VpTransPct = 90;
 
         static readonly (string Name, short Color, bool NoPlot, bool Off)[] Specs =
         {
@@ -52,8 +52,8 @@ namespace Nvk.Cad
         }
 
         /// <summary>
-        /// Рамка видового: слой не печатается, без прозрачности.
-        /// Прозрачность 90 на слое/экране делает пустым весь вид.
+        /// Рамка видового: слой не печатается, непрозрачный.
+        /// 90% стекла — на самом Viewport, после смены слоя On=true.
         /// </summary>
         public static void EnsureVpLayer(Database db, Transaction tr)
         {
