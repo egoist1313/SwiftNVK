@@ -1220,27 +1220,25 @@ namespace Nvk.Cad
             if (x1 < p0) x1 = p0;
             if (x2 > p1) x2 = p1;
             if (x2 < x1 + 1e-9) return r;
-            r.Add(new Point2d(x1, YAt(pts, x1)));
+            r.Add(new Point2d(x1, YAt(pts, x1, true)));
             foreach (var p in pts)
                 if (p.X > x1 + 1e-9 && p.X < x2 - 1e-9) r.Add(p);
-            r.Add(new Point2d(x2, YAt(pts, x2)));
+            r.Add(new Point2d(x2, YAt(pts, x2, false)));
             return r;
         }
 
         static double YAt(List<Point2d> pts, double x)
         {
-            if (x <= pts[0].X) return pts[0].Y;
-            if (x >= pts[pts.Count - 1].X) return pts[pts.Count - 1].Y;
-            for (int i = 0; i < pts.Count - 1; i++)
-            {
-                if (x >= pts[i].X && x <= pts[i + 1].X)
-                {
-                    double dx = pts[i + 1].X - pts[i].X;
-                    double u = dx < 1e-12 ? 0 : (x - pts[i].X) / dx;
-                    return pts[i].Y + u * (pts[i + 1].Y - pts[i].Y);
-                }
-            }
-            return pts[pts.Count - 1].Y;
+            return YAt(pts, x, false);
+        }
+
+        static double YAt(List<Point2d> pts, double x, bool atEnd)
+        {
+            if (pts == null || pts.Count == 0) return 0.0;
+            var tmp = new PolylineClip.Pt[pts.Count];
+            for (int i = 0; i < pts.Count; i++)
+                tmp[i] = new PolylineClip.Pt(pts[i].X, pts[i].Y);
+            return PolylineClip.YAt(tmp, x, atEnd);
         }
 
         static void DrawTitle(BlockTableRecord ms, Transaction tr, string layer,

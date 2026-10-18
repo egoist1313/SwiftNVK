@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Nvk.Core;
 using Xunit;
@@ -132,6 +133,77 @@ namespace Nvk.Core.Tests
                 if (p.X > 4.5 && p.X < 5.5) mid = true;
             }
             Assert.True(mid);
+        }
+
+        [Fact]
+        public void OverflowStepUpKeepsBedding()
+        {
+            // 64а: лоток прыгает вверх 0.22 м. L1 не срезать входящим L2.
+            var sand = new List<PolylineClip.Pt>
+            {
+                P(0, 100.00), P(10, 100.00), P(10, 100.22), P(20, 100.22)
+            };
+            var trench = new List<PolylineClip.Pt>
+            {
+                P(0, 99.90), P(10, 99.90), P(10, 100.12), P(20, 100.12)
+            };
+            var c = PolylineClip.KeepBelow(trench, sand);
+            Assert.True(c.Count >= 4);
+            double yIn = double.NaN, yOut = double.NaN;
+            for (int i = 0; i < c.Count; i++)
+            {
+                if (Math.Abs(c[i].X - 10.0) > 1e-9) continue;
+                if (double.IsNaN(yIn)) yIn = c[i].Y;
+                yOut = c[i].Y;
+            }
+            Assert.Equal(99.90, yIn, 5);
+            Assert.Equal(100.12, yOut, 5);
+            Assert.Equal(0.10, 100.00 - yIn, 5);
+            Assert.Equal(0.10, 100.22 - yOut, 5);
+            for (int i = 1; i < c.Count; i++)
+            {
+                if (c[i].X - c[i - 1].X < 0.5) continue;
+                double span = c[i].X - c[i - 1].X;
+                double dz = Math.Abs(c[i].Y - c[i - 1].Y);
+                Assert.True(dz < 0.05, "L1 не должна диагональю закрывать перелив");
+                Assert.True(span > 0.5);
+            }
+        }
+
+        [Fact]
+        public void OverflowStepDownKeepsBedding()
+        {
+            var sand = new List<PolylineClip.Pt>
+            {
+                P(0, 100.22), P(10, 100.22), P(10, 100.00), P(20, 100.00)
+            };
+            var trench = new List<PolylineClip.Pt>
+            {
+                P(0, 100.12), P(10, 100.12), P(10, 99.90), P(20, 99.90)
+            };
+            var c = PolylineClip.KeepBelow(trench, sand);
+            double yIn = double.NaN, yOut = double.NaN;
+            for (int i = 0; i < c.Count; i++)
+            {
+                if (Math.Abs(c[i].X - 10.0) > 1e-9) continue;
+                if (double.IsNaN(yIn)) yIn = c[i].Y;
+                yOut = c[i].Y;
+            }
+            Assert.Equal(100.12, yIn, 5);
+            Assert.Equal(99.90, yOut, 5);
+        }
+
+        [Fact]
+        public void YAtVerticalStepPicksIncomingOrOutgoing()
+        {
+            var sand = new List<PolylineClip.Pt>
+            {
+                P(0, 100.00), P(10, 100.00), P(10, 100.22), P(20, 100.22)
+            };
+            Assert.Equal(100.00, PolylineClip.YAt(sand, 10.0, false), 5);
+            Assert.Equal(100.22, PolylineClip.YAt(sand, 10.0, true), 5);
+            Assert.Equal(100.00, PolylineClip.YAt(sand, 5.0, false), 5);
+            Assert.Equal(100.22, PolylineClip.YAt(sand, 15.0, false), 5);
         }
 
         static double PolylineClipY(List<PolylineClip.Pt> trench, double x)

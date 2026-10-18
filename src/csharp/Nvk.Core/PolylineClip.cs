@@ -36,18 +36,21 @@ namespace Nvk.Core
             }
 
             double xa = pts[0].X, ya = pts[0].Y;
-            double y2a = YAt(bound, xa);
+            double y2a = YAt(bound, xa, false);
             result.Add(new Pt(xa, keepAbove ? Math.Max(ya, y2a) : Math.Min(ya, y2a)));
 
             for (int i = 1; i < pts.Count; i++)
             {
                 double xb = pts[i].X, yb = pts[i].Y;
-                y2a = YAt(bound, xa);
-                double y2b = YAt(bound, xb);
                 if (Math.Abs(xb - xa) < 1e-9)
+                {
+                    // Вертикальная ступенька (перелив): исходящий к исходящему, не к входящему.
+                    double y2b = YAt(bound, xb, true);
                     result.Add(new Pt(xb, keepAbove ? Math.Max(yb, y2b) : Math.Min(yb, y2b)));
+                }
                 else
                 {
+                    y2a = YAt(bound, xa, true);
                     var inner = new List<double>();
                     for (int k = 0; k < bound.Count; k++)
                     {
@@ -59,10 +62,12 @@ namespace Nvk.Core
                     double sxa = xa, sy1a = ya, sy2a = y2a;
                     foreach (double sxb in inner)
                     {
-                        double sy1b = Math.Abs(sxb - xb) < 1e-9
+                        bool atEnd = Math.Abs(sxb - xb) < 1e-9;
+                        double sy1b = atEnd
                             ? yb
                             : ya + ((sxb - xa) / (xb - xa)) * (yb - ya);
-                        double sy2b = YAt(bound, sxb);
+                        // Приход на пикет — входящая сторона ступеньки; исходящая — только вертикальный сегмент.
+                        double sy2b = YAt(bound, sxb, false);
                         bool aOut = keepAbove ? sy1a < sy2a - 1e-9 : sy1a > sy2a + 1e-9;
                         bool bOut = keepAbove ? sy1b < sy2b - 1e-9 : sy1b > sy2b + 1e-9;
                         if (aOut != bOut)
@@ -92,16 +97,34 @@ namespace Nvk.Core
             return result;
         }
 
-        static double YAt(IList<Pt> pts, double x)
+        /// <summary>
+        /// Отметка на X. На вертикальной ступеньке (перелив, два Y на одном пикете)
+        /// atEnd=false — входящая, atEnd=true — исходящая.
+        /// </summary>
+        public static double YAt(IList<Pt> pts, double x, bool atEnd = false)
         {
+            if (pts == null || pts.Count == 0) return 0.0;
             if (x <= pts[0].X) return pts[0].Y;
             if (x >= pts[pts.Count - 1].X) return pts[pts.Count - 1].Y;
+            int first = -1, last = -1;
+            for (int i = 0; i < pts.Count; i++)
+            {
+                if (Math.Abs(pts[i].X - x) < 1e-9)
+                {
+                    if (first < 0) first = i;
+                    last = i;
+                }
+            }
+            if (first >= 0)
+                return pts[atEnd ? last : first].Y;
             for (int i = 0; i < pts.Count - 1; i++)
             {
                 if (x >= pts[i].X && x <= pts[i + 1].X)
                 {
                     double dx = pts[i + 1].X - pts[i].X;
-                    double u = Math.Abs(dx) < 1e-12 ? 0 : (x - pts[i].X) / dx;
+                    double u = Math.Abs(dx) < 1e-12
+                        ? (atEnd ? 1.0 : 0.0)
+                        : (x - pts[i].X) / dx;
                     return pts[i].Y + u * (pts[i + 1].Y - pts[i].Y);
                 }
             }
