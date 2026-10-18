@@ -283,6 +283,11 @@ namespace Nvk.Cad
                 NvkLog.Write("[НВК] вставка по точке  CS=" + FmtPt(NvkSession.CsInsHas, NvkSession.CsIns)
                     + "  EP=" + FmtPt(NvkSession.EpInsHas, NvkSession.EpIns)
                     + "  VOL=" + FmtPt(NvkSession.VolInsHas, NvkSession.VolIns));
+                NvkLog.Write("[НВК] уровни NOD"
+                    + "  CS L1=" + FmtPt(NvkSession.CsHas[0], NvkSession.CsLvl[0])
+                    + "  L2=" + FmtPt(NvkSession.CsHas[1], NvkSession.CsLvl[1])
+                    + "  EP L1=" + FmtPt(NvkSession.EpHas[0], NvkSession.EpLvl[0])
+                    + "  L2=" + FmtPt(NvkSession.EpHas[1], NvkSession.EpLvl[1]));
             }
             ApplyTable();
             CaptureCannoscale();
@@ -385,14 +390,14 @@ namespace Nvk.Cad
             }
             if (!NvkSession.VolInsHas)
             {
-                if (NvkSession.EpInsHas)
+                if (NvkSession.CsInsHas)
                 {
-                    NvkSession.VolIns = new Point3d(NvkSession.EpIns.X, NvkSession.EpIns.Y - 40.0, 0.0);
+                    NvkSession.VolIns = new Point3d(NvkSession.CsIns.X, NvkSession.CsIns.Y - 40.0, 0.0);
                     NvkSession.VolInsHas = true;
                 }
-                else if (NvkSession.CsInsHas)
+                else if (NvkSession.EpInsHas)
                 {
-                    NvkSession.VolIns = new Point3d(NvkSession.CsIns.X, NvkSession.CsIns.Y - 80.0, 0.0);
+                    NvkSession.VolIns = new Point3d(NvkSession.EpIns.X - 80.0, NvkSession.EpIns.Y - 40.0, 0.0);
                     NvkSession.VolInsHas = true;
                 }
                 else

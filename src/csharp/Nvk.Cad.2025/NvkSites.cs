@@ -372,11 +372,11 @@ namespace Nvk.Cad
             }
         }
 
-        /// <summary>Вставка по точке: раскладка как у шаблона (участок 43-44-46 и т.п.).</summary>
+        /// <summary>Вставка по точке: раскладка шаблона или NOD 43-44-46 по умолчанию.</summary>
         public static bool PlaceInsertsAt(double x, double y)
         {
             var src = InsertTemplate;
-            if (src == null || !src.Any) src = new SiteLayout();
+            if (src == null || !src.Any) src = SiteLayout.NodDefault();
             var at = src.At(x, y);
             ToSession(at);
             return at.Any;

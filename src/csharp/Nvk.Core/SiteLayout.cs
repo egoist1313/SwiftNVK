@@ -4,19 +4,27 @@ namespace Nvk.Core
 {
     /// <summary>
     /// Точки вставки CS / EP / VOL и сдвинутые уровни.
-    /// На 43-44-46: CS-сетка 2 в ряду, шагX≈24.2, шагY=100 (CsYgap);
-    /// EP = CS+(80,0) пять листов вниз шагY профиля;
-    /// VOL = EP+(0,−40) пять блоков вниз, COORD справа, SAMP ниже.
-    /// Уровни CS/EP после «Двигать» хранятся отдельно и едут вместе с точкой.
+    /// Дефолт как NOD 43-44-46: VOL у точки CS+(0,−40);
+    /// уровни L1…L5 в ряд вправо шаг 700; CS каждого уровня
+    /// справа от EP того же уровня (CS L1 = CS+(771.8,−190)).
+    /// Сетка сечений 2 в ряду, шагX≈24.2, шагY=100.
+    /// Уровни после «Двигать» едут вместе с точкой.
     /// </summary>
     public sealed class SiteLayout
     {
         public const double DefaultEpDx = 80.0;
         public const double DefaultEpDy = 0.0;
-        public const double DefaultVolFromEpDx = 0.0;
-        public const double DefaultVolFromEpDy = -40.0;
-        public const double DefaultVolFromCsDx = 0.0;
-        public const double DefaultVolFromCsDy = -80.0;
+        public const double DefaultVolDx = 0.0;
+        public const double DefaultVolDy = -40.0;
+        /// <summary>Шаг X между L1…L5. Лог 43-44-46: EP/CS L2−L1 = 700.</summary>
+        public const double DefaultLevelPitchX = 700.0;
+        /// <summary>CS L1 относительно CS-DRAW. 2343768.9 − 2342997.1.</summary>
+        public const double DefaultCsLvlDx = 771.8;
+        public const double DefaultCsLvlDy = -190.0;
+        /// <summary>EP L1 относительно CS-DRAW. 2343637.6 − 2342997.1.</summary>
+        public const double DefaultEpLvlDx = 640.5;
+        public const double DefaultEpLvlDy = 0.0;
+        public const int DefaultCols = 2;
 
         public double Ox, Oy;
         public bool HasOrigin;
@@ -109,15 +117,46 @@ namespace Nvk.Core
             return r;
         }
 
+        /// <summary>Раскладка NOD 43-44-46 в начале координат — база для вставки по точке.</summary>
+        public static SiteLayout NodDefault()
+        {
+            var t = new SiteLayout();
+            t.SetCs(0.0, 0.0);
+            t.Ox = 0.0;
+            t.Oy = 0.0;
+            t.HasOrigin = true;
+            t.FillDefaults();
+            return t;
+        }
+
         public void FillDefaults()
         {
             if (!HasCs && HasOrigin) SetCs(Ox, Oy);
             if (!HasEp && HasCs)
                 SetEp(CsX + DefaultEpDx, CsY + DefaultEpDy);
-            if (!HasVol && HasEp)
-                SetVol(EpX + DefaultVolFromEpDx, EpY + DefaultVolFromEpDy);
-            else if (!HasVol && HasCs)
-                SetVol(CsX + DefaultVolFromCsDx, CsY + DefaultVolFromCsDy);
+            if (!HasVol && HasCs)
+                SetVol(CsX + DefaultVolDx, CsY + DefaultVolDy);
+            else if (!HasVol && HasEp)
+                SetVol(EpX - DefaultEpDx + DefaultVolDx, EpY + DefaultVolDy);
+            if (Cols <= 0) Cols = DefaultCols;
+            FillLevelDefaults();
+        }
+
+        /// <summary>
+        /// Если уровней ещё нет — L1…L5 как в NOD 43-44-46 (ряд вправо).
+        /// Уже сдвинутые «Двигать» не трогаем.
+        /// </summary>
+        public void FillLevelDefaults()
+        {
+            if (!HasCs) return;
+            for (int i = 0; i < 5; i++)
+                if (CsL[i] || EpL[i]) return;
+            for (int i = 0; i < 5; i++)
+            {
+                double px = i * DefaultLevelPitchX;
+                SetCsLvl(i, CsX + DefaultCsLvlDx + px, CsY + DefaultCsLvlDy);
+                SetEpLvl(i, CsX + DefaultEpLvlDx + px, CsY + DefaultEpLvlDy);
+            }
         }
 
         public void Shift(double dx, double dy)

@@ -15,7 +15,7 @@ namespace Nvk.Core.Tests
             Assert.Equal(200, at.CsY, 6);
             Assert.Equal(180, at.EpX, 6);
             Assert.Equal(200, at.EpY, 6);
-            Assert.Equal(180, at.VolX, 6);
+            Assert.Equal(100, at.VolX, 6);
             Assert.Equal(160, at.VolY, 6);
         }
 
@@ -63,8 +63,41 @@ namespace Nvk.Core.Tests
             Assert.Equal(20, at.CsY, 6);
             Assert.Equal(90, at.EpX, 6);
             Assert.Equal(20, at.EpY, 6);
-            Assert.Equal(90, at.VolX, 6);
+            Assert.Equal(10, at.VolX, 6);
             Assert.Equal(-20, at.VolY, 6);
+        }
+
+        [Fact]
+        public void EmptyTemplatePlacesLevelsLike4346Log()
+        {
+            var at = new SiteLayout().At(2342997.1, 476680.0);
+            Assert.Equal(2, at.Cols);
+            Assert.True(at.CsL[0]);
+            Assert.True(at.EpL[0]);
+            Assert.Equal(2343768.9, at.CsLx[0], 4);
+            Assert.Equal(476490.0, at.CsLy[0], 4);
+            Assert.Equal(2344468.9, at.CsLx[1], 4);
+            Assert.Equal(476490.0, at.CsLy[1], 4);
+            Assert.Equal(2345168.9, at.CsLx[2], 4);
+            Assert.Equal(2343637.6, at.EpLx[0], 4);
+            Assert.Equal(476680.0, at.EpLy[0], 4);
+            Assert.Equal(2344337.6, at.EpLx[1], 4);
+            Assert.Equal(476680.0, at.EpLy[1], 4);
+            Assert.Equal(2342997.1, at.VolX, 4);
+            Assert.Equal(476640.0, at.VolY, 4);
+        }
+
+        [Fact]
+        public void MovedLevelsStayWhenRebasing()
+        {
+            var t = new SiteLayout();
+            t.SetCs(0, 0);
+            t.SetCsLvl(0, 10, 20);
+            var at = t.At(100, 200);
+            Assert.True(at.CsL[0]);
+            Assert.False(at.CsL[1]);
+            Assert.Equal(110, at.CsLx[0], 6);
+            Assert.Equal(220, at.CsLy[0], 6);
         }
     }
 }
