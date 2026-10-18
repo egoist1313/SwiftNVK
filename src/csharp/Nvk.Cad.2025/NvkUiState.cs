@@ -76,6 +76,8 @@ namespace Nvk.Cad
         public static bool DoVol = true;
         /// <summary>Объёмы, пробы и координаты колодцев по всем участкам; нумерация сечений сквозная.</summary>
         public static bool VolJoinSites = true;
+        /// <summary>В имени участка и %%SEG%% убрать суффикс в скобках: 12(1) → 12.</summary>
+        public static bool MhStripParen;
         public static bool DoPlan = true;
         public static bool DoSheets = true;
         public static double VpScaleEp = 500;
@@ -373,6 +375,7 @@ namespace Nvk.Cad
             Pair(rb, "DO_POPER", DoPoper ? "1" : "0");
             Pair(rb, "DO_VOL", DoVol ? "1" : "0");
             Pair(rb, "VOL_JOIN", VolJoinSites ? "1" : "0");
+            Pair(rb, "MH_STRIP", MhStripParen ? "1" : "0");
             Pair(rb, "DO_PLAN", DoPlan ? "1" : "0");
             Pair(rb, "DO_SHEETS", DoSheets ? "1" : "0");
             Pair(rb, "VP_SC_EP", F(VpScaleEp, 0));
@@ -590,6 +593,7 @@ namespace Nvk.Cad
             DoPoper = true;
             DoVol = true;
             VolJoinSites = true;
+            MhStripParen = false;
             DoPlan = true;
             DoSheets = true;
             VpScaleEp = 500;
@@ -744,6 +748,7 @@ namespace Nvk.Cad
                 case "DO_POPER": DoPoper = v != "0"; break;
                 case "DO_VOL": DoVol = v != "0"; break;
                 case "VOL_JOIN": VolJoinSites = v != "0"; break;
+                case "MH_STRIP": MhStripParen = v != "0"; break;
                 case "DO_PLAN": DoPlan = v != "0"; break;
                 case "DO_SHEETS": DoSheets = v != "0"; break;
                 case "VP_SC_EP": VpScaleEp = D(v, VpScaleEp); if (VpScaleEp < 1) VpScaleEp = 500; break;

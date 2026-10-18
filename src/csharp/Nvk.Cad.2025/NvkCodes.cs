@@ -206,7 +206,7 @@ namespace Nvk.Cad
                     var s = sites[i];
                     if (s == null) continue;
                     if (!string.IsNullOrEmpty(s.Name))
-                        names.Add(s.Name);
+                        names.Add(SiteTitle.CleanTitle(s.Name, NvkUiState.MhStripParen));
                     if (s.Runs == null) continue;
                     for (int j = 0; j < s.Runs.Count; j++)
                     {
@@ -218,7 +218,7 @@ namespace Nvk.Cad
             }
             if (names.Count == 0 && NvkSites.Current != null
                 && !string.IsNullOrEmpty(NvkSites.Current.Name))
-                names.Add(NvkSites.Current.Name);
+                names.Add(SiteTitle.CleanTitle(NvkSites.Current.Name, NvkUiState.MhStripParen));
             if (nets.Count == 0)
             {
                 var runs = NvkSession.AllRuns();

@@ -58,5 +58,57 @@ namespace Nvk.Core.Tests
             });
             Assert.Equal("3-4", SiteTitle.FromChain(chain));
         }
+
+        [Fact]
+        public void StripParenDropsBracketSuffix()
+        {
+            Assert.Equal("12", SiteTitle.StripParen("12(1)"));
+            Assert.Equal("12", SiteTitle.StripParen("12 (2)"));
+            Assert.Equal("К12", SiteTitle.StripParen("К12(1)"));
+            Assert.Equal("12", SiteTitle.Token("12(1)", true));
+            Assert.Equal("12", SiteTitle.Token("К12 (2)", true));
+            Assert.Equal("12(1)", SiteTitle.Token("12(1)", false));
+        }
+
+        [Fact]
+        public void FromChainStripParenJoinsBareNumbers()
+        {
+            var chain = Chain.Sort(new List<PipeSeg>
+            {
+                new PipeSeg
+                {
+                    X0 = 0, Y0 = 0, X1 = 10, Y1 = 0,
+                    InvertStart = 1, InvertEnd = 1, Diam = 0.3,
+                    StartName = "12(1)", EndName = "13 (2)"
+                }
+            });
+            Assert.Equal("12-13", SiteTitle.FromChain(chain, true));
+            Assert.Equal("12(1)-13 (2)", SiteTitle.FromChain(chain, false));
+        }
+
+        [Fact]
+        public void StripParenCollapsesDuplicateAfterClean()
+        {
+            var chain = Chain.Sort(new List<PipeSeg>
+            {
+                new PipeSeg
+                {
+                    X0 = 0, Y0 = 0, X1 = 10, Y1 = 0,
+                    InvertStart = 1, InvertEnd = 1, Diam = 0.3,
+                    StartName = "12(1)", EndName = "12(2)"
+                }
+            });
+            Assert.Equal("12", SiteTitle.FromChain(chain, true));
+        }
+
+        [Fact]
+        public void CleanTitleKeepsTwoSitesAndDropsParens()
+        {
+            Assert.Equal("12-13; 67-68",
+                SiteTitle.CleanTitle("12(1)-13 (2); 67-68", true));
+            Assert.Equal("12", SiteTitle.CleanTitle("12(1)-12(2)", true));
+            Assert.Equal("Участок 1", SiteTitle.CleanTitle("Участок 1", true));
+            Assert.Equal("12(1)-13", SiteTitle.CleanTitle("12(1)-13", false));
+        }
     }
 }

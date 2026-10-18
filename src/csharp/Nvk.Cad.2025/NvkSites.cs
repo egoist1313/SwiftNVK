@@ -269,7 +269,7 @@ namespace Nvk.Cad
                         if (pipe != null) segs.Add(PipeReader.Read(tr, pipe));
                     }
                     tr.Commit();
-                    string name = SiteTitle.FromChains(Chain.Components(segs));
+                    string name = SiteTitle.FromChains(Chain.Components(segs), NvkUiState.MhStripParen);
                     if (!string.IsNullOrEmpty(name))
                         Current.Name = name;
                 }
@@ -286,7 +286,7 @@ namespace Nvk.Cad
                 var r = s.Runs[i];
                 if (r != null && r.Chain != null) chains.Add(r.Chain);
             }
-            string name = SiteTitle.FromChains(chains);
+            string name = SiteTitle.FromChains(chains, NvkUiState.MhStripParen);
             if (!string.IsNullOrEmpty(name))
                 s.Name = name;
         }
