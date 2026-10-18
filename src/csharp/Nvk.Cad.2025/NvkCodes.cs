@@ -7,8 +7,9 @@ using Exc = System.Exception;
 namespace Nvk.Cad
 {
     /// <summary>
-    /// Коды штампа: шаблон в XData TPL=, на листе поле CustomDP.
-    /// Каждый прогон обновляет свойства и пересчитывает поля.
+    /// Коды штампа: шаблон %%SEG%% и остальные в XData TPL=,
+    /// на листе подстановка значений. CustomDP пишем для ручных полей.
+    /// SetField с живым Field стирал текст — не ставим.
     /// Рамку не рисуем.
     /// </summary>
     static class NvkCodes
@@ -30,11 +31,9 @@ namespace Nvk.Cad
                 nLay++;
                 n += WalkSpace(tr, layout.BlockTableRecordId, net, seg, tol, type);
             }
-            try { db.EvaluateFields(); }
-            catch (Exc) { }
             string msg = "[НВК] коды net=\"" + (net ?? "") + "\" seg=\"" + (seg ?? "")
                 + "\"  листов " + nLay.ToString()
-                + "  полей " + n.ToString();
+                + "  подстановок " + n.ToString();
             return msg;
         }
 
@@ -119,33 +118,20 @@ namespace Nvk.Cad
             string tpl = NvkTag.Get1000(obj, NvkTag.TplKey);
             if (SheetCodes.HasCode(old))
                 tpl = old;
-            if (string.IsNullOrEmpty(tpl))
-            {
-                if (!SheetCodes.HasField(old)) return 0;
-                try
-                {
-                    if (!obj.IsWriteEnabled) obj.UpgradeOpen();
-                    EvalField(tr, obj);
-                }
-                catch (Exc) { }
-                return 1;
-            }
+            else if (string.IsNullOrEmpty(tpl) && SheetCodes.HasField(old))
+                tpl = SheetCodes.FromFieldText(old);
+            if (string.IsNullOrEmpty(tpl) || !SheetCodes.HasCode(tpl))
+                return 0;
             try { NvkTag.Put1000(tr, obj, NvkTag.TplKey, tpl); }
             catch (Exc ex) { NvkLog.Write("[НВК] коды TPL: " + ex.Message); }
 
-            string fieldText = SheetCodes.ToFieldText(tpl);
             string neu = SheetCodes.Subst(tpl, net, seg, tol, type);
             try
             {
                 if (!obj.IsWriteEnabled) obj.UpgradeOpen();
-                if (TrySetField(obj, fieldText, set))
-                    return 1;
-                if (!string.Equals(neu, old, StringComparison.Ordinal))
-                {
-                    set(neu);
-                    return 1;
-                }
-                return 0;
+                ClearField(tr, obj);
+                set(neu);
+                return 1;
             }
             catch (Exc ex)
             {
@@ -154,44 +140,26 @@ namespace Nvk.Cad
             }
         }
 
-        static void EvalField(Transaction tr, DBObject obj)
+        /// <summary>Снять пустое поле 0.210, иначе Contents не видно.</summary>
+        static void ClearField(Transaction tr, DBObject obj)
         {
-            if (obj == null || tr == null) return;
-            ObjectId fid;
-            try { fid = obj.GetField(); }
-            catch (Exc) { return; }
-            if (fid.IsNull) return;
-            Field f;
-            try { f = tr.GetObject(fid, OpenMode.ForWrite, false) as Field; }
-            catch (Exc) { return; }
-            if (f == null) return;
-            try { f.Evaluate(); }
-            catch (Exc) { }
-        }
-
-        static bool TrySetField(DBObject obj, string fieldText, Action<string> set)
-        {
-            if (string.IsNullOrEmpty(fieldText)
-                || fieldText.IndexOf("%<", StringComparison.Ordinal) < 0)
-                return false;
+            if (obj == null) return;
             try
             {
-                set(fieldText);
-                var f = new Field(fieldText);
-                obj.SetField(f);
-                try { f.Evaluate(); }
+                if (!obj.HasFields) return;
+                ObjectId fid = ObjectId.Null;
+                try { fid = obj.GetField(); }
                 catch (Exc) { }
-                return true;
-            }
-            catch (Exc)
-            {
+                obj.RemoveField();
+                if (fid.IsNull || tr == null) return;
                 try
                 {
-                    set(fieldText);
-                    return true;
+                    var f = tr.GetObject(fid, OpenMode.ForWrite, false) as Field;
+                    if (f != null && !f.IsErased) f.Erase();
                 }
-                catch (Exc) { return false; }
+                catch (Exc) { }
             }
+            catch (Exc) { }
         }
 
         public static void Collect(out string net, out string seg, out string tol, out string type)

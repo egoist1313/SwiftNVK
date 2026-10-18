@@ -63,6 +63,48 @@ namespace Nvk.Core
             return text.IndexOf("CustomDP.NVK_", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
+        /// <summary>Обратно из поля CustomDP в %%SEG%% и остальные (восстановить шаблон).</summary>
+        public static string FromFieldText(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text ?? "";
+            string t = StripField(text, PropNet, Net);
+            t = StripField(t, PropSeg, Seg);
+            t = StripField(t, PropTol, Tol);
+            t = StripField(t, PropType, Type);
+            return t;
+        }
+
+        static string StripField(string text, string prop, string code)
+        {
+            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(prop)) return text;
+            string needle = "CustomDP." + prop;
+            int i = 0;
+            var sb = new System.Text.StringBuilder();
+            while (i < text.Length)
+            {
+                int hit = text.IndexOf(needle, i, StringComparison.OrdinalIgnoreCase);
+                if (hit < 0)
+                {
+                    sb.Append(text, i, text.Length - i);
+                    break;
+                }
+                int lt = text.LastIndexOf("%<", hit, StringComparison.Ordinal);
+                int gt = text.IndexOf(">%", hit, StringComparison.Ordinal);
+                if (lt >= i && gt > hit)
+                {
+                    sb.Append(text, i, lt - i);
+                    sb.Append(code);
+                    i = gt + 2;
+                }
+                else
+                {
+                    sb.Append(text, i, hit + needle.Length - i);
+                    i = hit + needle.Length;
+                }
+            }
+            return sb.ToString();
+        }
+
         /// <summary>Уникальные имена через «; ». Пример: 40-41-42; 67-68.</summary>
         public static string JoinParts(IList<string> parts)
         {

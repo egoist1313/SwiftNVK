@@ -91,6 +91,15 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void FromFieldTextRestoresPlaceholders()
+        {
+            string t = SheetCodes.ToFieldText("уч. %%SEG%% сеть %%NET%%");
+            Assert.Equal("уч. %%SEG%% сеть %%NET%%", SheetCodes.FromFieldText(t));
+            Assert.Equal("%%TOL%%",
+                SheetCodes.FromFieldText("%<\\AcVar CustomDP.NVK_TOL \\f \"%tc1\">%"));
+        }
+
+        [Fact]
         public void TypeNameManyMixedWaterAndSewer()
         {
             Assert.Equal("водоснабжения", SheetCodes.TypeNameMany(new[] { "В1", "В2" }));
