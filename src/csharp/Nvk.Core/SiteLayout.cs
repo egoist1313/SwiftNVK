@@ -24,6 +24,8 @@ namespace Nvk.Core
         public double CsX, CsY; public bool HasCs;
         public double EpX, EpY; public bool HasEp;
         public double VolX, VolY; public bool HasVol;
+        /// <summary>Сечений в ряду. 2 = как 43-44-46. 0 = по длине продольника.</summary>
+        public int Cols;
 
         public readonly double[] CsLx = new double[5];
         public readonly double[] CsLy = new double[5];
@@ -138,7 +140,8 @@ namespace Nvk.Core
                 Ox = Ox, Oy = Oy, HasOrigin = HasOrigin,
                 CsX = CsX, CsY = CsY, HasCs = HasCs,
                 EpX = EpX, EpY = EpY, HasEp = HasEp,
-                VolX = VolX, VolY = VolY, HasVol = HasVol
+                VolX = VolX, VolY = VolY, HasVol = HasVol,
+                Cols = Cols
             };
             for (int i = 0; i < 5; i++)
             {

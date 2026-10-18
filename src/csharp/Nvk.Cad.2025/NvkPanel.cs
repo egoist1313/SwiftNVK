@@ -25,7 +25,7 @@ namespace Nvk.Cad
         static readonly Color C_WARN   = Color.FromArgb(160, 90, 24);
         // ──────────────────────────────────────────────────────────────────────
 
-        readonly TextBox _bedding, _zash, _asph, _gazn, _trot, _slopeL, _slopeR, _trenchL, _trenchR, _hwidth, _ygap;
+        readonly TextBox _bedding, _zash, _asph, _gazn, _trot, _slopeL, _slopeR, _trenchL, _trenchR, _hwidth, _ygap, _cols;
         readonly ComboBox _joint, _slopeU;
         readonly TextBox _hSc, _lSc, _csSc, _csTh, _textH, _textOff, _stations, _labW, _labH, _vpEp, _vpCs, _vpPlan;
         readonly CheckBox _blockCs, _showTags, _doCs, _doEp, _doPoper, _doVol, _volJoin, _doPlan, _doSheets;
@@ -156,6 +156,7 @@ namespace Nvk.Cad
             _slopeR  = Num(pPar, "Откос право m (0=вертикаль)", "0.00");
             _hwidth  = Num(pPar, "Полуширина TIN, м", "3.0");
             _ygap   = Num(pPar, "Шаг уровней CS, ед.", "100");
+            _cols   = Num(pPar, "Сечений в ряду", "2");
             _joint  = Combo(pPar, "Стык", new[] { "SOCKET", "WELD", "COUPLING" });
 
             pPar.Controls.Add(Head("Масштаб"));
@@ -305,6 +306,7 @@ namespace Nvk.Cad
             _slopeR.Text  = NvkUiState.SlopeR.ToString("0.###");
             _hwidth.Text  = NvkUiState.HalfWidth.ToString("0.#");
             _ygap.Text    = NvkUiState.CsYgap.ToString("0.#");
+            _cols.Text    = NvkUiState.CsCols.ToString();
             Pick(_joint, NvkUiState.Joint);
             _hSc.Text     = NvkUiState.HScale.ToString("0.#");
             _lSc.Text     = NvkUiState.LScale.ToString("0.#");
@@ -443,6 +445,8 @@ namespace Nvk.Cad
             NvkUiState.SlopeM    = NvkUiState.SlopeL > NvkUiState.SlopeR ? NvkUiState.SlopeL : NvkUiState.SlopeR;
             NvkUiState.HalfWidth = Parse(_hwidth, 3.0);
             NvkUiState.CsYgap    = Parse(_ygap, 100.0);
+            NvkUiState.CsCols    = (int)Parse(_cols, 2.0);
+            if (NvkUiState.CsCols < 0) NvkUiState.CsCols = 0;
             NvkUiState.Joint     = _joint.SelectedItem as string ?? "SOCKET";
             NvkUiState.HScale    = Parse(_hSc, 10);
             NvkUiState.LScale    = Parse(_lSc, 1);

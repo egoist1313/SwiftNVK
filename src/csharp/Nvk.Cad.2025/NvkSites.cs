@@ -329,6 +329,7 @@ namespace Nvk.Cad
                 if (NvkSession.EpHas != null && NvkSession.EpHas[i])
                     t.SetEpLvl(i, NvkSession.EpLvl[i].X, NvkSession.EpLvl[i].Y);
             }
+            t.Cols = NvkUiState.CsCols;
             t.ResolveOrigin();
             return t;
         }
@@ -363,6 +364,11 @@ namespace Nvk.Cad
                     NvkSession.EpLvl[i] = new Autodesk.AutoCAD.Geometry.Point3d(t.EpLx[i], t.EpLy[i], 0.0);
                     NvkSession.EpHas[i] = true;
                 }
+            }
+            if (t.Cols > 0)
+            {
+                NvkUiState.CsCols = t.Cols;
+                NvkSession.CsCols = t.Cols;
             }
         }
 

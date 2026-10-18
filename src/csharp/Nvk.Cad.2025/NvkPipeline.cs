@@ -573,6 +573,7 @@ namespace Nvk.Cad
             NvkUiState.ApplyTo(NewCfg(), t);
             NvkSession.Table = t;
             NvkSession.CsYgap = NvkUiState.CsYgap < 0.0 ? 0.0 : NvkUiState.CsYgap;
+            NvkSession.CsCols = NvkUiState.CsCols < 0 ? 0 : NvkUiState.CsCols;
         }
 
         static SectionConfig NewCfg()

@@ -3,7 +3,7 @@
 
 (vl-load-com)
 
-(setq *nvk-versija*        "0.205")
+(setq *nvk-versija*        "0.206")
 
 (defun nvk-def (sym val)
   (if (not (boundp sym)) (set sym val)))
@@ -81,6 +81,7 @@
 (setq *nvk-cs-scale*   1.0)    ; как l_scale в PipeBuild: 1 м = 1 ед. (изотропно)
 (setq *nvk-cs-text-h*  0.5)    ; текст таблиц сечения, отдельно от профиля
 (setq *nvk-cs-ygap*    100.0)  ; шаг между уровнями L1…L5 / отступ как CS_YGAP
+(setq *nvk-cs-cols*    2)      ; сечений в ряду (как 43-44-46)
 
 (setq *nvk-osh-override* nil)    ; nil = авто, число = ручной условный горизонт
 (setq *nvk-h-scale*    10.0)

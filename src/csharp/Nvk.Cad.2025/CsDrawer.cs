@@ -61,7 +61,7 @@ namespace Nvk.Cad
                 if (r != null && r.Chain != null && r.Chain.Total > chainLen)
                     chainLen = r.Chain.Total;
             double rowWidth = chainLen * (NvkUiState.LScale > 0.0 ? NvkUiState.LScale : 1.0);
-            int maxPerRow = CsAnnot.MaxPerRow(rowWidth, colGap);
+            int maxPerRow = CsAnnot.PerRow(NvkUiState.CsCols, rowWidth, colGap);
             int nStationRows = (nGeom + maxPerRow - 1) / maxPerRow;
             if (nStationRows < 1) nStationRows = 1;
             double groupStep = nStationRows * rowGap + 5.0 * th;
@@ -137,7 +137,8 @@ namespace Nvk.Cad
                  + (asBlock ? "  блоков " : "  групп ") + nIns
                  + "  шагX=" + colGap.ToString("0.0")
                  + "  шагY=" + rowGap.ToString("0.0")
-                 + "  в ряду " + maxPerRow.ToString();
+                 + "  в ряду " + maxPerRow.ToString()
+                 + (NvkUiState.CsCols > 0 ? " (NOD)" : "");
         }
 
         static string BlockName(string seg, ProfileKind kind, int i)

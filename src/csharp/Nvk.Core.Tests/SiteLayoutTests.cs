@@ -43,6 +43,17 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void AtKeepsColsFromTemplate()
+        {
+            var t = new SiteLayout();
+            t.SetCs(10, 20);
+            t.Cols = 2;
+            var at = t.At(100, 200);
+            Assert.Equal(2, at.Cols);
+            Assert.Equal(100, at.CsX, 6);
+        }
+
+        [Fact]
         public void EmptyTemplatePutsCsAtPickAndDefaultEpVol()
         {
             var t = new SiteLayout();

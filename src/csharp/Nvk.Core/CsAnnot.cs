@@ -298,6 +298,16 @@ namespace Nvk.Core
             return n < 1 ? 1 : n;
         }
 
+        /// <summary>
+        /// Сечений в ряду. specified&gt;0 — как в NOD/панели (43-44-46 = 2).
+        /// Иначе по длине продольника: короткий участок даёт 2, длинный — один ряд.
+        /// </summary>
+        public static int PerRow(int specified, double rowWidth, double slot)
+        {
+            if (specified > 0) return specified;
+            return MaxPerRow(rowWidth, slot);
+        }
+
         public static void Grid(int index, int maxPerRow, out int col, out int row)
         {
             if (maxPerRow < 1) maxPerRow = 1;

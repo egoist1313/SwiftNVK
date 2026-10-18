@@ -54,6 +54,8 @@ namespace Nvk.Cad
         public static double LScale = 1.0;
         public static double CsScale = 1.0;
         public static double CsYgap = 100.0;
+        /// <summary>Сечений в ряду. 2 = сетка 43-44-46. 0 = по длине продольника.</summary>
+        public static int CsCols = 2;
         public static double CsTextH = 0.5;
         public static double TextH = 2.5;
         public static double TextOff = 10.0;
@@ -341,6 +343,7 @@ namespace Nvk.Cad
             Pair(rb, "L1_PP", L1PavPat ?? "ANSI31");
             Pair(rb, "L1_PC", L1PavCol.ToString(Inv));
             Pair(rb, "CS_YGAP", F(CsYgap, 1));
+            Pair(rb, "CS_COLS", CsCols.ToString(Inv));
             Pair(rb, "JOINT", Joint ?? "SOCKET");
             Pair(rb, "SLOPE", F(SlopeM, 4));
             Pair(rb, "SLOPE_L", F(SlopeL, 4));
@@ -567,6 +570,7 @@ namespace Nvk.Cad
             LScale = 1.0;
             CsScale = 1.0;
             CsYgap = 100.0;
+            CsCols = 2;
             CsTextH = 0.5;
             TextH = 2.5;
             TextOff = 10.0;
@@ -709,6 +713,7 @@ namespace Nvk.Cad
                 case "L1_PP": L1PavPat = v; break;
                 case "L1_PC": L1PavCol = (short)D(v, L1PavCol); break;
                 case "CS_YGAP": CsYgap = D(v, CsYgap); break;
+                case "CS_COLS": CsCols = (int)D(v, CsCols); if (CsCols < 0) CsCols = 0; break;
                 case "JOINT": if (v.Length > 0) Joint = v; break;
                 case "SLOPE":
                 case "CS_SLOPE": SlopeM = D(v, SlopeM); break;

@@ -54,6 +54,14 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void PerRowKeepsNodColsOnLongChain()
+        {
+            Assert.Equal(2, CsAnnot.PerRow(2, 400.0, 24.0));
+            Assert.Equal(16, CsAnnot.PerRow(0, 400.0, 24.0));
+            Assert.Equal(2, CsAnnot.PerRow(0, 55.8, 22.0));
+        }
+
+        [Fact]
         public void HeaderIsSectionNumberOnly()
         {
             var g = G();
