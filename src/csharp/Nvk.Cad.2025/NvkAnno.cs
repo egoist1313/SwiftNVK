@@ -192,6 +192,7 @@ namespace Nvk.Cad
             if (e == null) return;
             try { e.Annotative = AnnotativeStates.True; }
             catch (Exc) { }
+            EnsureVisible(e);
         }
 
         /// <summary>Выноска: флаг аннотативности и масштабы листов, иначе на ВЭ другого масштаба её не видно.</summary>
