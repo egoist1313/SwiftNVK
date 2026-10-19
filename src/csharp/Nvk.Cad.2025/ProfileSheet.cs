@@ -116,6 +116,15 @@ namespace Nvk.Cad
             return h + tbl.TextH;
         }
 
+        /// <summary>Зазор таблицы: поле L1 «Таблица ниже низа, м».</summary>
+        static double TableGapM(TableCfg tbl)
+        {
+            double off = NvkUiState.TableOffsetM;
+            if (NvkSession.L1 != null)
+                off = NvkSession.L1.TableOffsetM;
+            return TableLayout.TableBelowM(off);
+        }
+
         public static void DrawOne(Database db, Transaction tr, BlockTableRecord ms,
             DomainResult last, Point3d o, double lSc, double hSc, double osh,
             ProfileKind kind, double th, int markOffset = 0)
@@ -165,7 +174,7 @@ namespace Nvk.Cad
                 Remember(kind, HeightSrc.RoadTop, cover, cover);
             }
             var tbl = NvkSession.Tbl();
-            double annGapM = tbl.AnnGap >= 0 ? tbl.AnnGap : 0.0;  // metres
+            double annGapM = TableGapM(tbl);
             double tableTop = y0 - annGapM * hSc;
             double ticksBot = tableTop;
             // oshDisplay: legend shows effective datum shifted down by the gap
@@ -200,7 +209,7 @@ namespace Nvk.Cad
                 }
             }
             double tableH = TableH(kind, tbl);
-            double annGapM = tbl.AnnGap >= 0.0 ? tbl.AnnGap : 0.0;
+            double annGapM = TableGapM(tbl);
             double pad = th * 3.0;
             double x0 = o.X - labW - th - pad;
             double x1 = o.X + L * lSc + pad;
@@ -527,7 +536,7 @@ namespace Nvk.Cad
                 mhPositions.Add(mhCh0);
                 if (mi < last.Chain.Segs.Count) mhCh0 += last.Chain.Segs[mi].Length2d;
             }
-            double yBot = o.Y - (tbl.AnnGap > 0 ? tbl.AnnGap * hSc : 0.0);
+            double yBot = o.Y - TableGapM(tbl) * hSc;
             short col = tbl.ProjectionColor == 256 ? (short)8 : tbl.ProjectionColor;
             foreach (var ch in mhPositions)
             {
@@ -1829,7 +1838,7 @@ namespace Nvk.Cad
             double xLft = o.X;
             double xRgt = o.X + last.Chain.Total * lSc;
             double dataL = xLft - th, dataR = xRgt + th, xLbl = dataL - labW;
-            double yTop = tableTop ?? (o.Y - (tbl.AnnGap > 0 ? tbl.AnnGap * hSc : 0.0));
+            double yTop = tableTop ?? (o.Y - TableGapM(tbl) * hSc);
             double tblH = 0.0;
             foreach (var row in spec)
             {

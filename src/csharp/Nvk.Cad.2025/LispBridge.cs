@@ -15,7 +15,7 @@ namespace Nvk.Cad
 {
     public sealed class LispBridge
     {
-        const string PingOk = "NVK ok 0.228";
+        const string PingOk = "NVK ok 0.229";
 
         [LispFunction("NVK-PING")]
         public static ResultBuffer Ping(ResultBuffer args)
@@ -153,7 +153,7 @@ namespace Nvk.Cad
             if (t.TextH <= 0.0) t.TextH = 2.5;
             if (t.CsTextH <= 0.0) t.CsTextH = 0.5;
             t.Annotative = NvkUiState.Annotative;
-            t.AnnGap = NvkUiState.AnnGap;
+            t.AnnGap = NvkUiState.TableOffsetM;
             t.DrawProjections = NvkUiState.DrawProjections;
             t.ProjectionColor = (short)NvkUiState.ProjectionColor;
             t.UseTextHeight = true;

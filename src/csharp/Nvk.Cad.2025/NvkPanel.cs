@@ -338,7 +338,7 @@ namespace Nvk.Cad
             _projFact.Checked  = NvkUiState.ProjFact;
             _singleSc.Checked  = NvkUiState.SingleScatter;
             _annot.Checked     = NvkUiState.Annotative;
-            _annGap.Text       = NvkUiState.AnnGap.ToString("0.#");
+            _annGap.Text       = NvkUiState.TableOffsetM.ToString("0.#");
             _pavAll.Checked    = NvkUiState.PavAll;
             _pickZones.Checked = NvkUiState.PickZones;
             _zones.Text        = NvkUiState.Zones ?? "";
@@ -487,7 +487,6 @@ namespace Nvk.Cad
             NvkUiState.ProjFact     = _projFact.Checked;
             NvkUiState.SingleScatter     = _singleSc.Checked;
             NvkUiState.Annotative     = _annot.Checked;
-            NvkUiState.AnnGap         = Parse(_annGap, 0);
             NvkUiState.PavAll         = _pavAll.Checked;
             NvkUiState.PickZones      = _pickZones.Checked;
             NvkUiState.Zones          = _zones.Text ?? "";
@@ -524,7 +523,13 @@ namespace Nvk.Cad
             if (string.IsNullOrEmpty(NvkUiState.BlackEarthHandle))
                 NvkUiState.UseBlackEarth = false;
             NvkUiState.L1ShowMh      = _l1mh.Checked;
-            NvkUiState.TableOffsetM  = Parse(_tblOff, 1.0);
+            double tblOff = Parse(_tblOff, 1.0);
+            double annGap = Parse(_annGap, 0);
+            if (Math.Abs(tblOff - NvkUiState.TableOffsetM) < 1e-9
+                && Math.Abs(annGap - NvkUiState.TableOffsetM) > 1e-9)
+                tblOff = annGap;
+            NvkUiState.TableOffsetM = tblOff;
+            NvkUiState.AnnGap = tblOff;
             NvkUiState.LabelRoad     = _labRoad.Text  ?? "";
             NvkUiState.LabelEarth    = _labEarth.Text ?? "";
             NvkUiState.LabelBottom   = _labBot.Text   ?? "";

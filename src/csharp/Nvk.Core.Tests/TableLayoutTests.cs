@@ -7,6 +7,16 @@ namespace Nvk.Core.Tests
     public class TableLayoutTests
     {
         [Fact]
+        public void TableBelowMClampsNegativeAndKeepsPositive()
+        {
+            Assert.Equal(0.0, TableLayout.TableBelowM(-3.0), 6);
+            Assert.Equal(0.0, TableLayout.TableBelowM(-0.001), 6);
+            Assert.Equal(0.0, TableLayout.TableBelowM(0.0), 6);
+            Assert.Equal(1.0, TableLayout.TableBelowM(1.0), 6);
+            Assert.Equal(5.5, TableLayout.TableBelowM(5.5), 6);
+        }
+
+        [Fact]
         public void RtosKeepsTrailingZeros()
         {
             Assert.Equal("10.50", TableLayout.Rtos(10.5, 2));

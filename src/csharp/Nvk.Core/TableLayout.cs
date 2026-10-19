@@ -108,6 +108,15 @@ namespace Nvk.Core
     {
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
+        /// <summary>
+        /// Зазор таблицы под низом профиля, м натуры (× h_scale).
+        /// Поле «Таблица ниже низа»; отрицательное = 0.
+        /// </summary>
+        public static double TableBelowM(double tableOffsetM)
+        {
+            return tableOffsetM < 0.0 ? 0.0 : tableOffsetM;
+        }
+
         public static string Rtos(double val, int precision)
         {
             if (precision <= 0)

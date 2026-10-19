@@ -166,7 +166,7 @@ namespace Nvk.Cad
             cfg.ScatterZashita = ScatterZashita;
             cfg.ScatterZasypka = ScatterZasypka;
             cfg.Annotative = Annotative;
-            cfg.AnnGap = AnnGap;
+            cfg.AnnGap = TableOffsetM;
             cfg.CsYgap = CsYgap;
             cfg.PlanEn = PlanEn;
             cfg.PlanInt = PlanInt;
@@ -186,10 +186,11 @@ namespace Nvk.Cad
             cfg.UsePipeWall = UsePipeWall;
             cfg.Walls = PipeWalls.Parse(string.IsNullOrWhiteSpace(Walls)
                 ? PipeWalls.Format(PipeWalls.KorsisSn8()) : Walls);
+            AnnGap = TableOffsetM;
             if (tbl != null)
             {
                 tbl.Annotative = Annotative;
-                tbl.AnnGap = AnnGap;
+                tbl.AnnGap = TableOffsetM;
                 tbl.DrawProjections = DrawProjections;
                 tbl.ProjectionColor = (short)ProjectionColor;
                 tbl.RoundTo = 2;
@@ -224,6 +225,10 @@ namespace Nvk.Cad
             s.ScatterAmp = scL1 > 1e-9 ? scL1 : ScatterRazr;
             s.ShowManholes = L1ShowMh;
             s.TableOffsetM = TableOffsetM;
+            if (NvkSession.L2 != null) NvkSession.L2.TableOffsetM = TableOffsetM;
+            if (NvkSession.L3 != null) NvkSession.L3.TableOffsetM = TableOffsetM;
+            if (NvkSession.L4 != null) NvkSession.L4.TableOffsetM = TableOffsetM;
+            if (NvkSession.L5 != null) NvkSession.L5.TableOffsetM = TableOffsetM;
             if (!string.IsNullOrEmpty(LabelRoad)) s.LabelRoad = LabelRoad;
             s.LabelEarth = ProfileRows.MigrateEarthLabel(LabelEarth);
             if (!string.IsNullOrEmpty(LabelBottom)) s.LabelBottom = LabelBottom;
