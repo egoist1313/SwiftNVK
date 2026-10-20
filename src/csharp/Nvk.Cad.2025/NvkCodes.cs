@@ -19,7 +19,9 @@ namespace Nvk.Cad
         {
             if (db == null || tr == null) return "[НВК] коды: нет чертежа";
             PutProps(db, net, seg, tol, type);
-            int n = 0, nLay = 0;
+            int planN = (int)Math.Round(NvkUiState.VpScalePlan);
+            if (planN < 1) planN = 500;
+            int n = 0, nLay = 0, nPlan = 0;
             var dict = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
             foreach (DBDictionaryEntry e in dict)
             {
@@ -29,11 +31,16 @@ namespace Nvk.Cad
                 catch (Exc) { continue; }
                 if (layout == null) continue;
                 nLay++;
-                n += WalkSpace(tr, layout.BlockTableRecordId, net, seg, tol, type);
+                int a, b;
+                WalkSpace(tr, layout.BlockTableRecordId, net, seg, tol, type, planN, out a, out b);
+                n += a;
+                nPlan += b;
             }
             string msg = "[НВК] коды net=\"" + (net ?? "") + "\" seg=\"" + (seg ?? "")
                 + "\"  листов " + nLay.ToString()
-                + "  подстановок " + n.ToString();
+                + "  подстановок " + n.ToString()
+                + "  план М1:" + planN.ToString()
+                + (nPlan > 0 ? " ×" + nPlan.ToString() : "");
             return msg;
         }
 
@@ -57,14 +64,16 @@ namespace Nvk.Cad
             table.Add(key, val ?? "");
         }
 
-        static int WalkSpace(Transaction tr, ObjectId btrId,
-            string net, string seg, string tol, string type)
+        static void WalkSpace(Transaction tr, ObjectId btrId,
+            string net, string seg, string tol, string type, int planN,
+            out int nCode, out int nPlan)
         {
-            if (btrId.IsNull) return 0;
+            nCode = 0;
+            nPlan = 0;
+            if (btrId.IsNull) return;
             BlockTableRecord btr;
             try { btr = (BlockTableRecord)tr.GetObject(btrId, OpenMode.ForRead); }
-            catch (Exc) { return 0; }
-            int n = 0;
+            catch (Exc) { return; }
             foreach (ObjectId id in btr)
             {
                 if (id.IsNull) continue;
@@ -75,30 +84,31 @@ namespace Nvk.Cad
                 var mt = ent as MText;
                 if (mt != null)
                 {
-                    n += Put(tr, mt, mt.Contents, v => mt.Contents = v, net, seg, tol, type);
+                    nCode += Put(tr, mt, mt.Contents, v => mt.Contents = v, net, seg, tol, type);
+                    nPlan += PutPlan(tr, mt, () => mt.Contents, v => mt.Contents = v, planN);
                     continue;
                 }
                 var tx = ent as DBText;
                 if (tx != null)
                 {
-                    n += Put(tr, tx, tx.TextString, v => tx.TextString = v, net, seg, tol, type);
+                    nCode += Put(tr, tx, tx.TextString, v => tx.TextString = v, net, seg, tol, type);
+                    nPlan += PutPlan(tr, tx, () => tx.TextString, v => tx.TextString = v, planN);
                     continue;
                 }
                 var br = ent as BlockReference;
                 if (br != null)
-                    n += WalkAttribs(tr, br, net, seg, tol, type);
+                    WalkAttribs(tr, br, net, seg, tol, type, planN, ref nCode, ref nPlan);
             }
-            return n;
         }
 
-        static int WalkAttribs(Transaction tr, BlockReference br,
-            string net, string seg, string tol, string type)
+        static void WalkAttribs(Transaction tr, BlockReference br,
+            string net, string seg, string tol, string type, int planN,
+            ref int nCode, ref int nPlan)
         {
-            int n = 0;
             AttributeCollection col;
             try { col = br.AttributeCollection; }
-            catch (Exc) { return 0; }
-            if (col == null) return 0;
+            catch (Exc) { return; }
+            if (col == null) return;
             foreach (ObjectId id in col)
             {
                 if (id.IsNull) continue;
@@ -106,9 +116,30 @@ namespace Nvk.Cad
                 try { att = tr.GetObject(id, OpenMode.ForRead) as AttributeReference; }
                 catch (Exc) { continue; }
                 if (att == null || att.IsErased) continue;
-                n += Put(tr, att, att.TextString, v => att.TextString = v, net, seg, tol, type);
+                nCode += Put(tr, att, att.TextString, v => att.TextString = v, net, seg, tol, type);
+                nPlan += PutPlan(tr, att, () => att.TextString, v => att.TextString = v, planN);
             }
-            return n;
+        }
+
+        static int PutPlan(Transaction tr, DBObject obj, Func<string> get, Action<string> set, int planN)
+        {
+            if (obj == null || get == null || set == null) return 0;
+            string old;
+            try { old = get(); }
+            catch (Exc) { return 0; }
+            string neu = ScaleText.SubstPlan(old, planN);
+            if (string.Equals(neu, old, StringComparison.Ordinal)) return 0;
+            try
+            {
+                if (!obj.IsWriteEnabled) obj.UpgradeOpen();
+                set(neu);
+                return 1;
+            }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] план М1: " + ex.Message);
+                return 0;
+            }
         }
 
         static int Put(Transaction tr, DBObject obj, string old, Action<string> set,
