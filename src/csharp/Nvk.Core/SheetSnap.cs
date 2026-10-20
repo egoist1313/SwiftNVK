@@ -5,7 +5,7 @@ namespace Nvk.Core
 {
     /// <summary>
     /// Снимок бумаги листов НВК: видовые, линии, тексты.
-    /// Временный шаблон — пока нет готовой рамки.
+    /// Стандарт — presets/sheets/snap.json, иначе StdPage A3.
     /// </summary>
     public sealed class SheetSnapFile
     {
@@ -151,19 +151,50 @@ namespace Nvk.Core
             return page != null && !string.IsNullOrWhiteSpace(page.Device);
         }
 
-        /// <summary>Общий плот: поле файла, иначе Разработка, иначе первый лист со снимком.</summary>
+        /// <summary>
+        /// Стандарт листа — снимок 0.222: A3 297×420, DWG To PDF, поворот 90°.
+        /// </summary>
+        public static SheetSnapPage StdPage()
+        {
+            return new SheetSnapPage
+            {
+                Device = "DWG To PDF.pc3",
+                Media = "ISO_full_bleed_A3_(297.00_x_420.00_MM)",
+                Units = "Millimeters",
+                PlotType = "Window",
+                Rotation = "Degrees090",
+                Ox = 0.0,
+                Oy = 0.0,
+                StdScale = false,
+                ScaleType = "StdScale1To1",
+                ScaleNum = 1.0,
+                ScaleDen = 1.0,
+                Style = "acad.ctb",
+                PlotStyles = false,
+                ScaleLw = false,
+                Centered = false,
+                Lineweights = true,
+                VpBorders = false,
+                PaperW = 297.0,
+                PaperH = 420.0
+            };
+        }
+
+        /// <summary>Общий плот: поле файла, иначе Разработка, иначе первый лист, иначе StdPage.</summary>
         public static SheetSnapPage DefaultPage(SheetSnapFile file)
         {
             if (HasPage(file != null ? file.Page : null)) return file.Page;
             var raz = Find(file, "Razrabotka");
             if (raz != null && HasPage(raz.Page)) return raz.Page;
-            if (file == null || file.Layouts == null) return null;
-            for (int i = 0; i < file.Layouts.Count; i++)
+            if (file != null && file.Layouts != null)
             {
-                var lay = file.Layouts[i];
-                if (lay != null && HasPage(lay.Page)) return lay.Page;
+                for (int i = 0; i < file.Layouts.Count; i++)
+                {
+                    var lay = file.Layouts[i];
+                    if (lay != null && HasPage(lay.Page)) return lay.Page;
+                }
             }
-            return null;
+            return StdPage();
         }
 
         public static SheetSnapPage PageOf(SheetSnapFile file, string kind)

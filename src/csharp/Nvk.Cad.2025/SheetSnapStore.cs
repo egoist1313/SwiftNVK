@@ -16,7 +16,8 @@ namespace Nvk.Cad
 {
     /// <summary>
     /// Снимок бумаги пяти листов: видовые + линии/тексты/вставки.
-    /// Файл presets/sheets/snap.json. Новые листы повторяют расстановку.
+    /// Файл presets/sheets/snap.json — стандартная расстановка (A3).
+    /// Нет файла — SheetSnap.StdPage (тот же плот).
     /// </summary>
     static class SheetSnapStore
     {

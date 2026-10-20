@@ -14,17 +14,17 @@ namespace Nvk.Core
         public LineStyle Top { get; set; }
         public LineStyle Bot { get; set; }
         /// <summary>Вертикальные риски сечений на продольнике. По умолчанию ACI 129.</summary>
-        public LineStyle CsLine { get; set; } = LineStyle.Of(129, "Continuous", 30);
+        public LineStyle CsLine { get; set; } = LineStyle.Of(129, "Continuous", 15);
 
         public static SheetStyle Pesok()
         {
             return new SheetStyle
             {
-                Hatch = FillStyle.Of("ANSI31", 5, 1),
-                Cover = LineStyle.Rgb(255, 0, 0, "DASHED", 18),
-                Top = LineStyle.Of(5, "Continuous", 30),
-                Bot = LineStyle.Of(5, "Continuous", 30),
-                CsLine = LineStyle.Of(129, "Continuous", 30)
+                Hatch = FillStyle.Rgb("ANSI31", 0, 0, 255, 1),
+                Cover = LineStyle.Rgb(255, 0, 0, "DASHED", 15),
+                Top = LineStyle.Rgb(0, 0, 255, "Continuous", 15),
+                Bot = LineStyle.Rgb(0, 0, 255, "Continuous", 15),
+                CsLine = LineStyle.Of(129, "Continuous", 15)
             };
         }
 
@@ -33,10 +33,10 @@ namespace Nvk.Core
             return new SheetStyle
             {
                 Hatch = null,
-                Cover = LineStyle.Rgb(255, 0, 0, "DASHED", 18),
-                Top = LineStyle.Rgb(255, 0, 0, "Continuous", 30),
-                Bot = LineStyle.Rgb(255, 0, 0, "Continuous", 30),
-                CsLine = LineStyle.Of(129, "Continuous", 30)
+                Cover = LineStyle.Rgb(255, 0, 0, "DASHED", 15),
+                Top = LineStyle.Rgb(255, 0, 0, "Continuous", 15),
+                Bot = LineStyle.Rgb(255, 0, 0, "Continuous", 15),
+                CsLine = LineStyle.Of(129, "Continuous", 15)
             };
         }
 
@@ -44,11 +44,11 @@ namespace Nvk.Core
         {
             return new SheetStyle
             {
-                Hatch = FillStyle.Of("AR-SAND", 5, 0.1),
-                Cover = LineStyle.Rgb(255, 0, 0, "DASHED", 18),
-                Top = LineStyle.Of(1, "Continuous", 30),
-                Bot = LineStyle.Of(5, "Continuous", 30),
-                CsLine = LineStyle.Of(129, "Continuous", 30)
+                Hatch = FillStyle.Rgb("AR-SAND", 0, 0, 255, 0.1),
+                Cover = LineStyle.Rgb(255, 0, 0, "DASHED", 15),
+                Top = LineStyle.Rgb(255, 0, 0, "Continuous", 15),
+                Bot = LineStyle.Rgb(0, 0, 255, "Continuous", 15),
+                CsLine = LineStyle.Of(129, "Continuous", 15)
             };
         }
 
@@ -56,13 +56,13 @@ namespace Nvk.Core
         {
             return new SheetStyle
             {
-                Hatch = FillStyle.Of("DOTS", 5, 0.2),
-                HatchSand = FillStyle.Of("AR-SAND", 5, 0.1),
-                HatchSoil = FillStyle.Of("DOTS", 5, 0.2),
-                Cover = LineStyle.Rgb(255, 0, 0, "DASHED", 18),
-                Top = LineStyle.Of(1, "Continuous", 30),
-                Bot = LineStyle.Of(5, "Continuous", 30),
-                CsLine = LineStyle.Of(129, "Continuous", 30)
+                Hatch = FillStyle.Rgb("DOTS", 0, 0, 255, 0.2),
+                HatchSand = FillStyle.Rgb("AR-SAND", 0, 0, 255, 0.1),
+                HatchSoil = FillStyle.Rgb("DOTS", 0, 0, 255, 0.2),
+                Cover = LineStyle.Rgb(255, 0, 0, "DASHED", 15),
+                Top = LineStyle.Rgb(255, 0, 0, "Continuous", 15),
+                Bot = LineStyle.Rgb(255, 0, 0, "Continuous", 15),
+                CsLine = LineStyle.Of(129, "Continuous", 15)
             };
         }
     }

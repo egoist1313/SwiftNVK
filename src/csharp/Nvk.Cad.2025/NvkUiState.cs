@@ -36,13 +36,13 @@ namespace Nvk.Cad
         public static short L1RoadCol = 1;
         public static short L1EarthCol = 5;
         public static short L1BotCol = 1;
-        public static string L1RoadLt = "Continuous";
+        public static string L1RoadLt = "DASHED";
         public static string L1EarthLt = "Continuous";
         public static string L1BotLt = "Continuous";
         public static string L1HatPat = "ANSI31";
-        public static short L1HatCol = 5;
+        public static short L1HatCol = 0;
         public static string L1PavPat = "ANSI31";
-        public static short L1PavCol = 5;
+        public static short L1PavCol = 0;
         public static string Joint = "SOCKET";
         public static double SlopeM = 0.0;
         public static double SlopeL = 0.0;
@@ -68,7 +68,7 @@ namespace Nvk.Cad
         public static double LabelColW = 0.0;
         public static bool BlockCs = true;
         public static bool BlockEp = false;
-        public static bool ShowLineTags = true;
+        public static bool ShowLineTags = false;
         public static string Stations = "AUTO";
         public static bool DoCs = true;
         public static bool DoEp = true;
@@ -77,10 +77,10 @@ namespace Nvk.Cad
         /// <summary>Объёмы, пробы и координаты колодцев по всем участкам; нумерация сечений сквозная.</summary>
         public static bool VolJoinSites = true;
         /// <summary>В имени участка и %%SEG%% убрать суффикс в скобках: 12(1) → 12.</summary>
-        public static bool MhStripParen;
+        public static bool MhStripParen = true;
         public static bool DoPlan = true;
         public static bool DoSheets = true;
-        public static double VpScaleEp = 500;
+        public static double VpScaleEp = 1000;
         public static double VpScaleCs = 200;
         public static double VpScalePlan = 500;
         public static bool ProjFact;
@@ -94,12 +94,12 @@ namespace Nvk.Cad
         public static double ScatterZashita = 0.05;
         public static double ScatterZasypka = 0.05;
         public static bool Annotative;
-        public static double AnnGap = 10.0;
+        public static double AnnGap = 1.0;
         public static bool PavAll;
         public static bool PickZones;
         public static string Zones = "";
         public static bool UsePipeWall = true;
-        public static string Walls = "";
+        public static string Walls = PipeWalls.Format(PipeWalls.KorsisSn8());
         public static bool PlanEn = true;
         public static double PlanInt = 50.0;
         public static double PlanMin = 15.0;
@@ -232,15 +232,15 @@ namespace Nvk.Cad
             if (!string.IsNullOrEmpty(LabelRoad)) s.LabelRoad = LabelRoad;
             s.LabelEarth = ProfileRows.MigrateEarthLabel(LabelEarth);
             if (!string.IsNullOrEmpty(LabelBottom)) s.LabelBottom = LabelBottom;
-            if (s.Road == null) s.Road = LineStyle.Rgb(255, 0, 0, "DASHED", 30);
-            if (s.Earth == null) s.Earth = LineStyle.Rgb(0, 0, 255, "Continuous", 30);
-            if (s.Bottom == null) s.Bottom = LineStyle.Rgb(255, 0, 0, "Continuous", 30);
-            if (s.CsLine == null) s.CsLine = LineStyle.Of(129, "Continuous", 30);
+            if (s.Road == null) s.Road = LineStyle.Rgb(255, 0, 0, "DASHED", 15);
+            if (s.Earth == null) s.Earth = LineStyle.Rgb(0, 0, 255, "Continuous", 15);
+            if (s.Bottom == null) s.Bottom = LineStyle.Rgb(255, 0, 0, "Continuous", 15);
+            if (s.CsLine == null) s.CsLine = LineStyle.Of(129, "Continuous", 15);
             if (!string.IsNullOrEmpty(L1RoadLt)) s.Road.Linetype = L1RoadLt;
             if (!string.IsNullOrEmpty(L1EarthLt)) s.Earth.Linetype = L1EarthLt;
             if (!string.IsNullOrEmpty(L1BotLt)) s.Bottom.Linetype = L1BotLt;
-            if (s.HatchExcavation == null) s.HatchExcavation = FillStyle.Of("ANSI31", 5, 1);
-            if (s.HatchPavement == null) s.HatchPavement = FillStyle.Of("ANSI31", 5, 1);
+            if (s.HatchExcavation == null) s.HatchExcavation = FillStyle.Rgb("ANSI31", 0, 0, 255, 1);
+            if (s.HatchPavement == null) s.HatchPavement = FillStyle.Rgb("ANSI31", 128, 128, 128, 1);
             if (string.IsNullOrEmpty(s.HatchExcavation.Pattern) && !string.IsNullOrEmpty(L1HatPat))
                 s.HatchExcavation.Pattern = L1HatPat;
             if (string.IsNullOrEmpty(s.HatchPavement.Pattern) && !string.IsNullOrEmpty(L1PavPat))
@@ -593,13 +593,13 @@ namespace Nvk.Cad
             L1RoadCol = 1;
             L1EarthCol = 5;
             L1BotCol = 1;
-            L1RoadLt = "Continuous";
+            L1RoadLt = "DASHED";
             L1EarthLt = "Continuous";
             L1BotLt = "Continuous";
             L1HatPat = "ANSI31";
-            L1HatCol = 5;
+            L1HatCol = 0;
             L1PavPat = "ANSI31";
-            L1PavCol = 5;
+            L1PavCol = 0;
             Joint = "SOCKET";
             SlopeM = 0.0;
             SlopeL = 0.0;
@@ -624,17 +624,17 @@ namespace Nvk.Cad
             LabelColW = 0.0;
             BlockCs = true;
             BlockEp = false;
-            ShowLineTags = true;
+            ShowLineTags = false;
             Stations = "AUTO";
             DoCs = true;
             DoEp = true;
             DoPoper = true;
             DoVol = true;
             VolJoinSites = true;
-            MhStripParen = false;
+            MhStripParen = true;
             DoPlan = true;
             DoSheets = true;
-            VpScaleEp = 500;
+            VpScaleEp = 1000;
             VpScaleCs = 200;
             VpScalePlan = 500;
             ProjFact = false;
@@ -648,12 +648,12 @@ namespace Nvk.Cad
             ScatterZashita = 0.05;
             ScatterZasypka = 0.05;
             Annotative = false;
-            AnnGap = 10.0;
+            AnnGap = 1.0;
             PavAll = false;
             PickZones = false;
             Zones = "";
             UsePipeWall = true;
-            Walls = "";
+            Walls = PipeWalls.Format(PipeWalls.KorsisSn8());
             PlanEn = true;
             PlanInt = 50.0;
             PlanMin = 15.0;
@@ -789,7 +789,7 @@ namespace Nvk.Cad
                 case "MH_STRIP": MhStripParen = v != "0"; break;
                 case "DO_PLAN": DoPlan = v != "0"; break;
                 case "DO_SHEETS": DoSheets = v != "0"; break;
-                case "VP_SC_EP": VpScaleEp = D(v, VpScaleEp); if (VpScaleEp < 1) VpScaleEp = 500; break;
+                case "VP_SC_EP": VpScaleEp = D(v, VpScaleEp); if (VpScaleEp < 1) VpScaleEp = 1000; break;
                 case "VP_SC_CS": VpScaleCs = D(v, VpScaleCs); if (VpScaleCs < 1) VpScaleCs = 200; break;
                 case "VP_SC_PLAN": VpScalePlan = D(v, VpScalePlan); if (VpScalePlan < 1) VpScalePlan = 500; break;
                 case "PROJ_FACT": ProjFact = v != "0"; break;

@@ -243,7 +243,7 @@ namespace Nvk.Cad
             if (hatchTop.Count >= 2 && bot.Count >= 2)
             {
                 var hx = HatchPat.ForKind(ProfileKind.Razrabotka, st, null)
-                    ?? FillStyle.Of("ANSI31", 5, 1);
+                    ?? FillStyle.Rgb("ANSI31", 0, 0, 255, 1);
                 double hxSc = HatchPat.Scale(hx);
                 if (gapAtMh)
                     HatchBandGapped(ms, tr, layer, hatchTop, bot, last, o, lSc, hx.Pattern, hxSc, CadColor.Of(hx));

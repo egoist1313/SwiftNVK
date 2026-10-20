@@ -73,7 +73,7 @@ namespace Nvk.Core
 
         static LineStyle CloneLine(LineStyle src)
         {
-            if (src == null) return LineStyle.Of(129, "Continuous", 30);
+            if (src == null) return LineStyle.Of(129, "Continuous", 15);
             return new LineStyle
             {
                 Color = src.Color,
@@ -87,7 +87,7 @@ namespace Nvk.Core
 
         static FillStyle CloneFill(FillStyle src)
         {
-            if (src == null) return FillStyle.Of("ANSI31", 5, 1);
+            if (src == null) return FillStyle.Rgb("ANSI31", 0, 0, 255, 1);
             return new FillStyle
             {
                 Pattern = src.Pattern ?? "ANSI31",

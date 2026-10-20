@@ -105,5 +105,18 @@ namespace Nvk.Core.Tests
             Assert.Equal("None", SheetSnap.PageOf(file, "Truba").Device);
             Assert.Equal("PDF.pc3", SheetSnap.PageOf(file, "Zasypka").Device);
         }
+
+        [Fact]
+        public void EmptyFileFallsBackToStdA3()
+        {
+            var p = SheetSnap.DefaultPage(null);
+            Assert.NotNull(p);
+            Assert.Equal("DWG To PDF.pc3", p.Device);
+            Assert.Contains("A3", p.Media);
+            Assert.Equal(297.0, p.PaperW, 6);
+            Assert.Equal(420.0, p.PaperH, 6);
+            Assert.Equal("Degrees090", p.Rotation);
+            Assert.Equal(p.Device, SheetSnap.StdPage().Device);
+        }
     }
 }

@@ -41,7 +41,7 @@ namespace Nvk.Core
                 if (l1 != null && l1.HatchExcavation != null
                     && !string.IsNullOrEmpty(l1.HatchExcavation.Pattern))
                     return l1.HatchExcavation;
-                return FillStyle.Of("ANSI31", 5, 1.0);
+                return FillStyle.Rgb("ANSI31", 0, 0, 255, 1.0);
             }
             if (sheet != null && sheet.Hatch != null
                 && !string.IsNullOrEmpty(sheet.Hatch.Pattern))
@@ -49,13 +49,13 @@ namespace Nvk.Core
             switch (kind)
             {
                 case ProfileKind.Pesok:
-                    return FillStyle.Of("ANSI31", 5, 1);
+                    return FillStyle.Rgb("ANSI31", 0, 0, 255, 1);
                 case ProfileKind.Zashita:
-                    return FillStyle.Of("AR-SAND", 5, SandScale);
+                    return FillStyle.Rgb("AR-SAND", 0, 0, 255, SandScale);
                 case ProfileKind.Zasypka:
-                    return FillStyle.Of("DOTS", 5, SoilScale);
+                    return FillStyle.Rgb("DOTS", 0, 0, 255, SoilScale);
                 default:
-                    return FillStyle.Of("ANSI31", 5, 1);
+                    return FillStyle.Rgb("ANSI31", 0, 0, 255, 1);
             }
         }
 
@@ -67,8 +67,8 @@ namespace Nvk.Core
             if (src != null && !string.IsNullOrEmpty(src.Pattern))
                 return src.Clone();
             return k == BackfillKind.Sand
-                ? FillStyle.Of("AR-SAND", 5, SandScale)
-                : FillStyle.Of("DOTS", 5, SoilScale);
+                ? FillStyle.Rgb("AR-SAND", 0, 0, 255, SandScale)
+                : FillStyle.Rgb("DOTS", 0, 0, 255, SoilScale);
         }
 
         static FillStyle PickBackfill(SheetStyle sheet, BackfillKind k)

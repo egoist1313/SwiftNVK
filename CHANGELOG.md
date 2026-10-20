@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.232 — 2026-10-20
+
+### Добавлено
+- Снимок листа (`presets/sheets/snap.json`) — стандарт расстановки
+  видовых, линий и текстов. Нет файла — плот A3 DWG To PDF как в снимке.
+- Стандарт стилей как в текущем дефолте панели: L0 DASHED, штриховки
+  RGB синие, вес 0.15, профиль 1:1000, MH_STRIP вкл, подписи L0–L6
+  выкл, каталог Корсис SN8.
+
+### Затронутые файлы
+- `SheetSnap.cs`, `SheetSnapStore.cs`, `L1Style.cs`, `SheetStyle.cs`,
+  `HatchPat.cs`, `NvkUiState.cs`, `NvkPanel.cs`, `StylePack.cs`
+- `presets/sheets/snap.json`
+- версии 0.232
+
 ## 0.231 — 2026-10-20
 
 ### Исправлено

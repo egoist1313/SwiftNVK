@@ -8,7 +8,7 @@ namespace Nvk.Core
         /// <summary>Старый ACI; если &gt;0 и RGB=0 — брать его.</summary>
         public short Color { get; set; }
         public string Linetype { get; set; } = "Continuous";
-        public int Weight { get; set; } = 30;
+        public int Weight { get; set; } = 15;
 
         public static LineStyle Of(short aci, string ltype, int weight)
         {
@@ -84,14 +84,14 @@ namespace Nvk.Core
         public string LabelLength { get; set; } = "Длина, м";
         public string LabelMh { get; set; } = "Колодец Ø / дно, м";
 
-        public LineStyle Road { get; set; } = LineStyle.Rgb(255, 0, 0, "Continuous", 40);
-        public LineStyle Earth { get; set; } = LineStyle.Rgb(0, 0, 255, "Continuous", 30);
-        public LineStyle Bottom { get; set; } = LineStyle.Rgb(255, 0, 0, "Continuous", 30);
+        public LineStyle Road { get; set; } = LineStyle.Rgb(255, 0, 0, "DASHED", 15);
+        public LineStyle Earth { get; set; } = LineStyle.Rgb(0, 0, 255, "Continuous", 15);
+        public LineStyle Bottom { get; set; } = LineStyle.Rgb(255, 0, 0, "Continuous", 15);
         /// <summary>Вертикальные риски сечений на продольнике L1. По умолчанию ACI 129.</summary>
-        public LineStyle CsLine { get; set; } = LineStyle.Of(129, "Continuous", 30);
+        public LineStyle CsLine { get; set; } = LineStyle.Of(129, "Continuous", 15);
 
-        public FillStyle HatchExcavation { get; set; } = FillStyle.Of("ANSI31", 5, 1.0);
-        public FillStyle HatchPavement { get; set; } = FillStyle.Of("ANSI31", 5, 1.0);
+        public FillStyle HatchExcavation { get; set; } = FillStyle.Rgb("ANSI31", 0, 0, 255, 1.0);
+        public FillStyle HatchPavement { get; set; } = FillStyle.Rgb("ANSI31", 128, 128, 128, 1.0);
 
         public static L1Style Default()
         {

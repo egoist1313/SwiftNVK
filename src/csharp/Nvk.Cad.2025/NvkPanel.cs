@@ -123,7 +123,7 @@ namespace Nvk.Cad
             _doPoper = Chk(pRun, "Таблица POPER", true);
             _doVol   = Chk(pRun, "Объёмы + колодцы", true);
             _volJoin = Chk(pRun, "Объёмы все участки вместе", true);
-            _mhStrip = Chk(pRun, "Колодцы без скобок в штампе  ГП12(1)→ГП12", false);
+            _mhStrip = Chk(pRun, "Колодцы без скобок в штампе  ГП12(1)→ГП12", true);
             _doPlan  = Chk(pRun, "План", true);
             _doSheets = Chk(pRun, "Листы + видовые экраны", true);
             _stations = Num(pRun, "Станции (AUTO или пикеты)", "AUTO");
@@ -167,13 +167,13 @@ namespace Nvk.Cad
             _lSc  = Num(pPar, "Профиль L", "1");
             _csSc = Num(pPar, "Сечение (как L профиля)", "1");
             _csTh = Num(pPar, "Текст сечения", "0.5");
-            _vpEp = Num(pPar, "Лист профиль 1:", "500");
+            _vpEp = Num(pPar, "Лист профиль 1:", "1000");
             _vpCs = Num(pPar, "Лист сечения 1:", "200");
             _vpPlan = Num(pPar, "Лист план 1:", "500");
 
             pPar.Controls.Add(Head("Графика"));
             _blockCs  = Chk(pPar, "Сечения блоками", true);
-            _showTags = Chk(pPar, "Подписи L0–L6", true);
+            _showTags = Chk(pPar, "Подписи L0–L6", false);
 
             pTbl.Controls.Add(Head("PoperSwift"));
             _textH   = Num(pTbl, "Текст профиля", "2.5");
@@ -244,7 +244,7 @@ namespace Nvk.Cad
             _labBot   = Num(pL1, "Подпись L1 дна траншеи", "Отметка дна траншеи, м");
             _btnCs    = ColorRow(pL1, "Линии сечения", AciToRgb(129));
             _btnRoad  = ColorRow(pL1, "L0 покрытие", Color.Red);
-            _l1rl     = LtRow(pL1, "Тип линии L0", "Continuous");
+            _l1rl     = LtRow(pL1, "Тип линии L0", "DASHED");
             _btnEarth = ColorRow(pL1, "L6 черная земля", Color.Blue);
             _l1el     = LtRow(pL1, "Тип линии L6", "Continuous");
             _btnBot   = ColorRow(pL1, "L1 дно траншеи", Color.Red);
@@ -480,8 +480,8 @@ namespace Nvk.Cad
             NvkUiState.LScale    = Parse(_lSc, 1);
             NvkUiState.CsScale   = Parse(_csSc, 1);
             NvkUiState.CsTextH   = Parse(_csTh, 0.5);
-            NvkUiState.VpScaleEp = Parse(_vpEp, 500);
-            if (NvkUiState.VpScaleEp < 1) NvkUiState.VpScaleEp = 500;
+            NvkUiState.VpScaleEp = Parse(_vpEp, 1000);
+            if (NvkUiState.VpScaleEp < 1) NvkUiState.VpScaleEp = 1000;
             NvkUiState.VpScaleCs = Parse(_vpCs, 200);
             if (NvkUiState.VpScaleCs < 1) NvkUiState.VpScaleCs = 200;
             NvkUiState.VpScalePlan = Parse(_vpPlan, 500);
@@ -573,8 +573,8 @@ namespace Nvk.Cad
             CopyRgb(_btnRoad,  NvkSession.L1.Road);
             CopyRgb(_btnEarth, NvkSession.L1.Earth  ?? (NvkSession.L1.Earth  = LineStyle.Rgb(  0,   0, 255, "Continuous", 30)));
             CopyRgb(_btnBot,   NvkSession.L1.Bottom ?? (NvkSession.L1.Bottom = LineStyle.Rgb(255,   0,   0, "Continuous", 30)));
-            CopyFill(_btnHat, NvkSession.L1.HatchExcavation ?? (NvkSession.L1.HatchExcavation = FillStyle.Of("ANSI31", 5, 1)));
-            CopyFill(_btnPav, NvkSession.L1.HatchPavement   ?? (NvkSession.L1.HatchPavement   = FillStyle.Of("ANSI31", 5, 1)));
+            CopyFill(_btnHat, NvkSession.L1.HatchExcavation ?? (NvkSession.L1.HatchExcavation = FillStyle.Rgb("ANSI31", 0, 0, 255, 1)));
+            CopyFill(_btnPav, NvkSession.L1.HatchPavement   ?? (NvkSession.L1.HatchPavement   = FillStyle.Rgb("ANSI31", 128, 128, 128, 1)));
             NvkUiState.L1HatPat  = NvkSession.L1.HatchExcavation.Pattern;
             NvkUiState.L1PavPat  = NvkSession.L1.HatchPavement.Pattern;
             NvkUiState.HasPush   = true;
@@ -1708,7 +1708,7 @@ namespace Nvk.Cad
                 st.Hatch = null;
             else
             {
-                if (st.Hatch == null) st.Hatch = FillStyle.Of("ANSI31", 5, 1);
+                if (st.Hatch == null) st.Hatch = FillStyle.Rgb("ANSI31", 0, 0, 255, 1);
                 CopyFill(ui.Hatch, st.Hatch);
             }
             if (st.Cover == null) st.Cover = LineStyle.Rgb(255,   0,   0, "DASHED",     18);

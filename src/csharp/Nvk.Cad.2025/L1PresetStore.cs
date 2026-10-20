@@ -55,12 +55,12 @@ namespace Nvk.Cad
             {
                 var st = JsonSerializer.Deserialize<L1Style>(File.ReadAllText(p), Opt);
                 if (st == null) return L1Style.Default();
-                if (st.Road == null) st.Road = LineStyle.Of(1, "Continuous", 30);
-                if (st.Earth == null) st.Earth = LineStyle.Of(5, "Continuous", 30);
-                if (st.Bottom == null) st.Bottom = LineStyle.Of(1, "Continuous", 30);
-                if (st.CsLine == null) st.CsLine = LineStyle.Of(129, "Continuous", 30);
-                if (st.HatchExcavation == null) st.HatchExcavation = FillStyle.Of("ANSI31", 5, 1);
-                if (st.HatchPavement == null) st.HatchPavement = FillStyle.Of("ANSI31", 5, 1);
+                if (st.Road == null) st.Road = LineStyle.Rgb(255, 0, 0, "DASHED", 15);
+                if (st.Earth == null) st.Earth = LineStyle.Rgb(0, 0, 255, "Continuous", 15);
+                if (st.Bottom == null) st.Bottom = LineStyle.Rgb(255, 0, 0, "Continuous", 15);
+                if (st.CsLine == null) st.CsLine = LineStyle.Of(129, "Continuous", 15);
+                if (st.HatchExcavation == null) st.HatchExcavation = FillStyle.Rgb("ANSI31", 0, 0, 255, 1);
+                if (st.HatchPavement == null) st.HatchPavement = FillStyle.Rgb("ANSI31", 128, 128, 128, 1);
                 return st;
             }
             catch (Exc)
