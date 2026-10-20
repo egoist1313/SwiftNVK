@@ -3,7 +3,7 @@
 
 (vl-load-com)
 
-(setq *nvk-versija*        "0.233")
+(setq *nvk-versija*        "0.234")
 
 (defun nvk-def (sym val)
   (if (not (boundp sym)) (set sym val)))

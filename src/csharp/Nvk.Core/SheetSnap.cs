@@ -157,7 +157,7 @@ namespace Nvk.Core
         }
 
         /// <summary>
-        /// Стандарт листа — снимок 0.222: A3 297×420, DWG To PDF, поворот 90°.
+        /// Стандарт листа — A3 420×297 альбом, DWG To PDF, печать Layout.
         /// </summary>
         public static SheetSnapPage StdPage()
         {
@@ -166,11 +166,11 @@ namespace Nvk.Core
                 Device = "DWG To PDF.pc3",
                 Media = "ISO_full_bleed_A3_(297.00_x_420.00_MM)",
                 Units = "Millimeters",
-                PlotType = "Window",
-                Rotation = "Degrees090",
+                PlotType = "Layout",
+                Rotation = "Degrees000",
                 Ox = 0.0,
                 Oy = 0.0,
-                StdScale = false,
+                StdScale = true,
                 ScaleType = "StdScale1To1",
                 ScaleNum = 1.0,
                 ScaleDen = 1.0,
@@ -180,12 +180,12 @@ namespace Nvk.Core
                 Centered = false,
                 Lineweights = true,
                 VpBorders = false,
-                PaperW = 297.0,
-                PaperH = 420.0,
+                PaperW = 420.0,
+                PaperH = 297.0,
                 Wx0 = 0.0,
                 Wy0 = 0.0,
-                Wx1 = 297.0,
-                Wy1 = 420.0
+                Wx1 = 420.0,
+                Wy1 = 297.0
             };
         }
 
@@ -220,7 +220,9 @@ namespace Nvk.Core
                 && page.Wy1 > page.Wy0 + 10.0;
         }
 
-        /// <summary>Окно печати: поле страницы, иначе рамка Defpoints / бумага снимка.</summary>
+        public const string FrameLayer = "ЭТА РАМКА";
+
+        /// <summary>Окно печати: поле страницы, иначе рамка слоя / Defpoints.</summary>
         public static void FillWindow(SheetSnapPage page, SheetSnapLayout lay)
         {
             if (page == null || HasWindow(page)) return;
@@ -232,12 +234,114 @@ namespace Nvk.Core
             page.Wy1 = y1;
         }
 
+        public static bool IsFrameLayer(string layer)
+        {
+            return !string.IsNullOrEmpty(layer)
+                && string.Equals(layer, FrameLayer, StringComparison.OrdinalIgnoreCase);
+        }
+
         public static bool TryFrame(SheetSnapLayout lay,
             out double x0, out double y0, out double x1, out double y1)
         {
+            if (TryNamedFrame(lay, out x0, out y0, out x1, out y1))
+                return true;
+            if (TryRedFrame(lay, out x0, out y0, out x1, out y1))
+                return true;
             if (TryDefpointsFrame(lay, out x0, out y0, out x1, out y1))
                 return true;
             return TryPaperBox(lay, out x0, out y0, out x1, out y1);
+        }
+
+        /// <summary>Рамка этого листа, иначе «ЭТА РАМКА» с Разработки.</summary>
+        public static bool TryFrame(SheetSnapFile file, string kind,
+            out double x0, out double y0, out double x1, out double y1)
+        {
+            x0 = y0 = x1 = y1 = 0.0;
+            var lay = Find(file, kind);
+            if (TryNamedFrame(lay, out x0, out y0, out x1, out y1))
+                return true;
+            var raz = Find(file, "Razrabotka");
+            if (TryNamedFrame(raz, out x0, out y0, out x1, out y1))
+                return true;
+            if (TryFrame(lay, out x0, out y0, out x1, out y1))
+                return true;
+            return TryFrame(raz, out x0, out y0, out x1, out y1);
+        }
+
+        /// <summary>Сдвиг снимка: левый низ рамки → (0,0). fw×fh — размер рамки.</summary>
+        public static bool ShiftOf(SheetSnapFile file, string kind,
+            out double dx, out double dy, out double fw, out double fh)
+        {
+            dx = 0.0;
+            dy = 0.0;
+            fw = 420.0;
+            fh = 297.0;
+            double x0, y0, x1, y1;
+            if (!TryFrame(file, kind, out x0, out y0, out x1, out y1))
+                return false;
+            fw = x1 - x0;
+            fh = y1 - y0;
+            if (fw < 50.0) fw = 420.0;
+            if (fh < 50.0) fh = 297.0;
+            dx = -x0;
+            dy = -y0;
+            return true;
+        }
+
+        public static void FitPage(SheetSnapPage page, double fw, double fh)
+        {
+            if (page == null) return;
+            if (fw < 50.0) fw = 420.0;
+            if (fh < 50.0) fh = 297.0;
+            page.PlotType = "Layout";
+            page.Rotation = "Degrees000";
+            page.StdScale = true;
+            page.ScaleType = "StdScale1To1";
+            page.ScaleNum = 1.0;
+            page.ScaleDen = 1.0;
+            page.Centered = false;
+            page.Ox = 0.0;
+            page.Oy = 0.0;
+            page.PaperW = fw;
+            page.PaperH = fh;
+            page.Wx0 = 0.0;
+            page.Wy0 = 0.0;
+            page.Wx1 = fw;
+            page.Wy1 = fh;
+            page.Media = fw + 1.0 >= fh
+                ? "ISO_full_bleed_A3_(420.00_x_297.00_MM)"
+                : "ISO_full_bleed_A3_(297.00_x_420.00_MM)";
+        }
+
+        public static SheetSnapPage CopyPage(SheetSnapPage src)
+        {
+            if (src == null) return StdPage();
+            return new SheetSnapPage
+            {
+                Device = src.Device,
+                Media = src.Media,
+                Units = src.Units,
+                PlotType = src.PlotType,
+                Rotation = src.Rotation,
+                Ox = src.Ox,
+                Oy = src.Oy,
+                StdScale = src.StdScale,
+                ScaleType = src.ScaleType,
+                ScaleNum = src.ScaleNum,
+                ScaleDen = src.ScaleDen,
+                Style = src.Style,
+                PlotStyles = src.PlotStyles,
+                ScaleLw = src.ScaleLw,
+                Centered = src.Centered,
+                Lineweights = src.Lineweights,
+                VpBorders = src.VpBorders,
+                PaperW = src.PaperW,
+                PaperH = src.PaperH,
+                Wx0 = src.Wx0,
+                Wy0 = src.Wy0,
+                Wx1 = src.Wx1,
+                Wy1 = src.Wy1
+            };
         }
 
         public static bool IsPaperCoord(double x, double y)
@@ -268,6 +372,55 @@ namespace Nvk.Core
             if (mm < 1e-9) mm = 1.0;
             double h = paperH / mm;
             return h < 1e-9 ? 1.0 : h;
+        }
+
+        static bool TryNamedFrame(SheetSnapLayout lay,
+            out double x0, out double y0, out double x1, out double y1)
+        {
+            x0 = y0 = x1 = y1 = 0.0;
+            if (lay == null || lay.Ents == null) return false;
+            bool any = false;
+            double a0 = 0.0, b0 = 0.0, a1 = 0.0, b1 = 0.0;
+            for (int i = 0; i < lay.Ents.Count; i++)
+            {
+                var e = lay.Ents[i];
+                if (e == null || !IsFrameLayer(e.Layer)) continue;
+                EachPoint(e, (x, y) =>
+                {
+                    if (IsPaperCoord(x, y))
+                        Acc(x, y, ref any, ref a0, ref b0, ref a1, ref b1);
+                });
+            }
+            if (!any || a1 - a0 <= 50.0 || b1 - b0 <= 50.0) return false;
+            x0 = a0; y0 = b0; x1 = a1; y1 = b1;
+            return true;
+        }
+
+        static bool TryRedFrame(SheetSnapLayout lay,
+            out double x0, out double y0, out double x1, out double y1)
+        {
+            x0 = y0 = x1 = y1 = 0.0;
+            if (lay == null || lay.Ents == null) return false;
+            bool any = false;
+            double a0 = 0.0, b0 = 0.0, a1 = 0.0, b1 = 0.0;
+            for (int i = 0; i < lay.Ents.Count; i++)
+            {
+                var e = lay.Ents[i];
+                if (e == null || e.Color != 1) continue;
+                if (!string.Equals(e.T, "LINE", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(e.T, "PL", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                EachPoint(e, (x, y) =>
+                {
+                    if (IsPaperCoord(x, y))
+                        Acc(x, y, ref any, ref a0, ref b0, ref a1, ref b1);
+                });
+            }
+            if (!any) return false;
+            double w = a1 - a0, h = b1 - b0;
+            if (w <= 200.0 || w >= 500.0 || h <= 200.0 || h >= 450.0) return false;
+            x0 = a0; y0 = b0; x1 = a1; y1 = b1;
+            return true;
         }
 
         static bool TryDefpointsFrame(SheetSnapLayout lay,

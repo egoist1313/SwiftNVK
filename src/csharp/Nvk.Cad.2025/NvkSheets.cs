@@ -591,9 +591,12 @@ namespace Nvk.Cad
                 using (var trNew = db.TransactionManager.StartTransaction())
                 {
                     var layNew = (Layout)trNew.GetObject(layoutId, OpenMode.ForWrite);
-                    var page = SheetSnapStore.PageOf(kind);
+                    double dx, dy, fw, fh;
+                    var page = SheetSnapStore.PageForApply(kind, out dx, out dy, out fw, out fh);
                     if (!SheetSnapStore.ApplyPage(layNew, page, name) && createdNew)
                         TrySetupA1(layNew, name);
+                    if (Math.Abs(dx) > 0.5 || Math.Abs(dy) > 0.5)
+                        SheetSnapStore.ShiftLivePaper(trNew, layNew, dx, dy);
                     trNew.Commit();
                 }
             }
@@ -840,6 +843,8 @@ namespace Nvk.Cad
         {
             var lay = SheetSnapStore.LayoutOf(kind);
             if (lay == null || specs == null) return;
+            double dx, dy, fw, fh;
+            SheetSnap.ShiftOf(SheetSnapStore.Load(), kind.ToString(), out dx, out dy, out fw, out fh);
             int n = 0;
             for (int i = 0; i < specs.Count; i++)
             {
@@ -847,11 +852,11 @@ namespace Nvk.Cad
                 double cx, cy, w, h;
                 if (!SheetSnap.TryVp(lay, s.Key, out cx, out cy, out w, out h))
                     continue;
-                specs[i] = new VpSpec(cx, cy, w, h, s.Win, s.ScaleN, s.Key, s.TwistDeg);
+                specs[i] = new VpSpec(cx + dx, cy + dy, w, h, s.Win, s.ScaleN, s.Key, s.TwistDeg);
                 n++;
                 NvkLog.Write("[НВК] VP снимок " + s.Key
                     + "  бумага " + w.ToString("0.0") + "x" + h.ToString("0.0")
-                    + " @ " + cx.ToString("0.0") + "," + cy.ToString("0.0"));
+                    + " @ " + (cx + dx).ToString("0.0") + "," + (cy + dy).ToString("0.0"));
             }
             if (n > 0)
                 NvkLog.Write("[НВК] лист снимок " + kind.ToString()
@@ -1108,19 +1113,19 @@ namespace Nvk.Cad
             ProfileKind kind;
             if (TryKind(name, out kind))
             {
-                double fx0, fy0, fx1, fy1;
-                if (SheetSnap.TryFrame(SheetSnapStore.LayoutOf(kind), out fx0, out fy0, out fx1, out fy1))
+                double dx, dy, fw, fh;
+                if (SheetSnap.ShiftOf(SheetSnapStore.Load(), kind.ToString(), out dx, out dy, out fw, out fh)
+                    && fw > 50.0 && fh > 50.0)
                 {
-                    x0 = fx0;
-                    y0 = fy0;
-                    x1 = fx1;
-                    y1 = fy1;
-                    paperW = x1 - x0;
-                    paperH = y1 - y0;
+                    x0 = 0.0;
+                    y0 = 0.0;
+                    x1 = fw;
+                    y1 = fh;
+                    paperW = fw;
+                    paperH = fh;
                     NvkLog.Write("[НВК] лист " + name
                         + " бумага снимок " + paperW.ToString("0") + "x" + paperH.ToString("0")
-                        + "  окно " + x0.ToString("0.0") + "," + y0.ToString("0.0")
-                        + ".." + x1.ToString("0.0") + "," + y1.ToString("0.0"));
+                        + "  сдвиг " + dx.ToString("0.0") + "," + dy.ToString("0.0"));
                     return;
                 }
             }

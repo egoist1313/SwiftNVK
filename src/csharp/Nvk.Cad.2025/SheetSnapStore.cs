@@ -131,6 +131,22 @@ namespace Nvk.Cad
             return SheetSnap.PageOf(Load(), kind.ToString());
         }
 
+        public static SheetSnapPage PageForApply(ProfileKind kind,
+            out double dx, out double dy, out double fw, out double fh)
+        {
+            var file = Load();
+            var page = SheetSnap.CopyPage(SheetSnap.PageOf(file, kind.ToString()));
+            if (!SheetSnap.ShiftOf(file, kind.ToString(), out dx, out dy, out fw, out fh))
+            {
+                dx = 0.0;
+                dy = 0.0;
+                fw = 420.0;
+                fh = 297.0;
+            }
+            SheetSnap.FitPage(page, fw, fh);
+            return page;
+        }
+
         static SheetSnapLayout ReadLayout(Transaction tr, Layout layout, ProfileKind kind, string name)
         {
             var snap = new SheetSnapLayout { Kind = kind.ToString(), Name = name };
@@ -338,7 +354,9 @@ namespace Nvk.Cad
             if (title == null) return;
             var t = SheetSnap.TitleEnt(LayoutOf(kind));
             if (t == null) return;
-            try { title.Location = new Point3d(t.X, t.Y, 0.0); } catch { }
+            double dx, dy, fw, fh;
+            SheetSnap.ShiftOf(Load(), kind.ToString(), out dx, out dy, out fw, out fh);
+            try { title.Location = new Point3d(t.X + dx, t.Y + dy, 0.0); } catch { }
             if (t.H > 0.05)
             {
                 try { title.TextHeight = t.H; } catch { }
@@ -361,7 +379,9 @@ namespace Nvk.Cad
                 return 0;
             }
             double fx0, fy0, fx1, fy1;
-            bool frame = SheetSnap.TryFrame(lay, out fx0, out fy0, out fx1, out fy1);
+            bool frame = SheetSnap.TryFrame(Load(), kind.ToString(), out fx0, out fy0, out fx1, out fy1);
+            double dx, dy, fw, fh;
+            SheetSnap.ShiftOf(Load(), kind.ToString(), out dx, out dy, out fw, out fh);
             int n = 0, nSkip = 0;
             for (int i = 0; i < lay.Ents.Count; i++)
             {
@@ -374,7 +394,7 @@ namespace Nvk.Cad
                 }
                 try
                 {
-                    if (PutEnt(db, tr, ps, e)) n++;
+                    if (PutEnt(db, tr, ps, e, dx, dy)) n++;
                 }
                 catch (Exc ex)
                 {
@@ -405,7 +425,8 @@ namespace Nvk.Cad
             return n;
         }
 
-        static bool PutEnt(Database db, Transaction tr, BlockTableRecord ps, SheetSnapEnt e)
+        static bool PutEnt(Database db, Transaction tr, BlockTableRecord ps, SheetSnapEnt e,
+            double dx, double dy)
         {
             EnsureLayer(db, tr, e.Layer, e.Color);
             Entity ent = null;
@@ -484,6 +505,11 @@ namespace Nvk.Cad
             ApplyLt(tr, db, ent, e.Lt);
             ps.AppendEntity(ent);
             tr.AddNewlyCreatedDBObject(ent, true);
+            if (Math.Abs(dx) > 0.01 || Math.Abs(dy) > 0.01)
+            {
+                try { ent.TransformBy(Matrix3d.Displacement(new Vector3d(dx, dy, 0.0))); }
+                catch { }
+            }
             if (!string.IsNullOrEmpty(e.Tpl))
                 NvkTag.Put1000(tr, ent, NvkTag.TplKey, e.Tpl);
             return true;
@@ -635,10 +661,19 @@ namespace Nvk.Cad
                 {
                     try { psv.SetCanonicalMediaName(layout, media); } catch { }
                 }
+                else
+                {
+                    string alt = PickA3Media(psv, layout, page.PaperW, page.PaperH);
+                    if (!string.IsNullOrEmpty(alt))
+                    {
+                        try { psv.SetCanonicalMediaName(layout, alt); } catch { }
+                    }
+                }
                 PlotPaperUnit units;
                 if (TryEnum(page.Units, PlotPaperUnit.Millimeters, out units))
                     try { psv.SetPlotPaperUnits(layout, units); } catch { }
-                try { psv.SetZoomToPaperOnUpdate(layout, false); } catch { }
+                bool asLayout = string.Equals(page.PlotType, "Layout", StringComparison.OrdinalIgnoreCase);
+                try { psv.SetZoomToPaperOnUpdate(layout, asLayout); } catch { }
                 double wx0 = page.Wx0, wy0 = page.Wy0, wx1 = page.Wx1, wy1 = page.Wy1;
                 if (!SheetSnap.HasWindow(page))
                 {
@@ -762,13 +797,20 @@ namespace Nvk.Cad
                     if (layout == null) { nFail++; continue; }
                     SheetSnapPage one = page;
                     ProfileKind kind;
+                    double dx = 0.0, dy = 0.0, fw = 420.0, fh = 297.0;
                     if (NvkSheets.TryKind(e.Key, out kind))
                     {
-                        one = SheetSnap.PageOf(file, kind.ToString()) ?? page;
-                        SheetSnap.FillWindow(one, SheetSnap.Find(file, kind.ToString()));
+                        one = PageForApply(kind, out dx, out dy, out fw, out fh);
+                    }
+                    else
+                    {
+                        one = SheetSnap.CopyPage(page);
+                        SheetSnap.FitPage(one, fw, fh);
                     }
                     if (ApplyPage(layout, one, e.Key)) nOk++;
                     else nFail++;
+                    if (Math.Abs(dx) > 0.5 || Math.Abs(dy) > 0.5)
+                        ShiftLivePaper(tr, layout, dx, dy);
                 }
                 tr.Commit();
             }
@@ -777,6 +819,87 @@ namespace Nvk.Cad
             msg += "  " + (page.Device ?? "") + "  " + (page.Media ?? "");
             NvkLog.Write(msg);
             return msg;
+        }
+
+        public static int ShiftLivePaper(Transaction tr, Layout layout, double dx, double dy)
+        {
+            if (tr == null || layout == null) return 0;
+            if (Math.Abs(dx) < 0.5 && Math.Abs(dy) < 0.5) return 0;
+            try
+            {
+                var ps = tr.GetObject(layout.BlockTableRecordId, OpenMode.ForWrite) as BlockTableRecord;
+                if (ps == null) return 0;
+                double minX = 0.0;
+                bool any = false;
+                foreach (ObjectId id in ps)
+                {
+                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                    if (ent == null || ent.IsErased) continue;
+                    var vp = ent as Viewport;
+                    if (vp != null)
+                    {
+                        int num = 0;
+                        try { num = vp.Number; } catch { }
+                        if (num == 1) continue;
+                        AccMin(vp.CenterPoint.X - vp.Width * 0.5, ref any, ref minX);
+                        continue;
+                    }
+                    if (SheetSnap.IsFrameLayer(ent.Layer))
+                    {
+                        try
+                        {
+                            Extents3d ext = ent.GeometricExtents;
+                            AccMin(ext.MinPoint.X, ref any, ref minX);
+                        }
+                        catch { }
+                        continue;
+                    }
+                    try
+                    {
+                        Extents3d ext = ent.GeometricExtents;
+                        if (SheetSnap.IsPaperCoord(ext.MinPoint.X, ext.MinPoint.Y))
+                            AccMin(ext.MinPoint.X, ref any, ref minX);
+                    }
+                    catch { }
+                }
+                if (any && minX < 80.0) return 0;
+                var move = Matrix3d.Displacement(new Vector3d(dx, dy, 0.0));
+                int n = 0;
+                foreach (ObjectId id in ps)
+                {
+                    var ent = tr.GetObject(id, OpenMode.ForWrite) as Entity;
+                    if (ent == null || ent.IsErased) continue;
+                    var vp = ent as Viewport;
+                    if (vp != null)
+                    {
+                        int num = 0;
+                        try { num = vp.Number; } catch { }
+                        if (num == 1) continue;
+                    }
+                    try
+                    {
+                        ent.TransformBy(move);
+                        n++;
+                    }
+                    catch { }
+                }
+                if (n > 0)
+                    NvkLog.Write("[НВК] лист " + (layout.LayoutName ?? "")
+                        + " сдвиг бумаги " + dx.ToString("0.0", Inv) + "," + dy.ToString("0.0", Inv)
+                        + "  объектов " + n.ToString());
+                return n;
+            }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] сдвиг бумаги: " + ex.Message);
+                return 0;
+            }
+        }
+
+        static void AccMin(double x, ref bool any, ref double minX)
+        {
+            if (!any) { minX = x; any = true; return; }
+            if (x < minX) minX = x;
         }
 
         static void ZoomToWindow(Layout layout, double x0, double y0, double x1, double y1)
@@ -806,6 +929,32 @@ namespace Nvk.Cad
                 }
             }
             catch { }
+        }
+
+        static string PickA3Media(PlotSettingsValidator psv, Layout layout, double fw, double fh)
+        {
+            System.Collections.Specialized.StringCollection names = null;
+            try { names = psv.GetCanonicalMediaNameList(layout); } catch { }
+            if (names == null) return null;
+            bool land = fw + 1.0 >= fh;
+            string best = null;
+            foreach (string n in names)
+            {
+                if (string.IsNullOrEmpty(n)) continue;
+                string u = n.ToUpperInvariant();
+                if (u.IndexOf("A3", StringComparison.Ordinal) < 0) continue;
+                int i420 = u.IndexOf("420", StringComparison.Ordinal);
+                int i297 = u.IndexOf("297", StringComparison.Ordinal);
+                if (i420 < 0 || i297 < 0) continue;
+                bool nLand = i420 < i297;
+                if (land == nLand)
+                {
+                    if (u.IndexOf("FULL_BLEED", StringComparison.Ordinal) >= 0) return n;
+                    if (best == null) best = n;
+                }
+                else if (best == null) best = n;
+            }
+            return best;
         }
 
         static string PickDevice(PlotSettingsValidator psv, string want)

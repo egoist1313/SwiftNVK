@@ -113,9 +113,10 @@ namespace Nvk.Core.Tests
             Assert.NotNull(p);
             Assert.Equal("DWG To PDF.pc3", p.Device);
             Assert.Contains("A3", p.Media);
-            Assert.Equal(297.0, p.PaperW, 6);
-            Assert.Equal(420.0, p.PaperH, 6);
-            Assert.Equal("Degrees090", p.Rotation);
+            Assert.Equal(420.0, p.PaperW, 6);
+            Assert.Equal(297.0, p.PaperH, 6);
+            Assert.Equal("Degrees000", p.Rotation);
+            Assert.Equal("Layout", p.PlotType);
             Assert.Equal(p.Device, SheetSnap.StdPage().Device);
         }
 
@@ -199,6 +200,82 @@ namespace Nvk.Core.Tests
             Assert.Equal(20.0, SheetSnap.ViewHeightAtScale(100.0, 200), 6);
             Assert.Equal(50.0, SheetSnap.ViewHeightAtScale(100.0, 500), 6);
             Assert.Equal(109.6, SheetSnap.ViewHeightAtScale(109.6, 1000), 6);
+        }
+
+        static SheetSnapEnt FrameLine(double x, double y, double x1, double y1)
+        {
+            return new SheetSnapEnt
+            {
+                T = "LINE",
+                Layer = SheetSnap.FrameLayer,
+                Color = 1,
+                X = x, Y = y, X1 = x1, Y1 = y1
+            };
+        }
+
+        [Fact]
+        public void TryFramePrefersNamedLayer()
+        {
+            var lay = new SheetSnapLayout
+            {
+                Ents =
+                {
+                    new SheetSnapEnt { T = "LINE", Layer = "Defpoints", X = 0, Y = 0, X1 = 100, Y1 = 0 },
+                    new SheetSnapEnt { T = "LINE", Layer = "Defpoints", X = 0, Y = 0, X1 = 0, Y1 = 100 },
+                    FrameLine(510.07, -20.4, 510.07, 276.6),
+                    FrameLine(510.07, 276.6, 930.07, 276.6),
+                    FrameLine(930.07, 276.6, 930.07, -20.4),
+                    FrameLine(930.07, -20.4, 510.07, -20.4)
+                }
+            };
+            double x0, y0, x1, y1;
+            Assert.True(SheetSnap.TryFrame(lay, out x0, out y0, out x1, out y1));
+            Assert.Equal(510.07, x0, 4);
+            Assert.Equal(930.07, x1, 4);
+            Assert.Equal(420.0, x1 - x0, 2);
+            Assert.Equal(297.0, y1 - y0, 2);
+        }
+
+        [Fact]
+        public void ShiftOfNamedFrameToOrigin()
+        {
+            var file = new SheetSnapFile
+            {
+                Layouts =
+                {
+                    new SheetSnapLayout
+                    {
+                        Kind = "Razrabotka",
+                        Ents =
+                        {
+                            FrameLine(510.07, -20.4, 510.07, 276.6),
+                            FrameLine(510.07, 276.6, 930.07, 276.6),
+                            FrameLine(930.07, 276.6, 930.07, -20.4),
+                            FrameLine(930.07, -20.4, 510.07, -20.4)
+                        }
+                    },
+                    new SheetSnapLayout { Kind = "Pesok" }
+                }
+            };
+            double dx, dy, fw, fh;
+            Assert.True(SheetSnap.ShiftOf(file, "Pesok", out dx, out dy, out fw, out fh));
+            Assert.Equal(-510.07, dx, 4);
+            Assert.Equal(20.4, dy, 4);
+            Assert.Equal(420.0, fw, 2);
+            Assert.Equal(297.0, fh, 2);
+        }
+
+        [Fact]
+        public void FitPageLandscapeA3Layout()
+        {
+            var page = new SheetSnapPage { Device = "DWG To PDF.pc3", PlotType = "Window" };
+            SheetSnap.FitPage(page, 420.0, 297.0);
+            Assert.Equal("Layout", page.PlotType);
+            Assert.Equal("Degrees000", page.Rotation);
+            Assert.Contains("420", page.Media);
+            Assert.Equal(0.0, page.Wx0, 6);
+            Assert.Equal(420.0, page.Wx1, 6);
+            Assert.Equal(297.0, page.Wy1, 6);
         }
     }
 }
