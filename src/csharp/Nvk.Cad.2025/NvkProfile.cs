@@ -26,7 +26,10 @@ namespace Nvk.Cad
                 var map = NvkUiState.Serialize();
                 var lines = new List<string>(map.Count);
                 foreach (var kv in map)
+                {
+                    if (NodPairs.DrawingBound.Contains(kv.Key)) continue;
                     lines.Add(kv.Key + "=" + kv.Value);
+                }
                 File.WriteAllLines(p, lines, Encoding.UTF8);
             }
             catch { }

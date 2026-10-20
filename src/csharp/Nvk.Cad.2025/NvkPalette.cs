@@ -118,8 +118,8 @@ namespace Nvk.Cad
                 bool fromDwg = NvkUiState.LoadFromDatabase(doc.Database, doc.Name, force);
                 if (!fromDwg && (force || !NvkUiState.IsCurrent(key)))
                 {
-                    if (!NvkProfile.Load())
-                        NvkUiState.ResetToDefaults();
+                    NvkUiState.ResetToDefaults();
+                    NvkProfile.Load();
                     NvkSession.ClearDrawingCaches();
                     NvkSites.Reset();
                     NvkUiState.HasNod = false;

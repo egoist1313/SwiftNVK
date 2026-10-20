@@ -37,6 +37,36 @@ namespace Nvk.Core
             return def;
         }
 
+        /// <summary>
+        /// Ключи чертежа: зоны, TIN, факт. Не класть в профиль настроек;
+        /// при загрузке профиля, если ключа нет, оставить текущее значение.
+        /// </summary>
+        public static readonly HashSet<string> DrawingBound = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "ZONES", "DESIGN_H", "DESIGN_N", "BE_H", "BE_N", "USE_BE",
+            "FACT_PROF_L1", "FACT_PROF_L2", "FACT_PROF_L3", "FACT_PROF_L4", "FACT_PROF_L5",
+            "L1_PRESET", "PIPES", "SEG", "SITES", "SITE"
+        };
+
+        public static bool HasKey(Dictionary<string, string> map, string key)
+        {
+            return map != null && !string.IsNullOrEmpty(key) && map.ContainsKey(key);
+        }
+
+        /// <summary>Для каждого ключа previous, которого нет в map, вызвать apply.</summary>
+        public static void RestoreAbsent(
+            Dictionary<string, string> map,
+            Dictionary<string, string> previous,
+            Action<string, string> apply)
+        {
+            if (previous == null || apply == null) return;
+            foreach (var kv in previous)
+            {
+                if (HasKey(map, kv.Key)) continue;
+                apply(kv.Key, kv.Value ?? "");
+            }
+        }
+
         static bool IsChunkKey(string k)
         {
             int hash = k.LastIndexOf('#');

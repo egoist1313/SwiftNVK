@@ -38,7 +38,7 @@ namespace Nvk.Cad
         readonly TextBox _labTblL2, _labTblL3, _labTblL4, _labTblL5;
         readonly ComboBox _fillA, _fillT, _fillG, _fillP;
         readonly ComboBox _l1rl, _l1el, _l1bl;
-        readonly TextBox _l1preset;
+        readonly ComboBox _presetCombo;
         readonly CheckBox _useBe, _l1mh;
         readonly Button _btnRoad, _btnEarth, _btnBot, _btnHat, _btnPav, _btnCs;
         readonly ComboBox _cL0, _cL6;
@@ -251,10 +251,29 @@ namespace Nvk.Cad
             _l1bl     = LtRow(pL1, "Тип линии L1", "Continuous");
             _btnHat   = HatchRow(pL1, "Штриховка разработки", Color.Blue);
             _btnPav   = HatchRow(pL1, "Штриховка одежды", Color.IndianRed);
-            _l1preset = Num(pL1, "Пресет L1", "default");
+            pL1.Controls.Add(new Label
+            {
+                Text      = "Профиль",
+                AutoSize  = true,
+                Margin    = new Padding(0, 6, 0, 1),
+                ForeColor = C_DIM,
+                BackColor = Color.Transparent,
+                Font      = new Font("Segoe UI", 8f)
+            });
+            _presetCombo = new ComboBox
+            {
+                Width         = 240,
+                DropDownStyle = ComboBoxStyle.DropDown,
+                BackColor     = C_INPUT,
+                ForeColor     = C_TEXT,
+                Margin        = new Padding(0, 0, 0, 2),
+                Text          = NvkUiState.L1Preset ?? "default"
+            };
+            RefreshPresetCombo();
+            pL1.Controls.Add(_presetCombo);
             var pre = new FlowLayoutPanel { Width = 244, Height = 38, WrapContents = true, BackColor = Color.Transparent };
-            pre.Controls.Add(Btn("Сохранить", SaveL1,  118));
-            pre.Controls.Add(Btn("Загрузить", LoadL1, 118));
+            pre.Controls.Add(Btn("Сохранить", SavePreset, 118));
+            pre.Controls.Add(Btn("Загрузить", LoadPreset, 118));
             pL1.Controls.Add(pre);
             pL1.Controls.Add(Head("Строки таблицы"));
             MakeRowConfigBtn(pL1, ProfileKind.Razrabotka, () => _defsL1, v => _defsL1 = v);
@@ -370,7 +389,12 @@ namespace Nvk.Cad
             SetLt(_l1bl, st.Bottom != null && !string.IsNullOrEmpty(st.Bottom.Linetype) ? st.Bottom.Linetype : "Continuous");
             PaintFill(_btnHat, st.HatchExcavation);
             PaintFill(_btnPav, st.HatchPavement);
-            _l1preset.Text = NvkUiState.L1Preset ?? "default";
+            try
+            {
+                _presetCombo.Text = NvkUiState.L1Preset ?? "default";
+                RefreshPresetCombo();
+            }
+            catch { }
             PushSheet(_s2, NvkSession.L2);
             PushSheet(_s3, NvkSession.L3);
             PushSheet(_s4, NvkSession.L4);
@@ -536,7 +560,7 @@ namespace Nvk.Cad
             NvkUiState.L1RoadLt      = LtName(_l1rl, "DASHED");
             NvkUiState.L1EarthLt     = LtName(_l1el, "Continuous");
             NvkUiState.L1BotLt       = LtName(_l1bl, "Continuous");
-            NvkUiState.L1Preset      = _l1preset.Text ?? "default";
+            NvkUiState.L1Preset      = _presetCombo.Text ?? "default";
             if (NvkSession.L1 == null) NvkSession.L1 = L1Style.Default();
             if (NvkSession.L1.Road   == null) NvkSession.L1.Road   = LineStyle.Rgb(255,   0, 0, "DASHED",     30);
             NvkSession.L1.Road.Linetype = LtName(_l1rl, "DASHED");
@@ -564,13 +588,18 @@ namespace Nvk.Cad
             if (NvkSession.L3 != null) NvkSession.L3.Hatch = null;
         }
 
-        void SaveL1()
+        void SavePreset()
         {
             SaveToState();
+            string n = string.IsNullOrWhiteSpace(_presetCombo.Text) ? "default" : _presetCombo.Text.Trim();
+            FullPresetStore.Save(n, NvkUiState.Serialize());
             if (NvkSession.L1 == null) NvkSession.L1 = L1Style.Default();
-            NvkSession.L1.Name = string.IsNullOrWhiteSpace(_l1preset.Text) ? "default" : _l1preset.Text.Trim();
+            NvkSession.L1.Name = n;
             L1PresetStore.Save(NvkSession.L1);
-            _status.Text = "Пресет L1 сохранён: " + NvkSession.L1.Name;
+            RefreshPresetCombo();
+            _presetCombo.Text = n;
+            NvkUiState.L1Preset = n;
+            _status.Text = "Профиль сохранён: " + n;
         }
 
         public System.Collections.Generic.List<TableRowDef> GetDefs(ProfileKind kind)
@@ -612,12 +641,43 @@ namespace Nvk.Cad
                 _defsL5 = TableRowDef.DeserializeList(NvkUiState.RowsL5);
         }
 
-        void LoadL1()
+        void LoadPreset()
         {
-            string n = string.IsNullOrWhiteSpace(_l1preset.Text) ? "default" : _l1preset.Text.Trim();
-            NvkUiState.FromL1(L1PresetStore.Load(n));
+            SaveToState();
+            string n = string.IsNullOrWhiteSpace(_presetCombo.Text) ? "default" : _presetCombo.Text.Trim();
+            // Сохраняем данные конкретного чертежа — они не должны меняться при смене профиля
+            string zones         = NvkUiState.Zones;
+            string designHandle  = NvkUiState.DesignHandle;
+            string designName    = NvkUiState.DesignName;
+            string beHandle      = NvkUiState.BlackEarthHandle;
+            string beName        = NvkUiState.BlackEarthName;
+            bool   useBe         = NvkUiState.UseBlackEarth;
+            var map = FullPresetStore.Load(n);
+            if (map != null)
+                NvkUiState.FromMap(map);
+            else
+                NvkUiState.FromL1(L1PresetStore.Load(n));
+            // Восстанавливаем данные чертежа
+            if (!string.IsNullOrEmpty(zones)) NvkUiState.Zones = zones;
+            NvkUiState.DesignHandle      = designHandle;
+            NvkUiState.DesignName        = designName;
+            NvkUiState.BlackEarthHandle  = beHandle;
+            NvkUiState.BlackEarthName    = beName;
+            NvkUiState.UseBlackEarth     = useBe;
             LoadFromState();
-            _status.Text = "Пресет L1: " + n;
+            _status.Text = "Профиль: " + n;
+        }
+
+        void RefreshPresetCombo()
+        {
+            if (_presetCombo == null) return;
+            string cur = _presetCombo.Text;
+            _presetCombo.Items.Clear();
+            foreach (var n in FullPresetStore.List()) _presetCombo.Items.Add(n);
+            foreach (var n in L1PresetStore.List())
+                if (!_presetCombo.Items.Contains(n)) _presetCombo.Items.Add(n);
+            if (_presetCombo.Items.Count == 0) _presetCombo.Items.Add("default");
+            _presetCombo.Text = cur;
         }
 
         public void RefreshInfo()
@@ -878,7 +938,8 @@ namespace Nvk.Cad
 
         void PickZones()
         {
-            SaveToState();
+            try { SaveToState(); }
+            catch (Exception ex) { _status.Text = "Ошибка: " + ex.Message; }
             _status.Text = "Зоны: кликай пары точек на плане. Enter — следующий тип.";
             Send("НВК-ЗОНЫ ");
         }

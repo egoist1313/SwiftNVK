@@ -495,7 +495,11 @@ namespace Nvk.Cad
             string key = MakeDocKey(db, docKey);
             var map = NvkNod.Read(db);
             bool has = map != null && map.Count > 0;
-            if (!has) return false;
+            if (!has)
+            {
+                if (!force && IsCurrent(key) && HasNod) return true;
+                return false;
+            }
             if (!force && IsCurrent(key) && HasNod) return true;
             FromMap(map);
             NvkNod.ApplyLayout(db, map);
@@ -510,11 +514,21 @@ namespace Nvk.Cad
             return true;
         }
 
-        /// <summary>Сброс к значениям по умолчанию, затем ключи карты. Не оставляет поля прошлого сеанса.</summary>
+        /// <summary>
+        /// Сброс к значениям по умолчанию, затем ключи карты.
+        /// Ключи чертежа (зоны, TIN), которых нет в карте, остаются как были —
+        /// профиль настроек их не хранит и не должен затирать NOD.
+        /// </summary>
         public static void FromMap(Dictionary<string, string> map)
         {
+            var keep = SnapshotDrawing();
             ResetToDefaults();
-            if (map == null || map.Count == 0) return;
+            if (map == null || map.Count == 0)
+            {
+                NodPairs.RestoreAbsent(null, keep, Apply);
+                SyncL1();
+                return;
+            }
             bool hasSlopeL = false;
             bool hasSlopeR = false;
             foreach (var kv in map)
@@ -524,6 +538,7 @@ namespace Nvk.Cad
                 if (k == "SLOPE_R") hasSlopeR = true;
                 Apply(kv.Key, kv.Value ?? "");
             }
+            NodPairs.RestoreAbsent(map, keep, Apply);
             if (!hasSlopeL) SlopeL = SlopeM;
             if (!hasSlopeR) SlopeR = SlopeM;
             MigratePlanLayers();
@@ -532,6 +547,24 @@ namespace Nvk.Cad
             HasPush = true;
             SyncL1();
             ApplyStyles(map);
+        }
+
+        static Dictionary<string, string> SnapshotDrawing()
+        {
+            var d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            d["ZONES"] = Zones ?? "";
+            d["DESIGN_H"] = DesignHandle ?? "";
+            d["DESIGN_N"] = DesignName ?? "";
+            d["BE_H"] = BlackEarthHandle ?? "";
+            d["BE_N"] = BlackEarthName ?? "";
+            d["USE_BE"] = UseBlackEarth ? "1" : "0";
+            d["FACT_PROF_L1"] = FactProfileHandleL1 ?? "";
+            d["FACT_PROF_L2"] = FactProfileHandleL2 ?? "";
+            d["FACT_PROF_L3"] = FactProfileHandleL3 ?? "";
+            d["FACT_PROF_L4"] = FactProfileHandleL4 ?? "";
+            d["FACT_PROF_L5"] = FactProfileHandleL5 ?? "";
+            d["L1_PRESET"] = L1Preset ?? "";
+            return d;
         }
 
         public static void ResetToDefaults()

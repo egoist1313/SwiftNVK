@@ -43,6 +43,42 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void RestoreAbsentKeepsZonesWhenPresetOmitsThem()
+        {
+            var prev = new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)
+            {
+                { "ZONES", "А:0.000-5.707 Г:5.707-50.120" },
+                { "DESIGN_H", "ABC" }
+            };
+            var preset = new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)
+            {
+                { "THK_ASPH", "1.02" },
+                { "PAV_ALL", "0" }
+            };
+            var got = new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+            NodPairs.RestoreAbsent(preset, prev, (k, v) => got[k] = v);
+            Assert.Equal("А:0.000-5.707 Г:5.707-50.120", got["ZONES"]);
+            Assert.Equal("ABC", got["DESIGN_H"]);
+            Assert.Contains("ZONES", NodPairs.DrawingBound);
+        }
+
+        [Fact]
+        public void RestoreAbsentDoesNotOverridePresentEmptyZones()
+        {
+            var prev = new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)
+            {
+                { "ZONES", "А:0-10" }
+            };
+            var nod = new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)
+            {
+                { "ZONES", "" }
+            };
+            var got = new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+            NodPairs.RestoreAbsent(nod, prev, (k, v) => got[k] = v);
+            Assert.False(got.ContainsKey("ZONES"));
+        }
+
+        [Fact]
         public void EmptyInput()
         {
             var m = NodPairs.Parse(null);

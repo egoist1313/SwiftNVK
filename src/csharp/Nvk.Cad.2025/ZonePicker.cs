@@ -6,6 +6,7 @@ using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using Nvk.Core;
+using CivilDb = Autodesk.Civil.DatabaseServices;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using AcadColor = Autodesk.AutoCAD.Colors.Color;
 using ColorMethod = Autodesk.AutoCAD.Colors.ColorMethod;
@@ -28,6 +29,7 @@ namespace Nvk.Cad
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
             var ed = doc.Editor;
+            EnsureAxis(ed);
             var runs = NvkSession.AllRuns();
             int nRun = 0;
             foreach (var r in runs)
@@ -102,6 +104,58 @@ namespace Nvk.Cad
             NvkProfile.Save();
             ed.WriteMessage("\n[НВК] зоны: " + (zones.Length > 0 ? zones : "(нет)") + ". Теперь Построить / Обновить.");
             ClearTmp(doc, tmp);
+        }
+
+        /// <summary>
+        /// После загрузки NOD Runs пусты, трубы уже в LastPipes.
+        /// Собираем ось из труб, чтобы клики на плане проецировались на цепочку.
+        /// </summary>
+        static void EnsureAxis(Editor ed)
+        {
+            var have = NvkSession.AllRuns();
+            if (have != null)
+            {
+                foreach (var r in have)
+                    if (r != null && r.Chain != null && r.Chain.Total > 1e-6) return;
+            }
+            var pipes = NvkSession.LastPipes;
+            if (pipes == null || pipes.Count == 0) return;
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            try
+            {
+                using (var tr = doc.TransactionManager.StartTransaction())
+                {
+                    var segs = new List<PipeSeg>();
+                    foreach (var id in pipes)
+                    {
+                        if (id.IsNull) continue;
+                        var pipe = tr.GetObject(id, OpenMode.ForRead) as CivilDb.Pipe;
+                        if (pipe != null) segs.Add(PipeReader.Read(tr, pipe));
+                    }
+                    var comps = Chain.Components(segs);
+                    var runs = new List<DomainResult>();
+                    if (comps != null)
+                    {
+                        foreach (var c in comps)
+                        {
+                            if (c == null || c.Total < 1e-6) continue;
+                            runs.Add(new DomainResult { Chain = c });
+                        }
+                    }
+                    if (runs.Count > 0)
+                    {
+                        NvkSession.Runs = runs;
+                        NvkSession.Last = runs[0];
+                    }
+                    tr.Commit();
+                }
+            }
+            catch (Exc ex)
+            {
+                if (ed != null)
+                    ed.WriteMessage("\n[НВК] ось для зон: " + ex.Message);
+            }
         }
 
         static int NearestRun(IList<DomainResult> runs, double x, double y, double maxDist)
