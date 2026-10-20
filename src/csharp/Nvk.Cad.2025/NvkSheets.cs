@@ -585,30 +585,30 @@ namespace Nvk.Cad
             {
                 layoutId = lm.CreateLayout(name);
                 createdNew = true;
-                try
-                {
-                    using (var trNew = db.TransactionManager.StartTransaction())
-                    {
-                        var layNew = (Layout)trNew.GetObject(layoutId, OpenMode.ForWrite);
-                        var page = SheetSnapStore.PageOf(kind);
-                        if (!SheetSnapStore.ApplyPage(layNew, page, name))
-                            TrySetupA1(layNew, name);
-                        trNew.Commit();
-                    }
-                }
-                catch (Exc ex)
-                {
-                    NvkLog.Write("[НВК] лист " + name + " плот A1: " + ex.Message);
-                }
-                try
-                {
-                    if (!string.Equals(lm.CurrentLayout, stayOn, StringComparison.OrdinalIgnoreCase))
-                        lm.CurrentLayout = stayOn;
-                }
-                catch { }
             }
+            try
+            {
+                using (var trNew = db.TransactionManager.StartTransaction())
+                {
+                    var layNew = (Layout)trNew.GetObject(layoutId, OpenMode.ForWrite);
+                    var page = SheetSnapStore.PageOf(kind);
+                    if (!SheetSnapStore.ApplyPage(layNew, page, name) && createdNew)
+                        TrySetupA1(layNew, name);
+                    trNew.Commit();
+                }
+            }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] лист " + name + " плот: " + ex.Message);
+            }
+            try
+            {
+                if (!string.Equals(lm.CurrentLayout, stayOn, StringComparison.OrdinalIgnoreCase))
+                    lm.CurrentLayout = stayOn;
+            }
+            catch { }
 
-            int nEp = ScaleN(NvkUiState.VpScaleEp, 500);
+            int nEp = ScaleN(NvkUiState.VpScaleEp, 1000);
             int nCs = ScaleN(NvkUiState.VpScaleCs, 200);
             int nPlan = ScaleN(NvkUiState.VpScalePlan, 500);
             SheetWin vol = null;
@@ -959,16 +959,7 @@ namespace Nvk.Cad
             double cx = (win.MinX + win.MaxX) * 0.5;
             double cy = (win.MinY + win.MaxY) * 0.5;
             double twist = PlanView.TwistRad(twistDeg);
-            double modelW, modelH;
-            if (Math.Abs(twistDeg) > 1e-9)
-                PlanView.RotatedSize(win.MinX, win.MinY, win.MaxX, win.MaxY, twistDeg, out modelW, out modelH);
-            else
-            {
-                modelW = win.Width;
-                modelH = win.Height;
-            }
-            double viewH = modelH * 1.08;
-            if (viewH < 1e-9) viewH = 1.0;
+            double viewH = SheetSnap.ViewHeightAtScale(vp.Height, scaleN);
             try { vp.Locked = false; } catch { }
             try { vp.PerspectiveOn = false; } catch { }
             try { vp.ViewDirection = new Vector3d(0.0, 0.0, 1.0); } catch { }
@@ -983,6 +974,8 @@ namespace Nvk.Cad
             try { vp.On = true; } catch { }
             double gotDeg = 0.0;
             try { gotDeg = vp.TwistAngle * 180.0 / Math.PI; } catch { }
+            double gotCs = 0.0;
+            try { gotCs = vp.CustomScale; } catch { }
             bool on = false;
             try { on = vp.On; } catch { }
             NvkLog.Write("[НВК] VP вид " + key
@@ -991,6 +984,7 @@ namespace Nvk.Cad
                 + "  модель " + win.Width.ToString("0.00") + "x" + win.Height.ToString("0.00")
                 + "  бумага " + vp.Width.ToString("0.0") + "x" + vp.Height.ToString("0.0")
                 + "  H=" + vp.ViewHeight.ToString("0.00")
+                + "  cs=" + gotCs.ToString("0.###")
                 + "  пск " + twistDeg.ToString("0.##")
                 + "  twist " + gotDeg.ToString("0.##")
                 + "  On=" + (on ? "1" : "0"));
@@ -1111,6 +1105,25 @@ namespace Nvk.Cad
             x1 = paperW;
             y1 = paperH;
             if (layout == null) return;
+            ProfileKind kind;
+            if (TryKind(name, out kind))
+            {
+                double fx0, fy0, fx1, fy1;
+                if (SheetSnap.TryFrame(SheetSnapStore.LayoutOf(kind), out fx0, out fy0, out fx1, out fy1))
+                {
+                    x0 = fx0;
+                    y0 = fy0;
+                    x1 = fx1;
+                    y1 = fy1;
+                    paperW = x1 - x0;
+                    paperH = y1 - y0;
+                    NvkLog.Write("[НВК] лист " + name
+                        + " бумага снимок " + paperW.ToString("0") + "x" + paperH.ToString("0")
+                        + "  окно " + x0.ToString("0.0") + "," + y0.ToString("0.0")
+                        + ".." + x1.ToString("0.0") + "," + y1.ToString("0.0"));
+                    return;
+                }
+            }
             try
             {
                 Point2d sz = layout.PlotPaperSize;

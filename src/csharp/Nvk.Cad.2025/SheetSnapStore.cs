@@ -88,6 +88,15 @@ namespace Nvk.Cad
                 tr.Commit();
             }
             FillDefaultPage(file);
+            if (file.Layouts != null)
+            {
+                for (int i = 0; i < file.Layouts.Count; i++)
+                {
+                    var L = file.Layouts[i];
+                    if (L != null) SheetSnap.FillWindow(L.Page, L);
+                }
+            }
+            SheetSnap.FillWindow(file.Page, SheetSnap.Find(file, "Razrabotka"));
             string path = PathOf();
             File.WriteAllText(path, JsonSerializer.Serialize(file, Opt), new UTF8Encoding(false));
             _mem = file;
@@ -351,11 +360,18 @@ namespace Nvk.Cad
                     + " бумага уже с объектами (" + nPaper.ToString() + "), линии не дублируем");
                 return 0;
             }
-            int n = 0;
+            double fx0, fy0, fx1, fy1;
+            bool frame = SheetSnap.TryFrame(lay, out fx0, out fy0, out fx1, out fy1);
+            int n = 0, nSkip = 0;
             for (int i = 0; i < lay.Ents.Count; i++)
             {
                 var e = lay.Ents[i];
                 if (e == null || SheetSnap.IsSheetTitle(e)) continue;
+                if (frame && !SheetSnap.IsNearPaper(e, fx0, fy0, fx1, fy1))
+                {
+                    nSkip++;
+                    continue;
+                }
                 try
                 {
                     if (PutEnt(db, tr, ps, e)) n++;
@@ -365,6 +381,9 @@ namespace Nvk.Cad
                     NvkLog.Write("[НВК] снимок ent " + (e.T ?? "?") + ": " + ex.Message);
                 }
             }
+            if (nSkip > 0)
+                NvkLog.Write("[НВК] снимок " + kind.ToString()
+                    + " мимо рамки " + nSkip.ToString());
             NvkLog.Write("[НВК] снимок " + kind.ToString() + " объектов +" + n.ToString());
             return n;
         }
@@ -576,6 +595,15 @@ namespace Nvk.Cad
                 p.PaperH = sz.Y;
             }
             catch { }
+            try
+            {
+                Extents2d w = layout.PlotWindowArea;
+                p.Wx0 = w.MinPoint.X;
+                p.Wy0 = w.MinPoint.Y;
+                p.Wx1 = w.MaxPoint.X;
+                p.Wy1 = w.MaxPoint.Y;
+            }
+            catch { }
             return SheetSnap.HasPage(p) ? p : null;
         }
 
@@ -610,9 +638,38 @@ namespace Nvk.Cad
                 PlotPaperUnit units;
                 if (TryEnum(page.Units, PlotPaperUnit.Millimeters, out units))
                     try { psv.SetPlotPaperUnits(layout, units); } catch { }
+                try { psv.SetZoomToPaperOnUpdate(layout, false); } catch { }
+                double wx0 = page.Wx0, wy0 = page.Wy0, wx1 = page.Wx1, wy1 = page.Wy1;
+                if (!SheetSnap.HasWindow(page))
+                {
+                    ProfileKind kind;
+                    if (NvkSheets.TryKind(name, out kind))
+                    {
+                        var snap = LayoutOf(kind);
+                        SheetSnap.FillWindow(page, snap);
+                        if (SheetSnap.HasWindow(page))
+                        {
+                            wx0 = page.Wx0; wy0 = page.Wy0;
+                            wx1 = page.Wx1; wy1 = page.Wy1;
+                        }
+                    }
+                }
+                bool win = SheetSnap.HasWindow(page)
+                    && string.Equals(page.PlotType, "Window", StringComparison.OrdinalIgnoreCase);
+                Extents2d winExt = win
+                    ? new Extents2d(wx0, wy0, wx1, wy1)
+                    : new Extents2d(0, 0, 1, 1);
+                if (win)
+                {
+                    try { psv.SetPlotWindowArea(layout, winExt); } catch { }
+                }
                 PlotType ptype;
                 if (TryEnum(page.PlotType, PlotType.Layout, out ptype))
                     try { psv.SetPlotType(layout, ptype); } catch { }
+                if (win)
+                {
+                    try { psv.SetPlotWindowArea(layout, winExt); } catch { }
+                }
                 PlotRotation rot;
                 if (TryEnum(page.Rotation, PlotRotation.Degrees000, out rot))
                     try { psv.SetPlotRotation(layout, rot); } catch { }
@@ -647,7 +704,12 @@ namespace Nvk.Cad
                 try { layout.PrintLineweights = page.Lineweights; } catch { }
                 try { layout.PlotViewportBorders = page.VpBorders; } catch { }
                 NvkLog.Write("[НВК] лист " + name + " плот " + dev
-                    + "  " + (layout.CanonicalMediaName ?? media));
+                    + "  " + (layout.CanonicalMediaName ?? media)
+                    + (win
+                        ? "  окно " + wx0.ToString("0.0", Inv) + "," + wy0.ToString("0.0", Inv)
+                            + ".." + wx1.ToString("0.0", Inv) + "," + wy1.ToString("0.0", Inv)
+                        : ""));
+                if (win) ZoomToWindow(layout, wx0, wy0, wx1, wy1);
                 return true;
             }
             catch (Exc ex)
@@ -685,6 +747,7 @@ namespace Nvk.Cad
                 return "[НВК] нет параметров листа. Сначала снимок или открой вкладку с нужным плотом.";
 
             int nOk = 0, nFail = 0;
+            var file = Load();
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 var dict = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
@@ -697,7 +760,14 @@ namespace Nvk.Cad
                     try { layout = tr.GetObject(e.Value, OpenMode.ForWrite) as Layout; }
                     catch { nFail++; continue; }
                     if (layout == null) { nFail++; continue; }
-                    if (ApplyPage(layout, page, e.Key)) nOk++;
+                    SheetSnapPage one = page;
+                    ProfileKind kind;
+                    if (NvkSheets.TryKind(e.Key, out kind))
+                    {
+                        one = SheetSnap.PageOf(file, kind.ToString()) ?? page;
+                        SheetSnap.FillWindow(one, SheetSnap.Find(file, kind.ToString()));
+                    }
+                    if (ApplyPage(layout, one, e.Key)) nOk++;
                     else nFail++;
                 }
                 tr.Commit();
@@ -707,6 +777,35 @@ namespace Nvk.Cad
             msg += "  " + (page.Device ?? "") + "  " + (page.Media ?? "");
             NvkLog.Write(msg);
             return msg;
+        }
+
+        static void ZoomToWindow(Layout layout, double x0, double y0, double x1, double y1)
+        {
+            if (layout == null || x1 - x0 < 10.0 || y1 - y0 < 10.0) return;
+            try
+            {
+                var tr = layout.Database.TransactionManager.TopTransaction;
+                if (tr == null) return;
+                var ps = tr.GetObject(layout.BlockTableRecordId, OpenMode.ForWrite) as BlockTableRecord;
+                if (ps == null) return;
+                double cx = (x0 + x1) * 0.5;
+                double cy = (y0 + y1) * 0.5;
+                double h = y1 - y0;
+                if (h < 10.0) h = 297.0;
+                h *= 1.12;
+                foreach (ObjectId id in ps)
+                {
+                    var vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
+                    if (vp == null || vp.IsErased) continue;
+                    int n = 0;
+                    try { n = vp.Number; } catch { continue; }
+                    if (n != 1) continue;
+                    try { vp.ViewCenter = new Point2d(cx, cy); } catch { }
+                    try { vp.ViewHeight = h; } catch { }
+                    break;
+                }
+            }
+            catch { }
         }
 
         static string PickDevice(PlotSettingsValidator psv, string want)
