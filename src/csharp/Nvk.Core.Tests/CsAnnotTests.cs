@@ -181,6 +181,7 @@ namespace Nvk.Core.Tests
         public void SectionMarkMatchesHeader()
         {
             Assert.Equal("Сечение 2-2", CsAnnot.SectionMark(1));
+            Assert.Equal(2.2, CsAnnot.SectionMarkH, 6);
         }
 
         [Fact]

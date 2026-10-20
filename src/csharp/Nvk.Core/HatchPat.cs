@@ -16,7 +16,7 @@ namespace Nvk.Core
             if (string.Equals(pattern, "DOTS", StringComparison.OrdinalIgnoreCase))
                 return SoilScale;
             if (string.Equals(pattern, "AR-SAND", StringComparison.OrdinalIgnoreCase))
-                return 0.01;
+                return SandScale;
             return 1.0;
         }
 

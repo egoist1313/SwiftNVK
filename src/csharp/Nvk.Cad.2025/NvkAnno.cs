@@ -214,11 +214,21 @@ namespace Nvk.Cad
         /// </summary>
         public static void HatchEnd(Hatch h)
         {
+            HatchEnd(h, 0.0);
+        }
+
+        public static void HatchEnd(Hatch h, double patternScale)
+        {
             if (h == null) return;
             ForceAnnotative(h);
             try { h.EvaluateHatch(true); }
             catch (Exc) { }
             ForceAnnotative(h);
+            if (patternScale > 1e-9)
+            {
+                try { h.PatternScale = patternScale < 0.001 ? 0.001 : patternScale; }
+                catch (Exc) { }
+            }
             AddPaperScales(h);
             LogHatchOnce(h);
         }

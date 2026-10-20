@@ -11,6 +11,9 @@ namespace Nvk.Cad
     /// <summary>Мультивыноска: стрелка в arrow, текст у text. Без отката в голый MTEXT.</summary>
     static class NvkLeader
     {
+        public const double TextH = 2.5;
+        public const double ShelfLen = 0.5;
+
         static int _ok, _fail;
         static string _lastErr;
 
@@ -322,13 +325,11 @@ namespace Nvk.Cad
                 catch (Exc) { }
                 ml.ContentType = ContentType.MTextContent;
 
-                double thIgn = 2.5, aszIgn = 1.25;
+                double thIgn = TextH, aszIgn = 1.25;
                 ObjectId txtSt = ObjectId.Null;
                 ReadStyle(db, tr, ref thIgn, ref aszIgn, ref txtSt);
-                double th = PlanView.PaperMmToModel(2.5, NvkUiState.VpScalePlan);
-                double asz = PlanView.PaperMmToModel(1.25, NvkUiState.VpScalePlan);
-                if (th < 1e-3) th = 0.5;
-                if (asz < 1e-4) asz = th * 0.5;
+                double th = TextH;
+                double asz = 1.25;
 
                 var mt = new MText();
                 if (db != null) mt.SetDatabaseDefaults(db);
@@ -357,9 +358,9 @@ namespace Nvk.Cad
                 try { ml.ArrowSize = asz; } catch (Exc) { }
                 try { ml.EnableLanding = true; } catch (Exc) { }
                 try { ml.EnableDogleg = true; } catch (Exc) { }
-                double dogLen = Math.Max(th, asz);
+                double dogLen = ShelfLen;
                 try { ml.DoglegLength = dogLen; } catch (Exc) { }
-                try { ml.LandingGap = 0.5 * th; } catch (Exc) { }
+                try { ml.LandingGap = 0.05; } catch (Exc) { }
                 try { ml.LeaderLineType = LeaderType.StraightLeader; } catch (Exc) { }
                 try
                 {
@@ -439,6 +440,9 @@ namespace Nvk.Cad
                 if (!string.IsNullOrEmpty(layer)) vla.Layer = layer;
                 try { vla.TextBackgroundFill = true; } catch (Exc) { }
                 try { vla.TextRotation = rot; } catch (Exc) { }
+                try { vla.TextHeight = TextH; } catch (Exc) { }
+                try { vla.DoglegLength = ShelfLen; } catch (Exc) { }
+                try { vla.LandingGap = 0.05; } catch (Exc) { }
                 try { vla.Annotative = true; } catch (Exc) { }
                 return true;
             }
@@ -464,7 +468,7 @@ namespace Nvk.Cad
                 tr.AddNewlyCreatedDBObject(ld, true);
                 NvkTag.Stamp(tr, ld);
                 NvkAnno.ApplyLeader(ld);
-                var mt = NvkText.Make(btr, tr, layer, text.X, text.Y, contents, 2.5, AttachmentPoint.MiddleLeft, rot);
+                var mt = NvkText.Make(btr, tr, layer, text.X, text.Y, contents, TextH, AttachmentPoint.MiddleLeft, rot);
                 if (mt != null) NvkAnno.ApplyLeader(mt);
                 _lastErr = (_lastErr ?? "") + " → LEADER";
                 return true;

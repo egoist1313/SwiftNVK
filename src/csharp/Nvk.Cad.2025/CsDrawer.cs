@@ -640,13 +640,11 @@ namespace Nvk.Cad
             pl.Color = color;
             if (lw > 0) pl.LineWeight = (LineWeight)lw;
             pl.Plinegen = true;
+            pl.LinetypeScale = 1.0;
             if (!string.IsNullOrEmpty(ltype) && !string.Equals(ltype, "Continuous", StringComparison.OrdinalIgnoreCase))
             {
                 EnsureLinetype(btr.Database, tr, ltype);
                 try { pl.Linetype = ltype; } catch (Exc) { }
-                double lts = sc > 0.5 ? sc * 0.25 : 1.0;
-                if (lts < 0.2) lts = 0.2;
-                pl.LinetypeScale = lts;
             }
             for (int i = 0; i < pts.Length; i++)
                 pl.AddVertexAt(i, pts[i], 0, 0, 0);
@@ -686,6 +684,7 @@ namespace Nvk.Cad
                 ln.SetDatabaseDefaults();
                 ln.Layer = LayerIns;
                 ln.Color = Aci(1);
+                ln.LinetypeScale = 1.0;
                 if (lt.Has("CENTER")) ln.Linetype = "CENTER";
                 btr.AppendEntity(ln);
                 tr.AddNewlyCreatedDBObject(ln, true);
@@ -766,7 +765,7 @@ namespace Nvk.Cad
                 inner.Add(cir.ObjectId);
                 h.AppendLoop(HatchLoopTypes.Default, inner);
                 h.EvaluateHatch(true);
-                NvkAnno.HatchEnd(h);
+                NvkAnno.HatchEnd(h, patScale);
             }
             catch (Exc)
             {
@@ -803,7 +802,7 @@ namespace Nvk.Cad
                 ids.Add(pl.ObjectId);
                 h.AppendLoop(HatchLoopTypes.Outermost, ids);
                 h.EvaluateHatch(true);
-                NvkAnno.HatchEnd(h);
+                NvkAnno.HatchEnd(h, patScale);
             }
             catch (Exc)
             {

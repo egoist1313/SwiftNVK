@@ -7,6 +7,7 @@ using Autodesk.AutoCAD.Geometry;
 using Nvk.Core;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using AcadColor = Autodesk.AutoCAD.Colors.Color;
+using Exc = System.Exception;
 
 namespace Nvk.Cad
 {
@@ -37,6 +38,7 @@ namespace Nvk.Cad
             EnsureLayer(db, tr, PlanView.LayerMh, 6);
             EnsureLayer(db, tr, PlanView.LayerSamp, 3);
             EnsureLayer(db, tr, PlanView.LayerSit, 5);
+            NvkAnno.CaptureDim(db, tr);
             var poses = LeaderPoses.Parse(NvkSession.CachePlanLdr);
             var live = NvkLeader.Collect(db, tr, LeaderLayers);
             LeaderPoses.Overlay(poses, live);
@@ -96,6 +98,7 @@ namespace Nvk.Cad
                     AddMhLeader(ms, tr, lastSeg, false, poses, planDeg);
                     nMh++;
                 }
+                AddMhSpanDims(ms, tr, last.Chain);
             }
             if (keep != null) NvkSession.Last = keep;
             NvkSession.CachePlanLdr = LeaderPoses.Format(poses);
@@ -498,6 +501,42 @@ namespace Nvk.Cad
             NvkLeader.Make(ms, tr, layer, ax, ay, tx, ty, key, rot);
         }
 
+        static void AddMhSpanDims(BlockTableRecord ms, Transaction tr, Chain chain)
+        {
+            var mhs = PlanPoints.Manholes(chain, false);
+            if (mhs == null || mhs.Count < 2) return;
+            for (int i = 0; i < mhs.Count - 1; i++)
+            {
+                var a = mhs[i];
+                var b = mhs[i + 1];
+                double dx = b.X - a.X;
+                double dy = b.Y - a.Y;
+                double len = Math.Sqrt(dx * dx + dy * dy);
+                if (len < 1e-4) continue;
+                double nx = -dy / len;
+                double ny = dx / len;
+                const double off = 2.0;
+                try
+                {
+                    var dim = new AlignedDimension();
+                    dim.SetDatabaseDefaults();
+                    try { dim.DimensionStyle = ms.Database.Dimstyle; } catch (Exc) { }
+                    dim.Layer = PlanView.LayerMh;
+                    dim.XLine1Point = new Point3d(a.X, a.Y, 0.0);
+                    dim.XLine2Point = new Point3d(b.X, b.Y, 0.0);
+                    dim.DimLinePoint = new Point3d(
+                        0.5 * (a.X + b.X) + nx * off,
+                        0.5 * (a.Y + b.Y) + ny * off,
+                        0.0);
+                    ms.AppendEntity(dim);
+                    tr.AddNewlyCreatedDBObject(dim, true);
+                    NvkAnno.ApplyDim(dim, tr);
+                    NvkTag.Stamp(tr, dim);
+                }
+                catch (Exc) { }
+            }
+        }
+
         static ObjectId AddPline(BlockTableRecord ms, Transaction tr, List<PlanPt> pts, bool closed, short color, int lw)
         {
             return AddPline(ms, tr, pts, closed, color, lw, Layer);
@@ -512,6 +551,7 @@ namespace Nvk.Cad
             pl.Closed = closed;
             pl.Color = Aci(color);
             if (lw > 0) pl.LineWeight = (LineWeight)lw;
+            pl.LinetypeScale = 1.0;
             for (int i = 0; i < pts.Count; i++)
                 pl.AddVertexAt(i, new Point2d(pts[i].X, pts[i].Y), 0, 0, 0);
             ms.AppendEntity(pl);

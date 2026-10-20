@@ -236,6 +236,7 @@ namespace Nvk.Cad
             ln.SetDatabaseDefaults();
             ln.Layer = Layer;
             ln.Color = AcadColor.FromColorIndex(ColorMethod.ByLayer, 256);
+            ln.LinetypeScale = 1.0;
             ms.AppendEntity(ln);
             tr.AddNewlyCreatedDBObject(ln, true);
         }

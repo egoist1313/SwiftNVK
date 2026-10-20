@@ -34,6 +34,36 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void ManholesWalkInChainOrderForSpanDims()
+        {
+            var chain = Chain.Sort(new List<PipeSeg>
+            {
+                new PipeSeg
+                {
+                    X0 = 0, Y0 = 0, X1 = 20, Y1 = 0,
+                    InvertStart = 100, InvertEnd = 99.8, Diam = 0.3,
+                    StartName = "К1", StartR = 0.8,
+                    EndName = "К2", EndR = 0.8
+                },
+                new PipeSeg
+                {
+                    X0 = 20, Y0 = 0, X1 = 50, Y1 = 0,
+                    InvertStart = 99.8, InvertEnd = 99.5, Diam = 0.3,
+                    StartName = "К2", StartR = 0.8,
+                    EndName = "К3", EndR = 0.8
+                }
+            });
+            var rows = PlanPoints.Manholes(chain);
+            Assert.Equal(3, rows.Count);
+            Assert.Equal("К1", rows[0].Name);
+            Assert.Equal("К2", rows[1].Name);
+            Assert.Equal("К3", rows[2].Name);
+            Assert.Equal(0.0, rows[0].X, 6);
+            Assert.Equal(20.0, rows[1].X, 6);
+            Assert.Equal(50.0, rows[2].X, 6);
+        }
+
+        [Fact]
         public void ManholesIncludeNamedZeroRadius()
         {
             var chain = Chain.Sort(new List<PipeSeg>

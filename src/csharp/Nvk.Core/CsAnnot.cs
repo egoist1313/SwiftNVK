@@ -109,6 +109,9 @@ namespace Nvk.Core
             return (slope * 1000.0).ToString("0.0", CultureInfo.InvariantCulture) + "‰";
         }
 
+        /// <summary>Высота подписи «Сечение N-N» на продольнике, ед. чертежа.</summary>
+        public const double SectionMarkH = 2.2;
+
         public static string SectionMark(int idx)
         {
             int n = idx + 1;

@@ -125,7 +125,9 @@ namespace Nvk.Core.Tests
         {
             Assert.Equal(1.0, HatchPat.CsFixed("ANSI31"), 6);
             Assert.Equal(0.2, HatchPat.CsFixed("DOTS"), 6);
-            Assert.Equal(0.01, HatchPat.CsFixed("AR-SAND"), 6);
+            Assert.Equal(0.1, HatchPat.CsFixed("AR-SAND"), 6);
+            Assert.Equal(HatchPat.SandScale, HatchPat.CsFixed("AR-SAND"), 6);
+            Assert.Equal(0.1, HatchPat.Scale(FillStyle.Of("AR-SAND", 5, 0)), 6);
             Assert.Equal("AR-SAND", HatchPat.Backfill("ASPH"));
             Assert.Equal("AR-SAND", HatchPat.Backfill("TROT"));
             Assert.Equal("DOTS", HatchPat.Backfill("GAZN"));

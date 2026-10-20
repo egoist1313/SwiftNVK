@@ -105,6 +105,7 @@ namespace Nvk.Cad
                     ln.SetDatabaseDefaults();
                     ln.Layer = "NVK-MARK";
                     ln.Color = Aci(8);
+                    ln.LinetypeScale = 1.0;
                     ms.AppendEntity(ln);
                     tr.AddNewlyCreatedDBObject(ln, true);
                     var mt = new MText();
@@ -112,7 +113,7 @@ namespace Nvk.Cad
                     mt.Layer = "NVK-MARK";
                     mt.Contents = CsAnnot.SectionMark(i);
                     mt.Location = new Point3d(x, yBot, 0.0);
-                    mt.TextHeight = 1.6;
+                    mt.TextHeight = CsAnnot.SectionMarkH;
                     mt.Attachment = AttachmentPoint.BottomLeft;
                     mt.Rotation = Math.PI * 0.5;
                     mt.Color = Aci(7);
@@ -226,6 +227,7 @@ namespace Nvk.Cad
             pl.Closed = closed;
             pl.Color = color;
             if (lw > 0) pl.LineWeight = (LineWeight)lw;
+            pl.LinetypeScale = 1.0;
             for (int i = 0; i < pts.Length; i++)
                 pl.AddVertexAt(i, pts[i], 0, 0, 0);
             btr.AppendEntity(pl);

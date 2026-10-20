@@ -276,6 +276,7 @@ namespace Nvk.Cad
         static void DrawZoneCoverage(BlockTableRecord ms, Transaction tr, string layer,
             DomainResult last, Point3d o, double lSc, double hSc, double osh, SectionConfig cfg, List<Point2d> road)
         {
+            if (!NvkUiState.ShowLineTags) return;
             if (cfg == null || cfg.Zones == null || cfg.Zones.Count == 0 || road == null || road.Count < 2)
                 return;
             foreach (var z in cfg.Zones)
@@ -1665,9 +1666,7 @@ namespace Nvk.Cad
             var cfg = last.Cfg ?? new SectionConfig();
             EnsureLayer(ms.Database, tr, "NVK-MARK", 7);
             var tbl = NvkSession.Tbl();
-            double markH = th * 0.7;
-            if (tbl != null && tbl.Annotative)
-                markH = tbl.Scaled(markH, NvkSession.Cannoscale);
+            double markH = CsAnnot.SectionMarkH;
             var col = CadColor.CsMark(kind);
             var stationX = new List<double>(last.Geoms.Count);
             for (int i = 0; i < last.Geoms.Count; i++)
@@ -1684,7 +1683,7 @@ namespace Nvk.Cad
                 double yLabel = yBot + (tbl != null ? tbl.OffsetPct : 0.0) * th / 100.0;
                 double lx = i < labelX.Count ? labelX[i] : x;
                 NvkText.Make(ms, tr, "NVK-MARK", lx, yLabel, CsAnnot.SectionMark(markOffset + i),
-                    th * 0.7, AttachmentPoint.BottomLeft, Math.PI * 0.5, 0, false);
+                    markH, AttachmentPoint.BottomLeft, Math.PI * 0.5, 0, false);
             }
         }
 
@@ -1999,7 +1998,7 @@ namespace Nvk.Cad
                         string nm = i == 0 ? cs[0].StartName
                             : i == cs.Count ? cs[cs.Count - 1].EndName
                             : cs[i].StartName;
-                        nm = SiteTitle.Label(nm, false);
+                        nm = SiteTitle.Label(nm, NvkUiState.MhStripParen);
                         if (!string.IsNullOrEmpty(nm))
                             NvkText.Make(ms, tr, layer, o.X + mhCh * lSc, 0.5 * (y + yB),
                                 nm, th, AttachmentPoint.MiddleCenter, Math.PI * 0.5);
@@ -2152,7 +2151,8 @@ namespace Nvk.Cad
             ln.SetDatabaseDefaults();
             ln.Layer = layer;
             ln.Color = col;
-            if (lw > 0) ln.LineWeight = (LineWeight)lw;
+            ln.LinetypeScale = 1.0;
+            ln.LineWeight = LineWeight.LineWeight015;
             btr.AppendEntity(ln);
             tr.AddNewlyCreatedDBObject(ln, true);
             NvkTag.Stamp(tr, ln);
@@ -2166,17 +2166,16 @@ namespace Nvk.Cad
             ml.SetDatabaseDefaults();
             if (!string.IsNullOrEmpty(layer)) ml.Layer = layer;
             ml.ContentType = ContentType.MTextContent;
-            double asz = th * 0.5;
+            double asz = NvkLeader.TextH * 0.5;
             ml.ArrowSize = asz;
-            double dogLen = th > asz ? th : asz;
-            if (dogLen < 1e-6) dogLen = 1.0;
+            double dogLen = NvkLeader.ShelfLen;
             var dog = textLeft ? new Vector3d(-1, 0, 0) : new Vector3d(1, 0, 0);
             var textPt = new Point3d(textX, textY, 0);
             var land = textPt - dog * dogLen;
             try { ml.EnableLanding = true; } catch (Exc) { }
             try { ml.EnableDogleg = true; } catch (Exc) { }
             try { ml.DoglegLength = dogLen; } catch (Exc) { }
-            try { ml.LandingGap = 0.5 * th; } catch (Exc) { }
+            try { ml.LandingGap = 0.05; } catch (Exc) { }
             try { ml.LeaderLineType = LeaderType.StraightLeader; } catch (Exc) { }
             try
             {
@@ -2194,10 +2193,7 @@ namespace Nvk.Cad
             var mt = new MText();
             mt.SetDatabaseDefaults();
             mt.Contents = contents ?? "";
-            double h = th > 0.0 ? th : 2.5;
-            var tblCfg = NvkSession.Tbl();
-            if (tblCfg != null && tblCfg.Annotative) h = tblCfg.Scaled(h, NvkSession.Cannoscale);
-            mt.TextHeight = h;
+            mt.TextHeight = NvkLeader.TextH;
             mt.Attachment = textLeft ? AttachmentPoint.MiddleRight : AttachmentPoint.MiddleLeft;
             mt.Location = textPt;
             mt.Rotation = textRot;
@@ -2239,11 +2235,9 @@ namespace Nvk.Cad
             pl.Layer = layer;
             pl.Closed = closed;
             pl.Color = col;
-            if (lw > 0) pl.LineWeight = (LineWeight)lw;
+            pl.LineWeight = LineWeight.LineWeight015;
             pl.Plinegen = true;
-            double lts = NvkSession.Cannoscale > 10.0 ? 10.0 / NvkSession.Cannoscale : 1.0;
-            if (lts < 0.01) lts = 0.01;
-            pl.LinetypeScale = lts;
+            pl.LinetypeScale = 1.0;
             if (!string.IsNullOrEmpty(ltype) && !string.Equals(ltype, "Continuous", StringComparison.OrdinalIgnoreCase))
             {
                 EnsureLinetype(btr.Database, tr, ltype);
@@ -2323,7 +2317,7 @@ namespace Nvk.Cad
                 ids.Add(pl.ObjectId);
                 h.AppendLoop(HatchLoopTypes.Outermost, ids);
                 h.EvaluateHatch(true);
-                NvkAnno.HatchEnd(h);
+                NvkAnno.HatchEnd(h, scale);
             }
             catch (Exc) { }
         }
