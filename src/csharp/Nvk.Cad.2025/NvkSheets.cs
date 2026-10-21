@@ -190,7 +190,7 @@ namespace Nvk.Cad
             if (doc == null) return "[НВК] ЛИСТЫ: нет документа";
             var db = doc.Database;
             var lm = LayoutManager.Current;
-            NvkLog.Write("[НВК] ЛИСТЫ старт (видовые включаем на вкладке, остаёмся в Модели)");
+            NvkLog.Write("[НВК] ЛИСТЫ старт (вкладки не переключаем)");
 
             using (var tr = db.TransactionManager.StartTransaction())
             {
@@ -252,6 +252,8 @@ namespace Nvk.Cad
             {
                 NvkQuiet.Pop(quiet);
             }
+
+            EntModAllVps(db);
 
             string msg = "[НВК] ЛИСТЫ: новых " + nNew + "  без изменений " + nKeep;
             if (nFail > 0) msg += "  ошибок " + nFail;
@@ -573,8 +575,6 @@ namespace Nvk.Cad
         static int MakeLevel(Database db, LayoutManager lm, string name, bool createdNew,
             ProfileKind kind, List<CsCell> epCells, List<CsCell> cells)
         {
-            const string stayOn = "Model";
-
             ObjectId layoutId = ObjectId.Null;
             try { layoutId = lm.GetLayoutId(name); } catch { }
             if (layoutId.IsNull)
@@ -582,6 +582,12 @@ namespace Nvk.Cad
                 layoutId = lm.CreateLayout(name);
                 createdNew = true;
             }
+            try
+            {
+                if (!string.Equals(lm.CurrentLayout, "Model", StringComparison.OrdinalIgnoreCase))
+                    lm.CurrentLayout = "Model";
+            }
+            catch { }
             try
             {
                 using (var trNew = db.TransactionManager.StartTransaction())
@@ -600,15 +606,7 @@ namespace Nvk.Cad
             {
                 NvkLog.Write("[НВК] лист " + name + " плот: " + ex.Message);
             }
-            // Viewport.On держится только пока вкладка листа текущая.
-            try { lm.CurrentLayout = name; }
-            catch (Exc ex)
-            {
-                NvkLog.Write("[НВК] лист " + name + " вкладка: " + ex.Message);
-            }
 
-            try
-            {
             int nEp = ScaleN(NvkUiState.VpScaleEp, 1000);
             int nCs = ScaleN(NvkUiState.VpScaleCs, 200);
             int nPlan = ScaleN(NvkUiState.VpScalePlan, 500);
@@ -681,13 +679,7 @@ namespace Nvk.Cad
                 foreach (var s in specs)
                 {
                     if (have.ContainsKey(s.Key)) continue;
-                    var vp = new Viewport();
-                    vp.SetDatabaseDefaults();
-                    vp.CenterPoint = new Point3d(s.Cx, s.Cy, 0.0);
-                    vp.Width = s.W;
-                    vp.Height = s.H;
-                    ps.AppendEntity(vp);
-                    tr.AddNewlyCreatedDBObject(vp, true);
+                    var vp = MakeVp(tr, db, ps, s);
                     StyleVp(vp);
                     NvkTag.StampVp(tr, vp, s.Key);
                     have[s.Key] = vp.ObjectId;
@@ -803,16 +795,6 @@ namespace Nvk.Cad
                 + "  экранов +" + nAdd.ToString()
                 + "  вид " + specs.Count.ToString());
             return nAdd > 0 ? nAdd : specs.Count;
-            }
-            finally
-            {
-                try
-                {
-                    if (!string.Equals(lm.CurrentLayout, stayOn, StringComparison.OrdinalIgnoreCase))
-                        lm.CurrentLayout = stayOn;
-                }
-                catch { }
-            }
         }
 
         static int DropStaleVps(Transaction tr, Dictionary<string, ObjectId> have,
@@ -1068,6 +1050,242 @@ namespace Nvk.Cad
             }
         }
 
+        static bool _layoutHooked;
+
+        public static void Hook()
+        {
+            if (_layoutHooked) return;
+            try
+            {
+                LayoutManager.Current.LayoutSwitched += OnLayoutSwitched;
+                _layoutHooked = true;
+            }
+            catch (Exc) { }
+            EnsureLispVpOn();
+        }
+
+        public static void Unhook()
+        {
+            if (!_layoutHooked) return;
+            try { LayoutManager.Current.LayoutSwitched -= OnLayoutSwitched; }
+            catch (Exc) { }
+            _layoutHooked = false;
+        }
+
+        static void OnLayoutSwitched(object sender, LayoutEventArgs e)
+        {
+            try
+            {
+                if (e == null) return;
+                string name = LayoutNameOf(e);
+                if (string.IsNullOrEmpty(name)) return;
+                if (string.Equals(name, "Model", StringComparison.OrdinalIgnoreCase))
+                    return;
+                if (!IsOurs(name)) return;
+                var doc = AcadApp.DocumentManager.MdiActiveDocument;
+                if (doc == null) return;
+                using (doc.LockDocument())
+                    WakeLayout(doc.Database, name);
+            }
+            catch (Exc) { }
+        }
+
+        static string LayoutNameOf(LayoutEventArgs e)
+        {
+            if (e == null) return null;
+            try
+            {
+                var t = e.GetType();
+                string[] names = { "NewLayout", "LayoutName", "Name", "NewName" };
+                for (int i = 0; i < names.Length; i++)
+                {
+                    var p = t.GetProperty(names[i]);
+                    if (p == null) continue;
+                    var v = p.GetValue(e) as string;
+                    if (!string.IsNullOrEmpty(v)) return v;
+                }
+            }
+            catch (Exc) { }
+            return null;
+        }
+
+        static void WakeLayout(Database db, string name)
+        {
+            if (db == null || string.IsNullOrEmpty(name)) return;
+            int on = 0, n = 0;
+            try
+            {
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var lm = LayoutManager.Current;
+                    ObjectId layoutId = ObjectId.Null;
+                    try { layoutId = lm.GetLayoutId(name); } catch (Exc) { }
+                    if (layoutId.IsNull) return;
+                    var layout = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
+                    var ps = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
+                    foreach (ObjectId id in ps)
+                    {
+                        var vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
+                        if (vp == null || vp.IsErased) continue;
+                        int num = 0;
+                        try { num = vp.Number; } catch (Exc) { }
+                        if (num == 1) continue;
+                        string key = NvkTag.VpKey(vp);
+                        string layer = "";
+                        try { layer = vp.Layer ?? ""; } catch (Exc) { }
+                        bool ours = !string.IsNullOrEmpty(key)
+                            || string.Equals(layer, NvkLayers.VpLayer, StringComparison.OrdinalIgnoreCase);
+                        if (!ours) continue;
+                        n++;
+                        try { vp.On = true; } catch (Exc) { }
+                        bool isOn = false;
+                        try { isOn = vp.On; } catch (Exc) { }
+                        if (isOn) on++;
+                    }
+                    tr.Commit();
+                }
+            }
+            catch (Exc) { }
+            if (n > 0)
+                NvkLog.Write("[НВК] VP вкл " + name + "  On " + on.ToString() + "/" + n.ToString());
+        }
+
+        static Viewport MakeVp(Transaction tr, Database db, BlockTableRecord ps, VpSpec s)
+        {
+            ObjectId tpl = ObjectId.Null;
+            foreach (ObjectId id in ps)
+            {
+                var ex = tr.GetObject(id, OpenMode.ForRead) as Viewport;
+                if (ex == null || ex.IsErased) continue;
+                int num = 0;
+                try { num = ex.Number; } catch (Exc) { }
+                if (num == 1) continue;
+                tpl = id;
+                bool on = false;
+                try { on = ex.On; } catch (Exc) { }
+                if (on) break;
+            }
+            Viewport vp = null;
+            if (!tpl.IsNull)
+            {
+                try
+                {
+                    var map = new IdMapping();
+                    db.DeepCloneObjects(new ObjectIdCollection { tpl }, ps.ObjectId, map, false);
+                    if (map.Contains(tpl))
+                        vp = tr.GetObject(map[tpl].Value, OpenMode.ForWrite) as Viewport;
+                }
+                catch (Exc) { vp = null; }
+            }
+            if (vp == null)
+            {
+                vp = new Viewport();
+                vp.SetDatabaseDefaults();
+                ps.AppendEntity(vp);
+                tr.AddNewlyCreatedDBObject(vp, true);
+            }
+            try { vp.CenterPoint = new Point3d(s.Cx, s.Cy, 0.0); } catch (Exc) { }
+            try { vp.Width = s.W; } catch (Exc) { }
+            try { vp.Height = s.H; } catch (Exc) { }
+            return vp;
+        }
+
+        static void EnsureLispVpOn()
+        {
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            try
+            {
+                doc.SendStringToExecute(
+                    "(if (not NVK-VP-ON-ALL) (defun NVK-VP-ON-ALL ( / ss i e d n) (setq n 0 ss (ssget \"_X\" '((0 . \"VIEWPORT\")))) (if ss (repeat (setq i (sslength ss)) (setq e (ssname ss (setq i (1- i))) d (entget e)) (if (and d (/= (cdr (assoc 69 d)) 1) (assoc 68 d)) (progn (entmod (subst (cons 68 1) (assoc 68 d) d)) (setq n (1+ n)))))) n)) ",
+                    true, false, false);
+            }
+            catch (Exc) { }
+        }
+
+        static int EntModAllVps(Database db)
+        {
+            int lispN = 0;
+            try
+            {
+                var rb = new ResultBuffer();
+                rb.Add(new TypedValue(5005, "NVK-VP-ON-ALL"));
+                object ret = AcadApp.Invoke(rb);
+                if (ret is ResultBuffer rb2)
+                {
+                    foreach (TypedValue tv in rb2)
+                    {
+                        if (tv.Value is short sh) lispN = sh;
+                        else if (tv.Value is int i) lispN = i;
+                    }
+                }
+                else if (ret is short sh) lispN = sh;
+                else if (ret is int i) lispN = i;
+            }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] VP entmod: " + ex.Message);
+            }
+            int walk = WalkSetOn(db);
+            NvkLog.Write("[НВК] VP вкл без вкладок  lisp=" + lispN.ToString()
+                + "  walk=" + walk.ToString());
+            try
+            {
+                var doc = AcadApp.DocumentManager.MdiActiveDocument;
+                if (doc != null)
+                    doc.SendStringToExecute(
+                        "(if (fboundp 'NVK-VP-ON-ALL) (NVK-VP-ON-ALL)) ",
+                        true, false, false);
+            }
+            catch (Exc) { }
+            return lispN;
+        }
+
+        static int WalkSetOn(Database db)
+        {
+            if (db == null) return 0;
+            int n = 0;
+            try
+            {
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    foreach (ObjectId bid in bt)
+                    {
+                        var rec = (BlockTableRecord)tr.GetObject(bid, OpenMode.ForRead);
+                        if (rec == null || !rec.IsLayout) continue;
+                        Layout lay = null;
+                        try { lay = (Layout)tr.GetObject(rec.LayoutId, OpenMode.ForRead); }
+                        catch (Exc) { }
+                        if (lay == null || lay.ModelType) continue;
+                        foreach (ObjectId id in rec)
+                        {
+                            var vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
+                            if (vp == null || vp.IsErased) continue;
+                            int num = 0;
+                            try { num = vp.Number; } catch (Exc) { }
+                            if (num == 1) continue;
+                            try { vp.On = true; } catch (Exc) { }
+                            try
+                            {
+                                dynamic com = vp.AcadObject;
+                                if (com != null)
+                                {
+                                    try { com.ViewportOn = true; }
+                                    catch (Exc) { }
+                                }
+                            }
+                            catch (Exc) { }
+                            n++;
+                        }
+                    }
+                    tr.Commit();
+                }
+            }
+            catch (Exc) { }
+            return n;
+        }
+
         /// <summary>
         /// Слой рамки NVK-VP (не печатается), стекло 90 на объекте.
         /// Слой менять ДО On: повторная смена слоя после On гасит экран.
@@ -1106,16 +1324,6 @@ namespace Nvk.Cad
                 NvkLog.Write("[НВК] VP twist " + key + ": " + ex.Message);
             }
             try { vp.On = true; } catch { }
-            try
-            {
-                dynamic com = vp.AcadObject;
-                if (com != null)
-                {
-                    try { com.Display(true); }
-                    catch { try { com.Display = true; } catch { } }
-                }
-            }
-            catch { }
             double gotDeg = 0.0;
             try { gotDeg = vp.TwistAngle * 180.0 / Math.PI; } catch { }
             double gotCs = 0.0;

@@ -23,6 +23,7 @@ namespace Nvk.Cad
                     NvkLayers.EnsureAll(doc.Database);
                     NvkPalette.SyncFromDoc(doc, true);
                     NvkEpLive.Attach(doc);
+                    NvkSheets.Hook();
                 }
                 catch { }
                 doc.Editor.WriteMessage(
@@ -60,6 +61,7 @@ namespace Nvk.Cad
             try
             {
                 NvkEpLive.DetachAll();
+                NvkSheets.Unhook();
                 var dm = Application.DocumentManager;
                 dm.DocumentBecameCurrent -= OnDoc;
                 dm.DocumentCreated -= OnDoc;
@@ -73,6 +75,7 @@ namespace Nvk.Cad
             {
                 NvkEpLive.Attach(e.Document);
                 NvkPalette.SyncFromDoc(e.Document, false);
+                NvkSheets.Hook();
             }
             catch { }
         }
