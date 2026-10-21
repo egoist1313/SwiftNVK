@@ -571,9 +571,9 @@ namespace Nvk.Cad
                     nSkip++;
                     continue;
                 }
-                if (SheetSnap.IsNorthDebris(e))
+                if (SheetSnap.IsNorthDebris(e) || SheetSnap.IsNorthInsert(e))
                 {
-                    if (northId.IsNull)
+                    if (northId.IsNull && SheetSnap.IsNorthDebris(e))
                     {
                         try
                         {
@@ -583,10 +583,7 @@ namespace Nvk.Cad
                         {
                             NvkLog.Write("[НВК] снимок ent " + (e.T ?? "?") + ": " + ex.Message);
                         }
-                        continue;
                     }
-                    if (!SheetSnap.IsNorthLetter(e)) continue;
-                    if (PutNorth(db, tr, ps, e, dx, dy, northId)) n++;
                     continue;
                 }
                 if (HasTwin(tr, ps, e, dx, dy))
@@ -971,45 +968,67 @@ namespace Nvk.Cad
             yield return @"E:\Programs\ACAD2025\AutoCAD 2025\Map\Sample\Symbols\Map - North Arrows.dwg";
         }
 
-        static bool PutNorth(Database db, Transaction tr, BlockTableRecord ps, SheetSnapEnt e,
-            double dx, double dy, ObjectId northId)
+        public static int PlaceNorth(Database db, Transaction tr, BlockTableRecord ps,
+            ProfileKind kind, double sitTwist, double planTwist)
         {
-            if (db == null || tr == null || ps == null || e == null || northId.IsNull)
-                return false;
-            double x, y;
-            SheetSnap.NorthInsertXY(e, out x, out y);
-            x += dx;
-            y += dy;
-            if (HasNorthTwin(tr, ps, x, y)) return false;
+            if (db == null || tr == null || ps == null) return 0;
+            var slots = SheetSnap.NorthSlots(LayoutOf(kind));
+            if (slots == null || slots.Count == 0) return 0;
+            double dx, dy, fw, fh;
+            SheetSnap.ShiftOf(Load(), kind.ToString(), out dx, out dy, out fw, out fh);
+            ObjectId northId = EnsureNorthBlock(db, tr);
+            if (northId.IsNull) return 0;
+            EraseNorthDebris(tr, ps);
+            int n = 0;
+            for (int i = 0; i < slots.Count; i++)
+            {
+                double twist = slots[i].Sit ? sitTwist : planTwist;
+                if (PutNorthAt(tr, ps, slots[i].X + dx, slots[i].Y + dy, twist, northId, slots[i].Sit))
+                    n++;
+            }
+            return n;
+        }
+
+        static bool PutNorthAt(Transaction tr, BlockTableRecord ps,
+            double x, double y, double twistRad, ObjectId northId, bool sit)
+        {
+            if (tr == null || ps == null || northId.IsNull) return false;
+            var twin = FindNorthTwin(tr, ps, x, y);
+            if (twin != null)
+            {
+                if (!twin.IsWriteEnabled) twin.UpgradeOpen();
+                twin.Rotation = twistRad;
+                NvkLog.Write("[НВК] стрелка севера "
+                    + (sit ? "SIT" : "PLAN")
+                    + " поворот " + (twistRad * 180.0 / Math.PI).ToString("0.##"));
+                return true;
+            }
             var br = new BlockReference(new Point3d(x, y, 0.0), northId);
             try { br.ScaleFactors = new Scale3d(SheetSnap.NorthScale, SheetSnap.NorthScale, 1.0); }
             catch { }
-            br.Rotation = e.Rot;
+            br.Rotation = twistRad;
             br.SetDatabaseDefaults();
-            if (!string.IsNullOrEmpty(e.Layer))
-            {
-                try { br.Layer = e.Layer; } catch { }
-            }
             ps.AppendEntity(br);
             tr.AddNewlyCreatedDBObject(br, true);
-            NvkLog.Write("[НВК] снимок стрелка севера Arrow3"
+            NvkLog.Write("[НВК] стрелка севера Arrow3 "
+                + (sit ? "SIT" : "PLAN")
                 + " @ " + x.ToString("0.0") + "," + y.ToString("0.0")
-                + " rot " + e.Rot.ToString("0.###"));
+                + " поворот " + (twistRad * 180.0 / Math.PI).ToString("0.##"));
             return true;
         }
 
-        static bool HasNorthTwin(Transaction tr, BlockTableRecord ps, double x, double y)
+        static BlockReference FindNorthTwin(Transaction tr, BlockTableRecord ps, double x, double y)
         {
-            if (tr == null || ps == null) return false;
+            if (tr == null || ps == null) return null;
             foreach (ObjectId id in ps)
             {
                 var br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
                 if (br == null || br.IsErased) continue;
                 if (Dist2(br.Position.X, br.Position.Y, x, y) > 36.0) continue;
                 string bn = BlockName(tr, br);
-                if (SheetSnap.IsNorthBlockName(bn)) return true;
+                if (SheetSnap.IsNorthBlockName(bn)) return br;
             }
-            return false;
+            return null;
         }
 
         static int EraseNorthDebris(Transaction tr, BlockTableRecord ps)

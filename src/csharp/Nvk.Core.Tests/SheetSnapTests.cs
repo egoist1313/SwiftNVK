@@ -1,3 +1,4 @@
+using System;
 using Nvk.Core;
 using Xunit;
 
@@ -297,6 +298,39 @@ namespace Nvk.Core.Tests
             Assert.True(SheetSnap.IsNorthDebris(pl));
             var frame = new SheetSnapEnt { T = "PL", Layer = "0", Lt = "ByLayer" };
             Assert.False(SheetSnap.IsNorthDebris(frame));
+        }
+
+        [Fact]
+        public void NorthSlotsLeftSitRightPlan()
+        {
+            var lay = new SheetSnapLayout
+            {
+                Ents =
+                {
+                    new SheetSnapEnt
+                    {
+                        T = "TEXT", Txt = "N", Style = "$1$North Arrow Text",
+                        X = 646.104042102324, Y = 263.36637526300666, Rot = 0.675
+                    },
+                    new SheetSnapEnt
+                    {
+                        T = "TEXT", Txt = "N", Style = "$4$North Arrow Text",
+                        X = 537.2122764950893, Y = 262.773762458254, Rot = 0
+                    }
+                }
+            };
+            var slots = SheetSnap.NorthSlots(lay);
+            Assert.Equal(2, slots.Count);
+            Assert.True(slots[0].Sit);
+            Assert.False(slots[1].Sit);
+            Assert.True(slots[0].X < slots[1].X);
+        }
+
+        [Fact]
+        public void PlanNorthTwistFollowsViewport()
+        {
+            double deg = 38.4;
+            Assert.Equal(-deg * Math.PI / 180.0, PlanView.TwistRad(deg), 9);
         }
 
         [Fact]

@@ -97,6 +97,13 @@ namespace Nvk.Core
         public string Style { get; set; }
     }
 
+    public sealed class NorthSlot
+    {
+        public double X { get; set; }
+        public double Y { get; set; }
+        public bool Sit { get; set; }
+    }
+
     public static class SheetSnap
     {
         public static SheetSnapLayout Find(SheetSnapFile file, string kind)
@@ -582,6 +589,73 @@ namespace Nvk.Core
             double s = Math.Sin(rot);
             x = letter.X + NorthOx * c - NorthOy * s;
             y = letter.Y + NorthOx * s + NorthOy * c;
+        }
+
+        public static bool IsPlanKey(string key)
+        {
+            return !string.IsNullOrEmpty(key)
+                && key.StartsWith("PLAN:", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsNorthInsert(SheetSnapEnt e)
+        {
+            if (e == null) return false;
+            if (!string.Equals(e.T, "INSERT", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return IsNorthBlockName(e.Name);
+        }
+
+        /// <summary>
+        /// Места стрелок из снимка. Левая — ситуационник (север вверх), правая — план.
+        /// Угол живого видового подставляем при постановке, из снимка не берём.
+        /// </summary>
+        public static List<NorthSlot> NorthSlots(SheetSnapLayout lay)
+        {
+            var pts = new List<NorthSlot>();
+            if (lay == null || lay.Ents == null) return pts;
+            for (int i = 0; i < lay.Ents.Count; i++)
+            {
+                var e = lay.Ents[i];
+                if (e == null) continue;
+                double x, y;
+                if (IsNorthLetter(e))
+                    NorthInsertXY(e, out x, out y);
+                else if (IsNorthInsert(e))
+                {
+                    x = e.X;
+                    y = e.Y;
+                }
+                else continue;
+                pts.Add(new NorthSlot { X = x, Y = y, Sit = true });
+            }
+            pts.Sort((a, b) => a.X.CompareTo(b.X));
+            if (pts.Count >= 2)
+            {
+                pts[0].Sit = true;
+                for (int i = 1; i < pts.Count; i++)
+                    pts[i].Sit = false;
+            }
+            else if (pts.Count == 1)
+                pts[0].Sit = NearerToSit(lay, pts[0].X, pts[0].Y);
+            return pts;
+        }
+
+        static bool NearerToSit(SheetSnapLayout lay, double x, double y)
+        {
+            if (lay == null || lay.Vps == null) return true;
+            SheetSnapVp sit = null, plan = null;
+            for (int i = 0; i < lay.Vps.Count; i++)
+            {
+                var v = lay.Vps[i];
+                if (v == null) continue;
+                if (IsSitKey(v.Key)) sit = v;
+                if (IsPlanKey(v.Key)) plan = v;
+            }
+            if (sit == null) return false;
+            if (plan == null) return true;
+            double ds = (x - sit.Cx) * (x - sit.Cx) + (y - sit.Cy) * (y - sit.Cy);
+            double dp = (x - plan.Cx) * (x - plan.Cx) + (y - plan.Cy) * (y - plan.Cy);
+            return ds <= dp;
         }
 
         /// <summary>Один профиль EP:4, в снимке два окна EP:4:0.</summary>

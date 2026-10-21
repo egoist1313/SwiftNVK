@@ -744,12 +744,9 @@ namespace Nvk.Cad
             }
 
             if (specs.Count == 0)
-            {
                 NvkLog.Write("[НВК] лист " + name + " экраны на месте");
-                return 0;
-            }
-
-            NvkLog.Write("[НВК] лист " + name + " вид из модели " + specs.Count.ToString());
+            else
+                NvkLog.Write("[НВК] лист " + name + " вид из модели " + specs.Count.ToString());
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 NvkLayers.EnsureVpLayer(db, tr);
@@ -782,6 +779,19 @@ namespace Nvk.Cad
                     else if (s.HasView && !SheetSnap.IsSitKey(s.Key))
                         AimStored(vp, s);
                 }
+                var layoutN = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
+                var psN = (BlockTableRecord)tr.GetObject(layoutN.BlockTableRecordId, OpenMode.ForWrite);
+                double planTwist = 0.0;
+                ObjectId planId;
+                if (have.TryGetValue("PLAN:" + ((int)kind).ToString(), out planId) && !planId.IsNull)
+                {
+                    var pvp = tr.GetObject(planId, OpenMode.ForRead) as Viewport;
+                    if (pvp != null && !pvp.IsErased)
+                    {
+                        try { planTwist = pvp.TwistAngle; } catch { }
+                    }
+                }
+                SheetSnapStore.PlaceNorth(db, tr, psN, kind, 0.0, planTwist);
                 tr.Commit();
             }
             NvkLog.Write("[НВК] лист " + name + " вид записан");
