@@ -152,6 +152,7 @@ namespace Nvk.Cad
             var snap = new SheetSnapLayout { Kind = kind.ToString(), Name = name };
             snap.Page = ReadPage(layout);
             var ps = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
+            var have = new List<string>();
             foreach (ObjectId id in ps)
             {
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
@@ -160,22 +161,117 @@ namespace Nvk.Cad
                 if (vp != null)
                 {
                     if (vp.Number == 1) continue;
-                    string key = NvkTag.VpKey(vp);
-                    if (string.IsNullOrEmpty(key)) continue;
-                    snap.Vps.Add(new SheetSnapVp
-                    {
-                        Key = key,
-                        Cx = vp.CenterPoint.X,
-                        Cy = vp.CenterPoint.Y,
-                        W = vp.Width,
-                        H = vp.Height
-                    });
+                    var rec = ReadVp(tr, vp, kind.ToString(), have);
+                    if (rec == null) continue;
+                    snap.Vps.Add(rec);
+                    if (!string.IsNullOrEmpty(rec.Key)) have.Add(rec.Key);
                     continue;
                 }
-                var se = FromEnt(tr, ent);
-                if (se != null) snap.Ents.Add(se);
+                CaptureEnt(tr, ent, snap.Ents);
             }
             return snap;
+        }
+
+        static SheetSnapVp ReadVp(Transaction tr, Viewport vp, string kind, List<string> have)
+        {
+            if (vp == null) return null;
+            string tagged = NvkTag.VpKey(vp);
+            int scaleN = 0;
+            try { scaleN = SheetSnap.ScaleNFromCustom(vp.CustomScale); }
+            catch { }
+            string key = SheetSnap.InferVpKey(tagged, scaleN, kind, have);
+            if (string.IsNullOrEmpty(key)) return null;
+            if (string.IsNullOrEmpty(tagged))
+            {
+                try
+                {
+                    if (!vp.IsWriteEnabled) vp.UpgradeOpen();
+                    NvkTag.StampVp(tr, vp, key);
+                    NvkLog.Write("[НВК] снимок VP метка " + key
+                        + "  1:" + scaleN.ToString());
+                }
+                catch (Exc ex)
+                {
+                    NvkLog.Write("[НВК] снимок VP метка: " + ex.Message);
+                }
+            }
+            var rec = new SheetSnapVp
+            {
+                Key = key,
+                Cx = vp.CenterPoint.X,
+                Cy = vp.CenterPoint.Y,
+                W = vp.Width,
+                H = vp.Height,
+                ScaleN = scaleN
+            };
+            try
+            {
+                rec.Vx = vp.ViewTarget.X;
+                rec.Vy = vp.ViewTarget.Y;
+            }
+            catch { }
+            try { rec.Vh = vp.ViewHeight; } catch { }
+            try { rec.Twist = vp.TwistAngle; } catch { }
+            return rec;
+        }
+
+        static void CaptureEnt(Transaction tr, Entity ent, List<SheetSnapEnt> ents)
+        {
+            if (ent == null || ents == null) return;
+            var br = ent as BlockReference;
+            if (br != null)
+            {
+                string bn = BlockName(tr, br);
+                if (SheetSnap.IsTransientBlock(bn))
+                {
+                    int n = ExplodeInto(tr, br, ents, 0);
+                    if (n > 0)
+                    {
+                        NvkLog.Write("[НВК] снимок блок " + bn + " → " + n.ToString() + " частей");
+                        return;
+                    }
+                }
+            }
+            var se = FromEnt(tr, ent);
+            if (se != null) ents.Add(se);
+        }
+
+        static int ExplodeInto(Transaction tr, BlockReference br, List<SheetSnapEnt> ents, int depth)
+        {
+            if (br == null || ents == null || depth > 4) return 0;
+            DBObjectCollection bits;
+            try
+            {
+                bits = new DBObjectCollection();
+                br.Explode(bits);
+            }
+            catch { return 0; }
+            if (bits == null) return 0;
+            int n = 0;
+            foreach (DBObject o in bits)
+            {
+                var e = o as Entity;
+                if (e == null)
+                {
+                    try { o.Dispose(); } catch { }
+                    continue;
+                }
+                var nested = e as BlockReference;
+                if (nested != null)
+                {
+                    n += ExplodeInto(tr, nested, ents, depth + 1);
+                    try { e.Dispose(); } catch { }
+                    continue;
+                }
+                var se = FromEnt(tr, e);
+                if (se != null)
+                {
+                    ents.Add(se);
+                    n++;
+                }
+                try { e.Dispose(); } catch { }
+            }
+            return n;
         }
 
         static SheetSnapEnt FromEnt(Transaction tr, Entity ent)
@@ -285,6 +381,26 @@ namespace Nvk.Cad
                 }
                 return se;
             }
+            var sol = ent as Solid;
+            if (sol != null)
+            {
+                se.T = "SOLID";
+                try
+                {
+                    var sb = new StringBuilder();
+                    for (short i = 0; i < 4; i++)
+                    {
+                        var p = sol.GetPointAt(i);
+                        if (sb.Length > 0) sb.Append(';');
+                        sb.Append(p.X.ToString("G", Inv));
+                        sb.Append(',');
+                        sb.Append(p.Y.ToString("G", Inv));
+                    }
+                    se.Pts = sb.ToString();
+                }
+                catch { return null; }
+                return se;
+            }
             return null;
         }
 
@@ -371,18 +487,11 @@ namespace Nvk.Cad
         {
             var lay = LayoutOf(kind);
             if (lay == null || lay.Ents == null || lay.Ents.Count == 0) return 0;
-            int nPaper = CountPaper(tr, ps);
-            if (nPaper > 2)
-            {
-                NvkLog.Write("[НВК] снимок " + kind.ToString()
-                    + " бумага уже с объектами (" + nPaper.ToString() + "), линии не дублируем");
-                return 0;
-            }
             double fx0, fy0, fx1, fy1;
             bool frame = SheetSnap.TryFrame(Load(), kind.ToString(), out fx0, out fy0, out fx1, out fy1);
             double dx, dy, fw, fh;
             SheetSnap.ShiftOf(Load(), kind.ToString(), out dx, out dy, out fw, out fh);
-            int n = 0, nSkip = 0;
+            int n = 0, nSkip = 0, nDup = 0;
             for (int i = 0; i < lay.Ents.Count; i++)
             {
                 var e = lay.Ents[i];
@@ -390,6 +499,11 @@ namespace Nvk.Cad
                 if (frame && !SheetSnap.IsNearPaper(e, fx0, fy0, fx1, fy1))
                 {
                     nSkip++;
+                    continue;
+                }
+                if (HasTwin(tr, ps, e, dx, dy))
+                {
+                    nDup++;
                     continue;
                 }
                 try
@@ -404,8 +518,103 @@ namespace Nvk.Cad
             if (nSkip > 0)
                 NvkLog.Write("[НВК] снимок " + kind.ToString()
                     + " мимо рамки " + nSkip.ToString());
-            NvkLog.Write("[НВК] снимок " + kind.ToString() + " объектов +" + n.ToString());
+            NvkLog.Write("[НВК] снимок " + kind.ToString()
+                + " объектов +" + n.ToString()
+                + (nDup > 0 ? "  уже " + nDup.ToString() : ""));
             return n;
+        }
+
+        static bool HasTwin(Transaction tr, BlockTableRecord ps, SheetSnapEnt e, double dx, double dy)
+        {
+            if (ps == null || e == null) return false;
+            double tx = e.X + dx;
+            double ty = e.Y + dy;
+            string t = e.T ?? "";
+            foreach (ObjectId id in ps)
+            {
+                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null || ent.IsErased || ent is Viewport) continue;
+                if (string.Equals(t, "INSERT", StringComparison.OrdinalIgnoreCase))
+                {
+                    var br = ent as BlockReference;
+                    if (br == null) continue;
+                    if (Dist2(br.Position.X, br.Position.Y, tx, ty) > 6.25) continue;
+                    if (SameBlock(BlockName(tr, br), e.Name)) return true;
+                    continue;
+                }
+                if (string.Equals(t, "MTEXT", StringComparison.OrdinalIgnoreCase))
+                {
+                    var mt = ent as MText;
+                    if (mt == null) continue;
+                    if (Dist2(mt.Location.X, mt.Location.Y, tx, ty) > 6.25) continue;
+                    return true;
+                }
+                if (string.Equals(t, "TEXT", StringComparison.OrdinalIgnoreCase))
+                {
+                    var dt = ent as DBText;
+                    if (dt == null) continue;
+                    if (Dist2(dt.Position.X, dt.Position.Y, tx, ty) > 6.25) continue;
+                    return true;
+                }
+                if (string.Equals(t, "LINE", StringComparison.OrdinalIgnoreCase))
+                {
+                    var ln = ent as Line;
+                    if (ln == null) continue;
+                    double x1 = e.X1 + dx, y1 = e.Y1 + dy;
+                    if (Dist2(ln.StartPoint.X, ln.StartPoint.Y, tx, ty) < 1.0
+                        && Dist2(ln.EndPoint.X, ln.EndPoint.Y, x1, y1) < 1.0)
+                        return true;
+                    if (Dist2(ln.StartPoint.X, ln.StartPoint.Y, x1, y1) < 1.0
+                        && Dist2(ln.EndPoint.X, ln.EndPoint.Y, tx, ty) < 1.0)
+                        return true;
+                    continue;
+                }
+                if (string.Equals(t, "CIRCLE", StringComparison.OrdinalIgnoreCase))
+                {
+                    var c = ent as Circle;
+                    if (c == null) continue;
+                    if (Dist2(c.Center.X, c.Center.Y, tx, ty) < 1.0) return true;
+                    continue;
+                }
+                if (string.Equals(t, "PL", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(t, "SOLID", StringComparison.OrdinalIgnoreCase))
+                {
+                    var pts = SplitPts(e.Pts);
+                    if (pts.Count == 0) continue;
+                    double px = pts[0].X + dx, py = pts[0].Y + dy;
+                    var pl = ent as Polyline;
+                    if (pl != null && pl.NumberOfVertices > 0)
+                    {
+                        var p0 = pl.GetPoint2dAt(0);
+                        if (Dist2(p0.X, p0.Y, px, py) < 1.0) return true;
+                    }
+                    var sol = ent as Solid;
+                    if (sol != null)
+                    {
+                        try
+                        {
+                            var p0 = sol.GetPointAt(0);
+                            if (Dist2(p0.X, p0.Y, px, py) < 1.0) return true;
+                        }
+                        catch { }
+                    }
+                }
+            }
+            return false;
+        }
+
+        static double Dist2(double x0, double y0, double x1, double y1)
+        {
+            double dx = x0 - x1, dy = y0 - y1;
+            return dx * dx + dy * dy;
+        }
+
+        static bool SameBlock(string a, string b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
+            return string.Equals(SheetSnap.BlockBaseName(a), SheetSnap.BlockBaseName(b),
+                StringComparison.OrdinalIgnoreCase);
         }
 
         static int CountPaper(Transaction tr, BlockTableRecord ps)
@@ -479,16 +688,36 @@ namespace Nvk.Cad
                 try { mt.Annotative = AnnotativeStates.False; } catch { }
                 ent = mt;
             }
+            else if (string.Equals(t, "SOLID", StringComparison.OrdinalIgnoreCase))
+            {
+                var pts = SplitPts(e.Pts);
+                if (pts.Count < 3) return false;
+                var p0 = new Point3d(pts[0].X, pts[0].Y, 0.0);
+                var p1 = new Point3d(pts[1].X, pts[1].Y, 0.0);
+                var p2 = new Point3d(pts[2].X, pts[2].Y, 0.0);
+                var p3 = pts.Count > 3
+                    ? new Point3d(pts[3].X, pts[3].Y, 0.0)
+                    : p2;
+                ent = new Solid(p0, p1, p2, p3);
+            }
             else if (string.Equals(t, "INSERT", StringComparison.OrdinalIgnoreCase))
             {
                 if (string.IsNullOrEmpty(e.Name)) return false;
                 var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                if (!bt.Has(e.Name))
+                ObjectId bid = ObjectId.Null;
+                if (bt.Has(e.Name)) bid = bt[e.Name];
+                else
+                {
+                    string baseName = SheetSnap.BlockBaseName(e.Name);
+                    if (!string.IsNullOrEmpty(baseName) && bt.Has(baseName))
+                        bid = bt[baseName];
+                }
+                if (bid.IsNull)
                 {
                     NvkLog.Write("[НВК] снимок нет блока " + e.Name);
                     return false;
                 }
-                var br = new BlockReference(new Point3d(e.X, e.Y, 0.0), bt[e.Name]);
+                var br = new BlockReference(new Point3d(e.X, e.Y, 0.0), bid);
                 double sx = e.Sx != 0.0 ? e.Sx : 1.0;
                 double sy = e.Sy != 0.0 ? e.Sy : 1.0;
                 try { br.ScaleFactors = new Scale3d(sx, sy, 1.0); } catch { }

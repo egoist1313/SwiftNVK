@@ -59,6 +59,15 @@ namespace Nvk.Core
         public double Cy { get; set; }
         public double W { get; set; }
         public double H { get; set; }
+        /// <summary>Центр вида в модели (ViewTarget).</summary>
+        public double Vx { get; set; }
+        public double Vy { get; set; }
+        /// <summary>Высота вида в модели, м.</summary>
+        public double Vh { get; set; }
+        /// <summary>Кручение вида, рад.</summary>
+        public double Twist { get; set; }
+        /// <summary>1:N с CustomScale (бумага мм / модель м).</summary>
+        public int ScaleN { get; set; }
     }
 
     public sealed class SheetSnapEnt
@@ -374,6 +383,127 @@ namespace Nvk.Core
             return h < 1e-9 ? 1.0 : h;
         }
 
+        /// <summary>CustomScale ≈ 1000/N (мм бумаги на метр модели).</summary>
+        public static int ScaleNFromCustom(double customScale)
+        {
+            if (customScale < 1e-9) return 0;
+            int n = (int)Math.Round(1000.0 / customScale);
+            return n < 1 ? 0 : n;
+        }
+
+        public static int KindNo(string kind)
+        {
+            if (string.IsNullOrEmpty(kind)) return 0;
+            if (string.Equals(kind, "Razrabotka", StringComparison.OrdinalIgnoreCase)) return 1;
+            if (string.Equals(kind, "Pesok", StringComparison.OrdinalIgnoreCase)) return 2;
+            if (string.Equals(kind, "Truba", StringComparison.OrdinalIgnoreCase)) return 3;
+            if (string.Equals(kind, "Zashita", StringComparison.OrdinalIgnoreCase)) return 4;
+            if (string.Equals(kind, "Zasypka", StringComparison.OrdinalIgnoreCase)) return 5;
+            int n;
+            if (int.TryParse(kind, out n) && n >= 1 && n <= 5) return n;
+            return 0;
+        }
+
+        public static bool IsSitKey(string key)
+        {
+            return !string.IsNullOrEmpty(key)
+                && key.StartsWith("SIT:", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsExtraKey(string key)
+        {
+            return !string.IsNullOrEmpty(key)
+                && key.StartsWith("EXTRA:", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool HasSitVp(SheetSnapLayout lay)
+        {
+            if (lay == null || lay.Vps == null) return false;
+            for (int i = 0; i < lay.Vps.Count; i++)
+            {
+                var v = lay.Vps[i];
+                if (v != null && IsSitKey(v.Key)) return true;
+            }
+            return false;
+        }
+
+        public static bool ContainsKey(IList<string> have, string key)
+        {
+            if (have == null || string.IsNullOrEmpty(key)) return false;
+            for (int i = 0; i < have.Count; i++)
+            {
+                if (string.Equals(have[i], key, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        static bool HasEpKey(IList<string> have, int kindNo)
+        {
+            if (kindNo < 1) return false;
+            string p = "EP:" + kindNo.ToString();
+            if (ContainsKey(have, p)) return true;
+            if (have == null) return false;
+            string pre = p + ":";
+            for (int i = 0; i < have.Count; i++)
+            {
+                if (have[i] != null
+                    && have[i].StartsWith(pre, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Метка снимка: своя VP= остаётся; 1:5000 → SIT; свободный 1:N профиля → EP;
+        /// иначе EXTRA:n.
+        /// </summary>
+        public static string InferVpKey(string tagged, int scaleN, string kind, IList<string> have)
+        {
+            if (!string.IsNullOrEmpty(tagged)) return tagged;
+            int k = KindNo(kind);
+            string sit = k > 0 ? "SIT:" + k.ToString() : "SIT";
+            if (scaleN >= 2500 && scaleN <= 20000 && !ContainsKey(have, sit))
+                return sit;
+            if (scaleN >= 400 && scaleN <= 2000 && k > 0 && !HasEpKey(have, k))
+                return "EP:" + k.ToString();
+            int n = 1;
+            while (n < 100)
+            {
+                string x = "EXTRA:" + n.ToString();
+                if (!ContainsKey(have, x)) return x;
+                n++;
+            }
+            return "EXTRA:" + n.ToString();
+        }
+
+        /// <summary>Блок $5$Arrow3 / *U… — из другого чертежа, на вставку не опираемся.</summary>
+        public static bool IsTransientBlock(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return true;
+            if (name[0] == '*') return true;
+            if (name.Length > 3 && name[0] == '$')
+            {
+                int i = 1;
+                while (i < name.Length && name[i] >= '0' && name[i] <= '9') i++;
+                return i > 1 && i < name.Length && name[i] == '$';
+            }
+            return false;
+        }
+
+        public static string BlockBaseName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return name ?? "";
+            if (name.Length > 3 && name[0] == '$')
+            {
+                int i = 1;
+                while (i < name.Length && name[i] >= '0' && name[i] <= '9') i++;
+                if (i > 1 && i < name.Length && name[i] == '$')
+                    return name.Substring(i + 1);
+            }
+            return name;
+        }
+
         static bool TryNamedFrame(SheetSnapLayout lay,
             out double x0, out double y0, out double x1, out double y1)
         {
@@ -513,7 +643,8 @@ namespace Nvk.Core
                 add(e.X1, e.Y1);
                 return;
             }
-            if (string.Equals(t, "PL", StringComparison.OrdinalIgnoreCase)
+            if ((string.Equals(t, "PL", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(t, "SOLID", StringComparison.OrdinalIgnoreCase))
                 && !string.IsNullOrEmpty(e.Pts))
             {
                 var parts = e.Pts.Split(';');

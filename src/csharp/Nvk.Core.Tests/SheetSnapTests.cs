@@ -202,6 +202,53 @@ namespace Nvk.Core.Tests
             Assert.Equal(109.6, SheetSnap.ViewHeightAtScale(109.6, 1000), 6);
         }
 
+        [Fact]
+        public void ScaleNFromCustomIsThousandOverCs()
+        {
+            Assert.Equal(5000, SheetSnap.ScaleNFromCustom(0.2));
+            Assert.Equal(1000, SheetSnap.ScaleNFromCustom(1.0));
+            Assert.Equal(500, SheetSnap.ScaleNFromCustom(2.0));
+            Assert.Equal(0, SheetSnap.ScaleNFromCustom(0.0));
+        }
+
+        [Fact]
+        public void InferVpKeySitAndEpAndExtra()
+        {
+            Assert.Equal("PLAN:1", SheetSnap.InferVpKey("PLAN:1", 5000, "Razrabotka", null));
+            Assert.Equal("SIT:1", SheetSnap.InferVpKey("", 5000, "Razrabotka", null));
+            Assert.Equal("EP:1", SheetSnap.InferVpKey("", 1000, "Razrabotka", null));
+            Assert.Equal("EXTRA:1",
+                SheetSnap.InferVpKey("", 1000, "Razrabotka", new[] { "EP:1" }));
+            Assert.Equal("SIT:1",
+                SheetSnap.InferVpKey("", 5000, "Razrabotka", new[] { "EP:1", "PLAN:1" }));
+        }
+
+        [Fact]
+        public void TransientBlockDollarPrefix()
+        {
+            Assert.True(SheetSnap.IsTransientBlock("$5$Arrow3"));
+            Assert.True(SheetSnap.IsTransientBlock("*U12"));
+            Assert.False(SheetSnap.IsTransientBlock("Arrow3"));
+            Assert.Equal("Arrow3", SheetSnap.BlockBaseName("$5$Arrow3"));
+            Assert.Equal("Arrow3", SheetSnap.BlockBaseName("Arrow3"));
+        }
+
+        [Fact]
+        public void HasSitVpByKey()
+        {
+            var lay = new SheetSnapLayout
+            {
+                Vps =
+                {
+                    new SheetSnapVp { Key = "PLAN:1", W = 70, H = 70 },
+                    new SheetSnapVp { Key = "SIT:1", W = 100, H = 100, ScaleN = 5000 }
+                }
+            };
+            Assert.True(SheetSnap.HasSitVp(lay));
+            Assert.True(SheetSnap.IsSitKey("SIT:1"));
+            Assert.False(SheetSnap.HasSitVp(new SheetSnapLayout()));
+        }
+
         static SheetSnapEnt FrameLine(double x, double y, double x1, double y1)
         {
             return new SheetSnapEnt

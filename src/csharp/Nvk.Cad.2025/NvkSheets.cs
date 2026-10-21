@@ -414,6 +414,8 @@ namespace Nvk.Cad
                 if (TryLayerExtents(db, tr, planLyrs[i], out px0, out py0, out px1, out py1))
                     NvkSession.AddPlanWin(px0, py0, px1, py1);
             }
+            if (TryLayerExtents(db, tr, PlanView.LayerSit, out px0, out py0, out px1, out py1))
+                NvkSession.AddSitWin(px0, py0, px1, py1);
             if (NvkSession.PlanWin != null && NvkSession.PlanWin.Valid)
             {
                 var p = NvkSession.PlanWin;
@@ -668,6 +670,7 @@ namespace Nvk.Cad
                 xLeft, topY, gap, usableW);
             FitSpecs(specs, xLeft, py0 + pad, px1 - pad, py1 - pad);
             ApplySnapPaper(kind, specs);
+            AddSnapExtraVps(kind, specs);
             if (SpecsOverflow(specs, px0, py0, px1, py1))
                 NvkLog.Write("[НВК] лист " + name + " видовые крупнее области печати, рамки 1:N");
 
@@ -736,8 +739,7 @@ namespace Nvk.Cad
                     titleEnt.UpgradeOpen();
                     titleEnt.Contents = titleTxt;
                 }
-                if (createdNew)
-                    SheetSnapStore.Spawn(db, tr, ps, kind);
+                SheetSnapStore.Spawn(db, tr, ps, kind);
                 tr.Commit();
             }
 
@@ -768,9 +770,14 @@ namespace Nvk.Cad
                     else
                         NvkLog.Write("[НВК] VP бумага как стоит " + s.Key);
                     StyleVp(vp);
-                    AimVp(vp, s.Win, s.ScaleN, s.Key, s.TwistDeg);
                     if (s.Key != null && s.Key.StartsWith("PLAN:", StringComparison.Ordinal))
                         ApplyPlanLayers(tr, vp, kind);
+                    if (SheetSnap.IsSitKey(s.Key))
+                        ApplySitLayers(tr, vp);
+                    if (s.Win != null && s.Win.Valid)
+                        AimVp(vp, s.Win, s.ScaleN, s.Key, s.TwistDeg);
+                    else if (s.HasView)
+                        AimStored(vp, s);
                 }
                 tr.Commit();
             }
@@ -863,6 +870,58 @@ namespace Nvk.Cad
                     + " экранов " + n.ToString());
         }
 
+        static void AddSnapExtraVps(ProfileKind kind, List<VpSpec> specs)
+        {
+            var lay = SheetSnapStore.LayoutOf(kind);
+            if (lay == null || lay.Vps == null || specs == null) return;
+            double dx, dy, fw, fh;
+            SheetSnap.ShiftOf(SheetSnapStore.Load(), kind.ToString(), out dx, out dy, out fw, out fh);
+            var have = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < specs.Count; i++)
+            {
+                if (!string.IsNullOrEmpty(specs[i].Key))
+                    have[specs[i].Key] = true;
+            }
+            int n = 0;
+            for (int i = 0; i < lay.Vps.Count; i++)
+            {
+                var v = lay.Vps[i];
+                if (v == null || string.IsNullOrEmpty(v.Key) || v.W < 1.0 || v.H < 1.0)
+                    continue;
+                if (have.ContainsKey(v.Key)) continue;
+                int scaleN = v.ScaleN > 0 ? v.ScaleN : 1000;
+                SheetWin win = null;
+                double twist = 0.0;
+                if (SheetSnap.IsSitKey(v.Key))
+                {
+                    if (scaleN < 2500) scaleN = 5000;
+                    twist = NvkUiState.PlanRotDeg;
+                    if (NvkSession.PlanWin != null && NvkSession.PlanWin.Valid)
+                        win = NvkSession.PlanWin;
+                    else if (NvkSession.SitWin != null && NvkSession.SitWin.Valid)
+                        win = NvkSession.SitWin;
+                }
+                var spec = new VpSpec(v.Cx + dx, v.Cy + dy, v.W, v.H, win, scaleN, v.Key, twist);
+                if (v.Vh > 1e-9)
+                {
+                    spec.HasView = true;
+                    spec.Vx = v.Vx;
+                    spec.Vy = v.Vy;
+                    spec.Vh = v.Vh;
+                    spec.TwistRad = v.Twist;
+                }
+                specs.Add(spec);
+                have[v.Key] = true;
+                n++;
+                NvkLog.Write("[НВК] VP снимок ещё " + v.Key
+                    + "  бумага " + v.W.ToString("0.0") + "x" + v.H.ToString("0.0")
+                    + "  1:" + scaleN.ToString());
+            }
+            if (n > 0)
+                NvkLog.Write("[НВК] лист снимок " + kind.ToString()
+                    + " чужих экранов " + n.ToString());
+        }
+
         static List<VpSpec> PackSpecs(ProfileKind kind, List<CsCell> epCells, SheetWin vol, SheetWin plan,
             SheetWin coord, SheetWin samp, List<CsCell> cells, int nEp, int nCs, int nPlan,
             double xLeft, double topY, double gap, double usableW)
@@ -902,6 +961,13 @@ namespace Nvk.Cad
             place(samp, nEp, "SAMP", 0.0);
             double planTwist = NvkUiState.PlanRotDeg;
             place(plan, nPlan, "PLAN:" + ((int)kind).ToString(), planTwist);
+            if (SheetSnap.HasSitVp(SheetSnapStore.LayoutOf(kind)))
+            {
+                SheetWin sit = NvkSession.SitWin != null && NvkSession.SitWin.Valid
+                    ? NvkSession.SitWin
+                    : plan;
+                place(sit, 5000, "SIT:" + ((int)kind).ToString(), planTwist);
+            }
 
             if (cells != null && cells.Count > 0)
             {
@@ -1036,6 +1102,67 @@ namespace Nvk.Cad
             }
         }
 
+        static void ApplySitLayers(Transaction tr, Viewport vp)
+        {
+            if (vp == null || tr == null) return;
+            var on = new List<string>
+            {
+                PlanView.LayerSit,
+                "NVK-PLAN",
+                PlanView.LayerMh
+            };
+            try
+            {
+                var db = vp.Database;
+                var lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+                var freeze = new ObjectIdCollection();
+                var thaw = new ObjectIdCollection();
+                foreach (ObjectId id in lt)
+                {
+                    var rec = (LayerTableRecord)tr.GetObject(id, OpenMode.ForRead);
+                    if (rec.IsDependent) continue;
+                    if (string.Equals(rec.Name, NvkLayers.VpLayer, StringComparison.OrdinalIgnoreCase))
+                    {
+                        thaw.Add(id);
+                        continue;
+                    }
+                    if (PlanView.IsOn(rec.Name, on, true)) thaw.Add(id);
+                    else if (!rec.IsOff && !rec.IsFrozen) freeze.Add(id);
+                }
+                if (thaw.Count > 0)
+                {
+                    try { vp.ThawLayersInViewport(thaw.GetEnumerator()); } catch { }
+                }
+                if (freeze.Count > 0)
+                {
+                    try { vp.FreezeLayersInViewport(freeze.GetEnumerator()); } catch { }
+                }
+                NvkLog.Write("[НВК] SIT слои вкл " + on.Count.ToString()
+                    + "  заморозка VP " + freeze.Count.ToString());
+            }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] SIT слои: " + ex.Message);
+            }
+        }
+
+        static void AimStored(Viewport vp, VpSpec s)
+        {
+            if (vp == null || !s.HasView) return;
+            double viewH = s.Vh > 1e-9 ? s.Vh : SheetSnap.ViewHeightAtScale(vp.Height, s.ScaleN);
+            try { vp.Locked = false; } catch { }
+            try { vp.PerspectiveOn = false; } catch { }
+            try { vp.ViewDirection = new Vector3d(0.0, 0.0, 1.0); } catch { }
+            try { vp.ViewTarget = new Point3d(s.Vx, s.Vy, 0.0); } catch { }
+            try { vp.ViewCenter = new Point2d(0.0, 0.0); } catch { }
+            try { vp.TwistAngle = s.TwistRad; } catch { }
+            try { vp.ViewHeight = viewH; } catch { }
+            try { vp.On = true; } catch { }
+            NvkLog.Write("[НВК] VP вид " + (s.Key ?? "?")
+                + "  снимок центр " + s.Vx.ToString("0.0") + "," + s.Vy.ToString("0.0")
+                + "  H=" + viewH.ToString("0.00"));
+        }
+
         struct VpSpec
         {
             public double Cx, Cy, W, H;
@@ -1043,9 +1170,12 @@ namespace Nvk.Cad
             public int ScaleN;
             public string Key;
             public double TwistDeg;
+            public double Vx, Vy, Vh, TwistRad;
+            public bool HasView;
             public VpSpec(double cx, double cy, double w, double h, SheetWin win, int scaleN, string key, double twistDeg)
             {
                 Cx = cx; Cy = cy; W = w; H = h; Win = win; ScaleN = scaleN; Key = key; TwistDeg = twistDeg;
+                Vx = 0.0; Vy = 0.0; Vh = 0.0; TwistRad = 0.0; HasView = false;
             }
         }
 
