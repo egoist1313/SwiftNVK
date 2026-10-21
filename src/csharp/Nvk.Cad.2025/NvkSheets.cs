@@ -1437,6 +1437,11 @@ namespace Nvk.Cad
             {
                 NvkLog.Write("[НВК] VP twist " + key + ": " + ex.Message);
             }
+            NvkAnno.ApplyToViewport(vp, scaleN);
+            try { vp.ViewHeight = viewH; } catch { }
+            try { vp.ViewTarget = new Point3d(cx, cy, 0.0); } catch { }
+            try { vp.ViewCenter = new Point2d(0.0, 0.0); } catch { }
+            try { vp.TwistAngle = twist; } catch { }
             try { vp.On = true; } catch { }
             double gotDeg = 0.0;
             try { gotDeg = vp.TwistAngle * 180.0 / Math.PI; } catch { }
@@ -1444,6 +1449,7 @@ namespace Nvk.Cad
             try { gotCs = vp.CustomScale; } catch { }
             bool on = false;
             try { on = vp.On; } catch { }
+            string anno = NvkAnno.ViewportAnnoName(vp);
             NvkLog.Write("[НВК] VP вид " + key
                 + "  1:" + scaleN.ToString()
                 + "  центр " + cx.ToString("0.0") + "," + cy.ToString("0.0")
@@ -1451,6 +1457,7 @@ namespace Nvk.Cad
                 + "  бумага " + vp.Width.ToString("0.0") + "x" + vp.Height.ToString("0.0")
                 + "  H=" + vp.ViewHeight.ToString("0.00")
                 + "  cs=" + gotCs.ToString("0.###")
+                + "  анно=" + (string.IsNullOrEmpty(anno) ? "?" : anno)
                 + "  пск " + twistDeg.ToString("0.##")
                 + "  twist " + gotDeg.ToString("0.##")
                 + "  On=" + (on ? "1" : "0")
@@ -1553,10 +1560,16 @@ namespace Nvk.Cad
             try { vp.ViewCenter = new Point2d(0.0, 0.0); } catch { }
             try { vp.TwistAngle = s.TwistRad; } catch { }
             try { vp.ViewHeight = viewH; } catch { }
+            NvkAnno.ApplyToViewport(vp, s.ScaleN);
+            try { vp.ViewHeight = viewH; } catch { }
+            try { vp.ViewTarget = new Point3d(s.Vx, s.Vy, 0.0); } catch { }
+            try { vp.ViewCenter = new Point2d(0.0, 0.0); } catch { }
+            try { vp.TwistAngle = s.TwistRad; } catch { }
             try { vp.On = true; } catch { }
             NvkLog.Write("[НВК] VP вид " + (s.Key ?? "?")
                 + "  снимок центр " + s.Vx.ToString("0.0") + "," + s.Vy.ToString("0.0")
-                + "  H=" + viewH.ToString("0.00"));
+                + "  H=" + viewH.ToString("0.00")
+                + "  анно=" + NvkAnno.ViewportAnnoName(vp));
         }
 
         struct VpSpec

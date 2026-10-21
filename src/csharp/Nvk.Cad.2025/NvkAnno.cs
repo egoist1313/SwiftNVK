@@ -294,6 +294,67 @@ namespace Nvk.Cad
             return n;
         }
 
+        /// <summary>
+        /// Аннотативный масштаб видового = 1:N (тот же, что вид).
+        /// Ставить после AppendEntity. ViewHeight после этого вернуть —
+        /// сеттер AnnotationScale может сбить CustomScale.
+        /// </summary>
+        public static void ApplyToViewport(Viewport vp, int scaleN)
+        {
+            if (vp == null || vp.Database == null || scaleN < 1) return;
+            var db = vp.Database;
+            var coll = ScaleColl(db);
+            if (coll == null)
+            {
+                EnsureDefaultScales(db);
+                coll = ScaleColl(db);
+            }
+            if (coll == null) return;
+            string name = AnnoScales.NameOf(scaleN);
+            AnnotationScale sc = null;
+            try
+            {
+                if (coll.HasContext(name))
+                    sc = coll.GetContext(name) as AnnotationScale;
+            }
+            catch (Exc) { }
+            if (sc == null)
+            {
+                try
+                {
+                    foreach (ObjectContext oc in coll)
+                    {
+                        var have = oc as AnnotationScale;
+                        if (have == null) continue;
+                        if (Near(DenOf(have), scaleN))
+                        {
+                            sc = have;
+                            break;
+                        }
+                    }
+                }
+                catch (Exc) { }
+            }
+            if (sc == null) return;
+            try { vp.AnnotationScale = sc; }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] VP анно 1:" + scaleN.ToString(Inv) + ": " + ex.Message);
+            }
+        }
+
+        public static string ViewportAnnoName(Viewport vp)
+        {
+            if (vp == null) return "";
+            try
+            {
+                var sc = vp.AnnotationScale;
+                if (sc != null && !string.IsNullOrEmpty(sc.Name)) return sc.Name;
+            }
+            catch (Exc) { }
+            return "";
+        }
+
         static ObjectContextCollection ScaleColl(Database db)
         {
             if (db == null) return null;
