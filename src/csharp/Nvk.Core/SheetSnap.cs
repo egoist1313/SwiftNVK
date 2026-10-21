@@ -512,15 +512,98 @@ namespace Nvk.Core
         }
 
         /// <summary>
-        /// Пустой вид в (0,0), мельче 12 мм или больше листа A3 — не снимкаем.
+        /// Пустой вид в (0,0) на бумаге в нуле, мельче 12 мм или больше листа A3 — не снимкаем.
+        /// Вид модели в нуле при живой рамке бумаги оставляем: слот EP/VOL.
         /// </summary>
         public static bool IsJunkVp(SheetSnapVp v)
         {
             if (v == null) return true;
             if (v.W < 12.0 || v.H < 8.0) return true;
             if (v.W > 430.0 || v.H > 310.0) return true;
-            if (Math.Abs(v.Vx) < 1.0 && Math.Abs(v.Vy) < 1.0) return true;
+            if (Math.Abs(v.Vx) < 1.0 && Math.Abs(v.Vy) < 1.0
+                && Math.Abs(v.Cx) < 12.0 && Math.Abs(v.Cy) < 8.0)
+                return true;
             return false;
+        }
+
+        public static bool IsEpKey(string key)
+        {
+            return !string.IsNullOrEmpty(key)
+                && key.StartsWith("EP:", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsVolKey(string key)
+        {
+            return !string.IsNullOrEmpty(key)
+                && key.StartsWith("VOL:", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Бумажный слот профиля с любой вкладки снимка (EP:n, иначе EP:n:0).</summary>
+        public static bool TryEpPaper(SheetSnapFile file,
+            out double cx, out double cy, out double w, out double h)
+        {
+            cx = 0.0;
+            cy = 0.0;
+            w = 0.0;
+            h = 0.0;
+            if (file == null || file.Layouts == null) return false;
+            SheetSnapVp named = null;
+            SheetSnapVp indexed = null;
+            for (int i = 0; i < file.Layouts.Count; i++)
+            {
+                var lay = file.Layouts[i];
+                if (lay == null || lay.Vps == null) continue;
+                for (int j = 0; j < lay.Vps.Count; j++)
+                {
+                    var v = lay.Vps[j];
+                    if (v == null || !IsEpKey(v.Key) || v.W < 12.0 || v.H < 8.0)
+                        continue;
+                    string rest = v.Key.Substring(3);
+                    if (rest.IndexOf(':') < 0)
+                    {
+                        named = v;
+                        break;
+                    }
+                    if (indexed == null && rest.EndsWith(":0", StringComparison.Ordinal))
+                        indexed = v;
+                }
+                if (named != null) break;
+            }
+            var pick = named ?? indexed;
+            if (pick == null) return false;
+            cx = pick.Cx;
+            cy = pick.Cy;
+            w = pick.W;
+            h = pick.H;
+            return true;
+        }
+
+        /// <summary>Сдвиг рамки в (x0,y0)–(x1,y1). Размер 1:N не трогаем.</summary>
+        public static void ClampVp(ref double cx, ref double cy, double w, double h,
+            double x0, double y0, double x1, double y1)
+        {
+            if (w < 1.0) w = 1.0;
+            if (h < 1.0) h = 1.0;
+            if (x1 < x0) { double sw = x0; x0 = x1; x1 = sw; }
+            if (y1 < y0) { double sh = y0; y0 = y1; y1 = sh; }
+            double l = cx - w * 0.5, r = cx + w * 0.5;
+            double b = cy - h * 0.5, t = cy + h * 0.5;
+            double dx = 0.0, dy = 0.0;
+            double pw = x1 - x0, ph = y1 - y0;
+            if (w <= pw + 1e-6)
+            {
+                if (l < x0) dx = x0 - l;
+                else if (r > x1) dx = x1 - r;
+            }
+            else dx = x0 - l;
+            if (h <= ph + 1e-6)
+            {
+                if (b < y0) dy = y0 - b;
+                else if (t > y1) dy = y1 - t;
+            }
+            else dy = y1 - t;
+            cx += dx;
+            cy += dy;
         }
 
         /// <summary>Видовые, которые пакуем сами — из снимка чужими не докладываем.</summary>

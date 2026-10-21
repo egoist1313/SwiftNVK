@@ -244,6 +244,53 @@ namespace Nvk.Core.Tests
             {
                 W = 107, H = 103, Vx = 2338934, Vy = 477488, ScaleN = 5000
             }));
+            Assert.False(SheetSnap.IsJunkVp(new SheetSnapVp
+            {
+                W = 160, H = 128, Cx = 88, Cy = 215, Vx = 0, Vy = 0
+            }));
+        }
+
+        [Fact]
+        public void TryEpPaperTakesNamedThenIndexed()
+        {
+            var file = new SheetSnapFile
+            {
+                Layouts =
+                {
+                    new SheetSnapLayout
+                    {
+                        Kind = "Razrabotka",
+                        Vps = { new SheetSnapVp { Key = "VOL:1", Cx = 400, Cy = 70, W = 150, H = 20 } }
+                    },
+                    new SheetSnapLayout
+                    {
+                        Kind = "Zashita",
+                        Vps =
+                        {
+                            new SheetSnapVp { Key = "EP:4", Cx = 260, Cy = 144, W = 94, H = 110 }
+                        }
+                    }
+                }
+            };
+            double cx, cy, w, h;
+            Assert.True(SheetSnap.TryEpPaper(file, out cx, out cy, out w, out h));
+            Assert.Equal(260.0, cx, 6);
+            Assert.Equal(144.0, cy, 6);
+            Assert.Equal(94.0, w, 6);
+            Assert.Equal(110.0, h, 6);
+            Assert.True(SheetSnap.IsEpKey("EP:1"));
+            Assert.True(SheetSnap.IsVolKey("VOL:2"));
+            Assert.False(SheetSnap.IsEpKey("PLAN:1"));
+        }
+
+        [Fact]
+        public void ClampVpMovesOffPaperOntoSheet()
+        {
+            double cx = 429.4, cy = 77.3;
+            SheetSnap.ClampVp(ref cx, ref cy, 216.0, 30.2, 8.0, 8.0, 412.0, 289.0);
+            Assert.True(cx - 108.0 >= 8.0 - 1e-6);
+            Assert.True(cx + 108.0 <= 412.0 + 1e-6);
+            Assert.Equal(77.3, cy, 6);
         }
 
         [Fact]

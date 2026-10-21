@@ -52,6 +52,8 @@ namespace Nvk.Cad
                 else Skip("VOL", ref skip);
                 if (NvkUiState.DoPlan) Step("PLAN", StagePlan, ref ok, ref skip, ref fail);
                 else Skip("PLAN", ref skip);
+                try { NvkAnno.ApplyAll(doc.Database); }
+                catch (Exc ex) { NvkLog.Write("[НВК] анно.масштабы: " + ex.Message); }
                 if (NvkUiState.DoSheets) Step("SHEETS", StageSheets, ref ok, ref skip, ref fail);
                 else Skip("SHEETS", ref skip);
                 Step("CODES", StageCodes, ref ok, ref skip, ref fail);

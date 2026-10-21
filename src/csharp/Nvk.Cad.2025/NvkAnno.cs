@@ -206,6 +206,7 @@ namespace Nvk.Cad
             if (h == null) return;
             TryHpAnnoOn();
             ForceAnnotative(h);
+            AddPaperScales(h);
         }
 
         /// <summary>
@@ -395,11 +396,79 @@ namespace Nvk.Cad
             catch (Exc) { return 0.0; }
         }
 
+        /// <summary>
+        /// После коммита графики: флаг + 1:200 1:500 1:1000 1:5000 на штриховках,
+        /// размерах, выносках в модели и блоках NVK-*.
+        /// </summary>
+        public static int ApplyAll(Database db)
+        {
+            if (db == null) return 0;
+            EnsureDefaultScales(db);
+            int n = 0;
+            try
+            {
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    n += StampSpace(tr, bt[BlockTableRecord.ModelSpace]);
+                    foreach (ObjectId bid in bt)
+                    {
+                        var rec = (BlockTableRecord)tr.GetObject(bid, OpenMode.ForRead);
+                        if (rec == null || rec.IsLayout || rec.IsAnonymous) continue;
+                        string name = rec.Name ?? "";
+                        if (name.Length < 4
+                            || name.IndexOf("NVK", StringComparison.OrdinalIgnoreCase) < 0)
+                            continue;
+                        n += StampSpace(tr, bid);
+                    }
+                    tr.Commit();
+                }
+            }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] анно.масштабы объекты: " + ex.Message);
+            }
+            if (n > 0)
+                NvkLog.Write("[НВК] анно.масштабы объектов " + n.ToString(Inv)
+                    + "  1:200 1:500 1:1000 1:5000");
+            return n;
+        }
+
+        static int StampSpace(Transaction tr, ObjectId spaceId)
+        {
+            if (tr == null || spaceId.IsNull) return 0;
+            var rec = (BlockTableRecord)tr.GetObject(spaceId, OpenMode.ForRead);
+            int n = 0;
+            foreach (ObjectId id in rec)
+            {
+                Entity e = null;
+                try { e = tr.GetObject(id, OpenMode.ForWrite) as Entity; }
+                catch (Exc) { continue; }
+                if (e == null || e.IsErased) continue;
+                bool want = e is Hatch || e is Dimension || e is MLeader;
+                bool anno = false;
+                try { anno = e.Annotative == AnnotativeStates.True; }
+                catch (Exc) { }
+                if (!anno && !want) continue;
+                if (!anno) ForceAnnotative(e);
+                AddPaperScales(e);
+                n++;
+            }
+            return n;
+        }
+
         static void AddPaperScales(Entity e)
         {
+            if (e == null) return;
             var db = e.Database;
             if (db == null) return;
             EnsureDefaultScales(db);
+            try
+            {
+                e.Annotative = AnnotativeStates.False;
+                e.Annotative = AnnotativeStates.True;
+            }
+            catch (Exc) { }
             try
             {
                 if (db.Cannoscale != null)
@@ -419,6 +488,28 @@ namespace Nvk.Cad
                     double den = DenOf(sc);
                     if (!WantScale(den)) continue;
                     try { e.AddContext(sc); } catch (Exc) { }
+                }
+            }
+            catch (Exc) { }
+            AddPaperScalesCom(e);
+        }
+
+        static void AddPaperScalesCom(Entity e)
+        {
+            if (e == null) return;
+            try
+            {
+                dynamic com = e.AcadObject;
+                if (com == null) return;
+                for (int i = 0; i < AnnoScales.Default.Length; i++)
+                {
+                    string nm = AnnoScales.NameOf(AnnoScales.Default[i]);
+                    try { com.ObjectScaleAdd(nm); }
+                    catch (Exc)
+                    {
+                        try { com.AddScale(nm); }
+                        catch (Exc) { }
+                    }
                 }
             }
             catch (Exc) { }

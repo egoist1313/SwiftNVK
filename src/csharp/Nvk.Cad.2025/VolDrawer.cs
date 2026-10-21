@@ -49,7 +49,7 @@ namespace Nvk.Cad
             double totalL = 0.0;
             foreach (var r in runs)
                 if (r != null && r.Chain != null) totalL += r.Chain.Total;
-            double wrapW = Math.Max(totalL * 0.5, th * 80.0);
+            double wrapW = Math.Max(totalL * 0.5, th * 48.0);
 
             var packed = new List<RunVol>();
             int nRun = 0;
@@ -182,9 +182,12 @@ namespace Nvk.Cad
             double x, double y, double th, double w, string txt)
         {
             var id = MakeMText(ms, tr, Layer, x, y, th, w, txt);
-            double h = EstimateHeight(txt, th);
-            win.Union(x, y - h, x + w, y + th);
             AccEntity(tr, win, id);
+            if (!win.Any)
+            {
+                double h = EstimateHeight(txt, th);
+                win.Union(x, y - h, x + w, y + th);
+            }
         }
 
         static void AccEntity(Transaction tr, SheetWin win, ObjectId id)

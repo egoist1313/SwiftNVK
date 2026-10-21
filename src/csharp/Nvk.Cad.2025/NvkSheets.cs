@@ -757,7 +757,9 @@ namespace Nvk.Cad
                     var vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
                     if (vp == null || vp.IsErased) continue;
                     try { vp.Locked = false; } catch { }
-                    bool keep = keepPaper.Contains(s.Key);
+                    bool keep = keepPaper.Contains(s.Key)
+                        && !SheetSnap.IsEpKey(s.Key)
+                        && !SheetSnap.IsVolKey(s.Key);
                     if (!keep)
                     {
                         try { vp.Width = s.W; } catch { }
@@ -864,26 +866,53 @@ namespace Nvk.Cad
 
         static void ApplySnapPaper(ProfileKind kind, List<VpSpec> specs)
         {
+            var file = SheetSnapStore.Load();
             var lay = SheetSnapStore.LayoutOf(kind);
-            if (lay == null || specs == null) return;
+            if (specs == null) return;
             double dx, dy, fw, fh;
-            SheetSnap.ShiftOf(SheetSnapStore.Load(), kind.ToString(), out dx, out dy, out fw, out fh);
+            SheetSnap.ShiftOf(file, kind.ToString(), out dx, out dy, out fw, out fh);
+            if (fw < 50.0) fw = 420.0;
+            if (fh < 50.0) fh = 297.0;
+            double pad = 8.0;
             int n = 0;
             for (int i = 0; i < specs.Count; i++)
             {
                 var s = specs[i];
-                double cx, cy, w, h;
-                if (!SheetSnap.TryVp(lay, s.Key, out cx, out cy, out w, out h))
+                double cx = 0.0, cy = 0.0, w = 0.0, h = 0.0;
+                bool hit = lay != null && SheetSnap.TryVp(lay, s.Key, out cx, out cy, out w, out h);
+                if (!hit)
                 {
                     string fb = SheetSnap.EpFallbackKey(s.Key);
-                    if (fb == null || !SheetSnap.TryVp(lay, fb, out cx, out cy, out w, out h))
+                    hit = fb != null && lay != null
+                        && SheetSnap.TryVp(lay, fb, out cx, out cy, out w, out h);
+                }
+                if (!hit && SheetSnap.IsEpKey(s.Key))
+                    hit = SheetSnap.TryEpPaper(file, out cx, out cy, out w, out h);
+                if (hit)
+                {
+                    cx += dx;
+                    cy += dy;
+                    if (SheetSnap.IsEpKey(s.Key) || SheetSnap.IsVolKey(s.Key))
+                    {
+                        w = s.W;
+                        h = s.H;
+                    }
+                }
+                else
+                {
+                    cx = s.Cx;
+                    cy = s.Cy;
+                    w = s.W;
+                    h = s.H;
+                    if (!SheetSnap.IsEpKey(s.Key) && !SheetSnap.IsVolKey(s.Key))
                         continue;
                 }
-                specs[i] = new VpSpec(cx + dx, cy + dy, w, h, s.Win, s.ScaleN, s.Key, s.TwistDeg);
+                SheetSnap.ClampVp(ref cx, ref cy, w, h, pad, pad, fw - pad, fh - pad);
+                specs[i] = new VpSpec(cx, cy, w, h, s.Win, s.ScaleN, s.Key, s.TwistDeg);
                 n++;
                 NvkLog.Write("[НВК] VP снимок " + s.Key
                     + "  бумага " + w.ToString("0.0") + "x" + h.ToString("0.0")
-                    + " @ " + (cx + dx).ToString("0.0") + "," + (cy + dy).ToString("0.0"));
+                    + " @ " + cx.ToString("0.0") + "," + cy.ToString("0.0"));
             }
             if (n > 0)
                 NvkLog.Write("[НВК] лист снимок " + kind.ToString()
