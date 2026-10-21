@@ -539,8 +539,19 @@ namespace Nvk.Core
         {
             if (string.IsNullOrEmpty(name)) return false;
             string b = BlockBaseName(name);
-            return b.IndexOf("Arrow", StringComparison.OrdinalIgnoreCase) >= 0
-                || b.IndexOf("North", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (b.IndexOf("HEAD", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+            if (b.IndexOf("North", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (string.Equals(b, "ArrowN", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (b.Length < 6 || !b.StartsWith("Arrow", StringComparison.OrdinalIgnoreCase))
+                return false;
+            for (int i = 5; i < b.Length; i++)
+            {
+                if (b[i] < '0' || b[i] > '9') return false;
+            }
+            return true;
         }
 
         public static bool IsNorthLetter(SheetSnapEnt e)

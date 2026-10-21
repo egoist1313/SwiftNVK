@@ -274,9 +274,15 @@ namespace Nvk.Core.Tests
         public void NorthBlockAndDebris()
         {
             Assert.True(SheetSnap.IsNorthBlockName("Arrow3"));
+            Assert.True(SheetSnap.IsNorthBlockName("Arrow2"));
+            Assert.True(SheetSnap.IsNorthBlockName("Arrow1"));
             Assert.True(SheetSnap.IsNorthBlockName("$5$Arrow3"));
             Assert.True(SheetSnap.IsNorthBlockName("North Arrow"));
+            Assert.True(SheetSnap.IsNorthBlockName("ArrowN"));
+            Assert.False(SheetSnap.IsNorthBlockName("Arrow"));
             Assert.False(SheetSnap.IsNorthBlockName("GOST_A3"));
+            Assert.False(SheetSnap.IsNorthBlockName("ARROWHEAD_6"));
+            Assert.False(SheetSnap.IsNorthBlockName("_Arrowhead"));
             var n = new SheetSnapEnt
             {
                 T = "TEXT",

@@ -837,9 +837,21 @@ namespace Nvk.Cad
         static ObjectId EnsureNorthBlock(Database db, Transaction tr)
         {
             ObjectId id = FindNorthBlock(db, tr);
-            if (!id.IsNull) return id;
-            if (!ImportNorthDwg(db)) return ObjectId.Null;
-            return FindNorthBlock(db, tr);
+            if (id.IsNull)
+            {
+                if (!ImportNorthDwg(db)) return ObjectId.Null;
+                id = FindNorthBlock(db, tr);
+            }
+            if (!id.IsNull)
+            {
+                try
+                {
+                    var rec = (BlockTableRecord)tr.GetObject(id, OpenMode.ForRead);
+                    NvkLog.Write("[НВК] стрелка севера блок " + (rec != null ? rec.Name : "?"));
+                }
+                catch { }
+            }
+            return id;
         }
 
         static ObjectId FindNorthBlock(Database db, Transaction tr)
@@ -954,7 +966,7 @@ namespace Nvk.Cad
                     }
                     catch { }
                 }
-                if (SheetSnap.IsNorthBlockName(bn) || SheetSnap.IsTransientBlock(bn))
+                if (SheetSnap.IsNorthBlockName(bn))
                     return br.BlockTableRecord;
             }
             return ObjectId.Null;
@@ -993,15 +1005,24 @@ namespace Nvk.Cad
             double x, double y, double twistRad, ObjectId northId, bool sit)
         {
             if (tr == null || ps == null || northId.IsNull) return false;
+            EraseJunkArrow(tr, ps, x, y);
             var twin = FindNorthTwin(tr, ps, x, y);
             if (twin != null)
             {
                 if (!twin.IsWriteEnabled) twin.UpgradeOpen();
-                twin.Rotation = twistRad;
-                NvkLog.Write("[НВК] стрелка севера "
-                    + (sit ? "SIT" : "PLAN")
-                    + " поворот " + (twistRad * 180.0 / Math.PI).ToString("0.##"));
-                return true;
+                if (twin.BlockTableRecord != northId)
+                {
+                    twin.Erase();
+                    twin = null;
+                }
+                else
+                {
+                    twin.Rotation = twistRad;
+                    NvkLog.Write("[НВК] стрелка севера "
+                        + (sit ? "SIT" : "PLAN")
+                        + " поворот " + (twistRad * 180.0 / Math.PI).ToString("0.##"));
+                    return true;
+                }
             }
             var br = new BlockReference(new Point3d(x, y, 0.0), northId);
             try { br.ScaleFactors = new Scale3d(SheetSnap.NorthScale, SheetSnap.NorthScale, 1.0); }
@@ -1015,6 +1036,33 @@ namespace Nvk.Cad
                 + " @ " + x.ToString("0.0") + "," + y.ToString("0.0")
                 + " поворот " + (twistRad * 180.0 / Math.PI).ToString("0.##"));
             return true;
+        }
+
+        static void EraseJunkArrow(Transaction tr, BlockTableRecord ps, double x, double y)
+        {
+            if (tr == null || ps == null) return;
+            var kill = new List<ObjectId>();
+            foreach (ObjectId id in ps)
+            {
+                var br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+                if (br == null || br.IsErased) continue;
+                if (Dist2(br.Position.X, br.Position.Y, x, y) > 36.0) continue;
+                string bn = BlockName(tr, br);
+                if (string.IsNullOrEmpty(bn)) continue;
+                if (bn.IndexOf("HEAD", StringComparison.OrdinalIgnoreCase) >= 0)
+                    kill.Add(id);
+            }
+            for (int i = 0; i < kill.Count; i++)
+            {
+                try
+                {
+                    var ent = tr.GetObject(kill[i], OpenMode.ForWrite) as Entity;
+                    if (ent != null && !ent.IsErased) ent.Erase();
+                }
+                catch { }
+            }
+            if (kill.Count > 0)
+                NvkLog.Write("[НВК] стрелка севера снята HEAD " + kill.Count.ToString());
         }
 
         static BlockReference FindNorthTwin(Transaction tr, BlockTableRecord ps, double x, double y)
