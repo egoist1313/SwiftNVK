@@ -17,6 +17,7 @@ namespace Nvk.Core.Tests
             Assert.False(AnnoScales.IsDefault(50));
             Assert.Equal("1:5000", AnnoScales.NameOf(5000));
             Assert.Equal("1:200", AnnoScales.NameOf(200));
+            Assert.Equal("ACDB_ANNOTATIONSCALES", AnnoScales.CollName);
         }
     }
 }

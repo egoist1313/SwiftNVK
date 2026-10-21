@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Reflection;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Nvk.Core;
@@ -257,18 +258,26 @@ namespace Nvk.Cad
             AddPaperScales(e);
         }
 
+        static string _collNameUsed;
+        static bool _collLogged;
+        static MethodInfo _addCtxMethod;
+
         public static int EnsureDefaultScales(Database db)
         {
             _hatchAnnoOnce = false;
+            _collLogged = false;
             TryHpAnnoOn();
             if (db == null) return 0;
             int n = 0;
             try
             {
-                var ocm = db.ObjectContextManager;
-                if (ocm == null) return 0;
-                var coll = ocm.GetContextCollection("ACDB_ANNOTATION_SCALES");
-                if (coll == null) return 0;
+                var coll = ScaleColl(db);
+                if (coll == null)
+                {
+                    NvkLog.Write("[НВК] анно.коллекция не найдена (ждали "
+                        + AnnoScales.CollName + ")");
+                    return 0;
+                }
                 for (int i = 0; i < AnnoScales.Default.Length; i++)
                 {
                     if (EnsureScale(coll, AnnoScales.Default[i]))
@@ -279,10 +288,73 @@ namespace Nvk.Cad
             {
                 NvkLog.Write("[НВК] анно.масштабы: " + ex.Message);
             }
-            if (n > 0)
-                NvkLog.Write("[НВК] анно.масштабы + " + n.ToString(Inv)
-                    + "  1:200 1:500 1:1000 1:5000");
+            NvkLog.Write("[НВК] анно.коллекция " + (_collNameUsed ?? "?")
+                + "  +" + n.ToString(Inv)
+                + "  1:200 1:500 1:1000 1:5000");
             return n;
+        }
+
+        static ObjectContextCollection ScaleColl(Database db)
+        {
+            if (db == null) return null;
+            var ocm = db.ObjectContextManager;
+            if (ocm == null) return null;
+            var names = new System.Collections.Generic.List<string>();
+            try
+            {
+                var p = typeof(AnnotationScale).GetProperty("CollectionName",
+                    BindingFlags.Public | BindingFlags.Static);
+                if (p != null)
+                {
+                    var v = p.GetValue(null) as string;
+                    if (!string.IsNullOrEmpty(v)) names.Add(v);
+                }
+            }
+            catch (Exc) { }
+            names.Add(AnnoScales.CollName);
+            names.Add(AnnoScales.CollNameAlt);
+            ObjectContextCollection empty = null;
+            string emptyName = null;
+            for (int i = 0; i < names.Count; i++)
+            {
+                string nm = names[i];
+                if (string.IsNullOrEmpty(nm)) continue;
+                ObjectContextCollection c = null;
+                try { c = ocm.GetContextCollection(nm); }
+                catch (Exc) { }
+                if (c == null) continue;
+                int k = 0;
+                try
+                {
+                    foreach (ObjectContext oc in c) k++;
+                }
+                catch (Exc) { }
+                if (k > 0)
+                {
+                    _collNameUsed = nm;
+                    LogCollOnce(nm, k);
+                    return c;
+                }
+                if (empty == null)
+                {
+                    empty = c;
+                    emptyName = nm;
+                }
+            }
+            if (empty != null)
+            {
+                _collNameUsed = emptyName;
+                LogCollOnce(emptyName, 0);
+            }
+            return empty;
+        }
+
+        static void LogCollOnce(string name, int n)
+        {
+            if (_collLogged) return;
+            _collLogged = true;
+            NvkLog.Write("[НВК] анно.коллекция " + name
+                + "  шкал " + n.ToString(Inv));
         }
 
         static void TryHpAnnoOn()
@@ -331,8 +403,7 @@ namespace Nvk.Cad
                     var db = h.Database;
                     if (db != null && db.ObjectContextManager != null)
                     {
-                        var coll = db.ObjectContextManager
-                            .GetContextCollection("ACDB_ANNOTATION_SCALES");
+                        var coll = ScaleColl(db);
                         if (coll != null)
                         {
                             foreach (ObjectContext oc in coll)
@@ -398,19 +469,23 @@ namespace Nvk.Cad
 
         /// <summary>
         /// После коммита графики: флаг + 1:200 1:500 1:1000 1:5000 на штриховках,
-        /// размерах, выносках в модели и блоках NVK-*.
+        /// размерах, выносках в модели и блоках NVK-*. Без False/True — он
+        /// обнуляет OBJECTSCALE при ANNOAUTOSCALE=0.
         /// </summary>
         public static int ApplyAll(Database db)
         {
             if (db == null) return 0;
             EnsureDefaultScales(db);
             int n = 0;
+            int with = 0;
             try
             {
                 using (var tr = db.TransactionManager.StartTransaction())
                 {
                     var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                    n += StampSpace(tr, bt[BlockTableRecord.ModelSpace]);
+                    int a, b;
+                    StampSpace(tr, bt[BlockTableRecord.ModelSpace], out a, out b);
+                    n += a; with += b;
                     foreach (ObjectId bid in bt)
                     {
                         var rec = (BlockTableRecord)tr.GetObject(bid, OpenMode.ForRead);
@@ -419,7 +494,8 @@ namespace Nvk.Cad
                         if (name.Length < 4
                             || name.IndexOf("NVK", StringComparison.OrdinalIgnoreCase) < 0)
                             continue;
-                        n += StampSpace(tr, bid);
+                        StampSpace(tr, bid, out a, out b);
+                        n += a; with += b;
                     }
                     tr.Commit();
                 }
@@ -428,17 +504,20 @@ namespace Nvk.Cad
             {
                 NvkLog.Write("[НВК] анно.масштабы объекты: " + ex.Message);
             }
-            if (n > 0)
-                NvkLog.Write("[НВК] анно.масштабы объектов " + n.ToString(Inv)
-                    + "  1:200 1:500 1:1000 1:5000");
+            BroadcastScales(db);
+            ProbeOne(db);
+            NvkLog.Write("[НВК] анно.масштабы объектов " + n.ToString(Inv)
+                + "  с шкалами " + with.ToString(Inv)
+                + "  1:200 1:500 1:1000 1:5000");
             return n;
         }
 
-        static int StampSpace(Transaction tr, ObjectId spaceId)
+        static void StampSpace(Transaction tr, ObjectId spaceId, out int visited, out int with)
         {
-            if (tr == null || spaceId.IsNull) return 0;
+            visited = 0;
+            with = 0;
+            if (tr == null || spaceId.IsNull) return;
             var rec = (BlockTableRecord)tr.GetObject(spaceId, OpenMode.ForRead);
-            int n = 0;
             foreach (ObjectId id in rec)
             {
                 Entity e = null;
@@ -452,9 +531,9 @@ namespace Nvk.Cad
                 if (!anno && !want) continue;
                 if (!anno) ForceAnnotative(e);
                 AddPaperScales(e);
-                n++;
+                visited++;
+                if (CountWanted(e) > 0) with++;
             }
-            return n;
         }
 
         static void AddPaperScales(Entity e)
@@ -462,36 +541,113 @@ namespace Nvk.Cad
             if (e == null) return;
             var db = e.Database;
             if (db == null) return;
-            EnsureDefaultScales(db);
             try
             {
-                e.Annotative = AnnotativeStates.False;
-                e.Annotative = AnnotativeStates.True;
+                if (e.Annotative != AnnotativeStates.True)
+                    e.Annotative = AnnotativeStates.True;
             }
             catch (Exc) { }
-            try
+            var coll = ScaleColl(db);
+            if (db.Cannoscale != null)
+                Attach(e, db.Cannoscale);
+            if (coll != null)
             {
-                if (db.Cannoscale != null)
-                    e.AddContext(db.Cannoscale);
-            }
-            catch (Exc) { }
-            try
-            {
-                var ocm = db.ObjectContextManager;
-                if (ocm == null) return;
-                var coll = ocm.GetContextCollection("ACDB_ANNOTATION_SCALES");
-                if (coll == null) return;
+                for (int i = 0; i < AnnoScales.Default.Length; i++)
+                {
+                    ObjectContext ctx = ContextOf(coll, AnnoScales.Default[i]);
+                    if (ctx != null) Attach(e, ctx);
+                }
                 foreach (ObjectContext oc in coll)
                 {
                     var sc = oc as AnnotationScale;
                     if (sc == null) continue;
-                    double den = DenOf(sc);
-                    if (!WantScale(den)) continue;
-                    try { e.AddContext(sc); } catch (Exc) { }
+                    if (!WantScale(DenOf(sc))) continue;
+                    Attach(e, oc);
+                }
+            }
+            AddPaperScalesCom(e);
+        }
+
+        static ObjectContext ContextOf(ObjectContextCollection coll, double den)
+        {
+            if (coll == null) return null;
+            string name = AnnoScales.NameOf(den);
+            try
+            {
+                var ctx = coll.GetContext(name);
+                if (ctx != null) return ctx;
+            }
+            catch (Exc) { }
+            foreach (ObjectContext oc in coll)
+            {
+                var sc = oc as AnnotationScale;
+                if (sc == null) continue;
+                if (Near(DenOf(sc), den)) return oc;
+            }
+            return null;
+        }
+
+        static void Attach(Entity e, ObjectContext ctx)
+        {
+            if (e == null || ctx == null) return;
+            try
+            {
+                if (!e.HasContext(ctx))
+                    e.AddContext(ctx);
+            }
+            catch (Exc) { }
+            TryInternalAdd(e, ctx);
+        }
+
+        static void TryInternalAdd(Entity e, ObjectContext ctx)
+        {
+            if (e == null || ctx == null) return;
+            try
+            {
+                if (_addCtxMethod == null)
+                {
+                    Type t = null;
+                    try { t = typeof(Database).Assembly.GetType("Autodesk.AutoCAD.Internal.ObjectContexts"); }
+                    catch (Exc) { }
+                    if (t == null)
+                    {
+                        try { t = typeof(AcadApp).Assembly.GetType("Autodesk.AutoCAD.Internal.ObjectContexts"); }
+                        catch (Exc) { }
+                    }
+                    if (t == null) return;
+                    _addCtxMethod = t.GetMethod("AddContext",
+                        BindingFlags.Public | BindingFlags.Static,
+                        null,
+                        new[] { typeof(DBObject), typeof(ObjectContext) },
+                        null);
+                    if (_addCtxMethod == null)
+                        _addCtxMethod = t.GetMethod("AddContext",
+                            BindingFlags.Public | BindingFlags.Static);
+                }
+                if (_addCtxMethod != null)
+                    _addCtxMethod.Invoke(null, new object[] { e, ctx });
+            }
+            catch (Exc) { }
+        }
+
+        static int CountWanted(Entity e)
+        {
+            if (e == null) return 0;
+            int n = 0;
+            try
+            {
+                var coll = ScaleColl(e.Database);
+                if (coll == null) return 0;
+                foreach (ObjectContext oc in coll)
+                {
+                    var sc = oc as AnnotationScale;
+                    if (sc == null) continue;
+                    if (!WantScale(DenOf(sc))) continue;
+                    try { if (e.HasContext(oc)) n++; } catch (Exc) { }
                 }
             }
             catch (Exc) { }
-            AddPaperScalesCom(e);
+            return n;
         }
 
         static void AddPaperScalesCom(Entity e)
@@ -513,6 +669,127 @@ namespace Nvk.Cad
                 }
             }
             catch (Exc) { }
+        }
+
+        /// <summary>
+        /// Смена CANNOSCALE при ANNOAUTOSCALE=-4 вешает шкалу на все
+        /// аннотативные объекты, в том числе внутри блоков NVK-*.
+        /// </summary>
+        static void BroadcastScales(Database db)
+        {
+            if (db == null) return;
+            object oldAuto = null, oldCanno = null;
+            try { oldAuto = AcadApp.GetSystemVariable("ANNOAUTOSCALE"); } catch (Exc) { }
+            try { oldCanno = AcadApp.GetSystemVariable("CANNOSCALE"); } catch (Exc) { }
+            try { AcadApp.SetSystemVariable("ANNOAUTOSCALE", -4); }
+            catch (Exc)
+            {
+                try { AcadApp.SetSystemVariable("ANNOAUTOSCALE", 4); }
+                catch (Exc) { }
+            }
+            int ok = 0;
+            for (int i = 0; i < AnnoScales.Default.Length; i++)
+            {
+                string nm = AnnoScales.NameOf(AnnoScales.Default[i]);
+                try
+                {
+                    AcadApp.SetSystemVariable("CANNOSCALE", nm);
+                    ok++;
+                }
+                catch (Exc ex)
+                {
+                    NvkLog.Write("[НВК] CANNOSCALE " + nm + ": " + ex.Message);
+                }
+            }
+            try
+            {
+                if (oldCanno != null)
+                    AcadApp.SetSystemVariable("CANNOSCALE", oldCanno);
+            }
+            catch (Exc) { }
+            try
+            {
+                if (oldAuto != null)
+                    AcadApp.SetSystemVariable("ANNOAUTOSCALE", oldAuto);
+            }
+            catch (Exc) { }
+            NvkLog.Write("[НВК] анно.рассылка CANNOSCALE " + ok.ToString(Inv)
+                + "/4");
+        }
+
+        static void ProbeOne(Database db)
+        {
+            if (db == null) return;
+            try
+            {
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    Hatch h = FindHatch(tr, bt[BlockTableRecord.ModelSpace]);
+                    if (h == null)
+                    {
+                        foreach (ObjectId bid in bt)
+                        {
+                            var rec = (BlockTableRecord)tr.GetObject(bid, OpenMode.ForRead);
+                            if (rec == null || rec.IsLayout || rec.IsAnonymous) continue;
+                            string name = rec.Name ?? "";
+                            if (name.IndexOf("NVK", StringComparison.OrdinalIgnoreCase) < 0)
+                                continue;
+                            h = FindHatch(tr, bid);
+                            if (h != null) break;
+                        }
+                    }
+                    if (h == null)
+                    {
+                        NvkLog.Write("[НВК] анно.проверка: штриховки нет");
+                        tr.Commit();
+                        return;
+                    }
+                    bool anno = false;
+                    try { anno = h.Annotative == AnnotativeStates.True; }
+                    catch (Exc) { }
+                    int n = CountWanted(h);
+                    int comN = -1;
+                    try
+                    {
+                        dynamic com = h.AcadObject;
+                        if (com != null)
+                        {
+                            try { comN = (int)com.ObjectScaleCount; }
+                            catch (Exc)
+                            {
+                                try { comN = (int)com.ScaleCount; }
+                                catch (Exc) { }
+                            }
+                        }
+                    }
+                    catch (Exc) { }
+                    NvkLog.Write("[НВК] анно.проверка штриховка анно="
+                        + (anno ? "да" : "нет")
+                        + "  HasContext=" + n.ToString(Inv)
+                        + "  COM=" + comN.ToString(Inv)
+                        + "  коллекция " + (_collNameUsed ?? "?"));
+                    tr.Commit();
+                }
+            }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] анно.проверка: " + ex.Message);
+            }
+        }
+
+        static Hatch FindHatch(Transaction tr, ObjectId spaceId)
+        {
+            if (tr == null || spaceId.IsNull) return null;
+            var rec = (BlockTableRecord)tr.GetObject(spaceId, OpenMode.ForRead);
+            foreach (ObjectId id in rec)
+            {
+                Hatch h = null;
+                try { h = tr.GetObject(id, OpenMode.ForRead) as Hatch; }
+                catch (Exc) { }
+                if (h != null && !h.IsErased) return h;
+            }
+            return null;
         }
 
         static bool WantScale(double den)

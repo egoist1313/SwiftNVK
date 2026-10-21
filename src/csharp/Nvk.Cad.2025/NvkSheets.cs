@@ -190,7 +190,7 @@ namespace Nvk.Cad
             if (doc == null) return "[НВК] ЛИСТЫ: нет документа";
             var db = doc.Database;
             var lm = LayoutManager.Current;
-            NvkLog.Write("[НВК] ЛИСТЫ старт (вкладки не переключаем)");
+            NvkLog.Write("[НВК] ЛИСТЫ старт (видовые включаем на вкладке, остаёмся в Модели)");
 
             using (var tr = db.TransactionManager.StartTransaction())
             {
@@ -573,13 +573,7 @@ namespace Nvk.Cad
         static int MakeLevel(Database db, LayoutManager lm, string name, bool createdNew,
             ProfileKind kind, List<CsCell> epCells, List<CsCell> cells)
         {
-            string stayOn = "Model";
-            try
-            {
-                string cur = lm.CurrentLayout;
-                if (!string.IsNullOrEmpty(cur)) stayOn = cur;
-            }
-            catch { }
+            const string stayOn = "Model";
 
             ObjectId layoutId = ObjectId.Null;
             try { layoutId = lm.GetLayoutId(name); } catch { }
@@ -606,13 +600,15 @@ namespace Nvk.Cad
             {
                 NvkLog.Write("[НВК] лист " + name + " плот: " + ex.Message);
             }
+            // Viewport.On держится только пока вкладка листа текущая.
+            try { lm.CurrentLayout = name; }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] лист " + name + " вкладка: " + ex.Message);
+            }
+
             try
             {
-                if (!string.Equals(lm.CurrentLayout, stayOn, StringComparison.OrdinalIgnoreCase))
-                    lm.CurrentLayout = stayOn;
-            }
-            catch { }
-
             int nEp = ScaleN(NvkUiState.VpScaleEp, 1000);
             int nCs = ScaleN(NvkUiState.VpScaleCs, 200);
             int nPlan = ScaleN(NvkUiState.VpScalePlan, 500);
@@ -807,6 +803,16 @@ namespace Nvk.Cad
                 + "  экранов +" + nAdd.ToString()
                 + "  вид " + specs.Count.ToString());
             return nAdd > 0 ? nAdd : specs.Count;
+            }
+            finally
+            {
+                try
+                {
+                    if (!string.Equals(lm.CurrentLayout, stayOn, StringComparison.OrdinalIgnoreCase))
+                        lm.CurrentLayout = stayOn;
+                }
+                catch { }
+            }
         }
 
         static int DropStaleVps(Transaction tr, Dictionary<string, ObjectId> have,
@@ -1064,12 +1070,18 @@ namespace Nvk.Cad
 
         /// <summary>
         /// Слой рамки NVK-VP (не печатается), стекло 90 на объекте.
-        /// Слой менять ДО On: смена слоя после On гасит экран.
+        /// Слой менять ДО On: повторная смена слоя после On гасит экран.
         /// </summary>
         static void StyleVp(Viewport vp)
         {
             if (vp == null || vp.IsErased) return;
-            try { vp.Layer = NvkLayers.VpLayer; } catch (Exc) { }
+            string want = NvkLayers.VpLayer;
+            string have = null;
+            try { have = vp.Layer; } catch (Exc) { }
+            if (!string.Equals(have, want, StringComparison.OrdinalIgnoreCase))
+            {
+                try { vp.Layer = want; } catch (Exc) { }
+            }
             try { vp.Transparency = NvkLayers.Alpha(NvkLayers.VpTransPct); } catch (Exc) { }
             try { vp.On = true; } catch (Exc) { }
         }
@@ -1082,6 +1094,7 @@ namespace Nvk.Cad
             double twist = PlanView.TwistRad(twistDeg);
             double viewH = SheetSnap.ViewHeightAtScale(vp.Height, scaleN);
             try { vp.Locked = false; } catch { }
+            try { vp.On = true; } catch { }
             try { vp.PerspectiveOn = false; } catch { }
             try { vp.ViewDirection = new Vector3d(0.0, 0.0, 1.0); } catch { }
             try { vp.ViewTarget = new Point3d(cx, cy, 0.0); } catch { }
@@ -1093,6 +1106,16 @@ namespace Nvk.Cad
                 NvkLog.Write("[НВК] VP twist " + key + ": " + ex.Message);
             }
             try { vp.On = true; } catch { }
+            try
+            {
+                dynamic com = vp.AcadObject;
+                if (com != null)
+                {
+                    try { com.Display(true); }
+                    catch { try { com.Display = true; } catch { } }
+                }
+            }
+            catch { }
             double gotDeg = 0.0;
             try { gotDeg = vp.TwistAngle * 180.0 / Math.PI; } catch { }
             double gotCs = 0.0;
