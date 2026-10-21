@@ -18,6 +18,14 @@ namespace Nvk.Cad
         {
             Layer, PlanView.LayerMh, PlanView.LayerSamp, PlanView.LayerSit
         };
+        static readonly string[] EraseLayers =
+        {
+            Layer, PlanView.LayerMh, PlanView.LayerSamp, PlanView.LayerSit, PlanView.LayerDim
+        };
+        static readonly string[] PlanWinLayers =
+        {
+            Layer, PlanView.LayerMh, PlanView.LayerDim
+        };
 
         public static string Draw(Database db, Transaction tr)
         {
@@ -36,6 +44,7 @@ namespace Nvk.Cad
                 return "[НВК] PLAN: выкл. (plan_en)";
             EnsureLayer(db, tr, Layer, 1);
             EnsureLayer(db, tr, PlanView.LayerMh, 6);
+            EnsureLayer(db, tr, PlanView.LayerDim, 6);
             EnsureLayer(db, tr, PlanView.LayerSamp, 3);
             EnsureLayer(db, tr, PlanView.LayerSit, 5);
             NvkAnno.CaptureDim(db, tr);
@@ -47,7 +56,7 @@ namespace Nvk.Cad
                 if (kv.Value != null && kv.Value.HasArrow) nLiveArr++;
             NvkLog.Write("[НВК] PLAN выноски из чертежа " + live.Count.ToString(CultureInfo.InvariantCulture)
                 + "  стрелок " + nLiveArr.ToString(CultureInfo.InvariantCulture));
-            EraseLayer(db, tr, LeaderLayers);
+            EraseLayer(db, tr, EraseLayers);
             NvkLeader.LogStyle(db, tr);
             double planDeg = NvkUiState.PlanRotDeg;
 
@@ -67,7 +76,7 @@ namespace Nvk.Cad
                 AddPline(ms, tr, axis, false, 1, 0);
                 var trench = TrenchByOffset(last.Chain, cfg);
                 AddPline(ms, tr, trench, true, 5, 30);
-                DrawSituation(ms, tr, axis, poses, planDeg, nRun);
+                DrawSituation(ms, tr, axis, poses, nRun);
 
                 if (cfg.PlanEn && last.PlanTargets != null)
                 {
@@ -125,7 +134,7 @@ namespace Nvk.Cad
             {
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                 if (ent == null || ent.IsErased) continue;
-                if (!IsPlanLayer(ent.Layer))
+                if (!LayerIn(ent.Layer, PlanWinLayers))
                     continue;
                 Extents3d ext;
                 try { ext = ent.GeometricExtents; }
@@ -319,21 +328,17 @@ namespace Nvk.Cad
         }
 
         /// <summary>
-        /// Коридор ±10 м, штриховка ANSI31 (цвет 1, масштаб 5×DIMSCALE)
-        /// и выноска «Предъявляемый участок»: остриё 6 м, полка 14 м влево от оси.
-        /// </summary>
-        /// <summary>
-        /// Коридор ±10 м: ось на 10 м за крайние колодцы, OFFSET.
-        /// Вершины OFFSET как есть (не нарезка 0.5 м), потом прореживание
-        /// коллинеарных. Дуги/bulge — шаг ~15°.
+        /// Коридор ±SitHalfM: ось за крайние колодцы, OFFSET.
+        /// Вершины OFFSET как есть, потом прореживание коллинеарных.
         /// </summary>
         static List<PlanPt> SituationByOffset(List<PlanPt> axis)
         {
             var src = PlanGeom.Simplify(axis, 0.05);
             if (src == null || src.Count < 2) src = axis;
-            src = PlanGeom.ExtendEnds(src, PlanGeom.SitHalfM);
+            double half = SitHalf();
+            src = PlanGeom.ExtendEnds(src, half);
             var fallback = PlanGeom.SimplifyClosed(
-                PlanGeom.SituationClosed(src, PlanGeom.SitHalfM), PlanGeom.SitSimplifyM);
+                PlanGeom.SituationClosed(src, half), PlanGeom.SitSimplifyM);
             object oldGap = null;
             try
             {
@@ -343,7 +348,7 @@ namespace Nvk.Cad
             catch { }
             try
             {
-                var acad = OffsetClosed(src, PlanGeom.SitHalfM, PlanGeom.SitHalfM);
+                var acad = OffsetClosed(src, half, half);
                 if (acad.Count < 4) return fallback;
                 var thin = PlanGeom.SimplifyClosed(acad, PlanGeom.SitSimplifyM);
                 return thin.Count >= 4 ? thin : acad;
@@ -370,7 +375,7 @@ namespace Nvk.Cad
         }
 
         static void DrawSituation(BlockTableRecord ms, Transaction tr, List<PlanPt> axis,
-            Dictionary<string, LeaderPose> poses, double planDeg, int nRun)
+            Dictionary<string, LeaderPose> poses, int nRun)
         {
             var sit = SituationByOffset(axis);
             if (sit.Count >= 3)
@@ -384,7 +389,7 @@ namespace Nvk.Cad
             string key = PlanView.SitLabel;
             if (nRun > 1)
                 key = PlanView.SitLabel + " " + nRun.ToString(CultureInfo.InvariantCulture);
-            PlaceLeader(ms, tr, poses, arrow.X, arrow.Y, text.X, text.Y, key, PlanView.LayerSit, planDeg, true);
+            PlaceLeader(ms, tr, poses, arrow.X, arrow.Y, text.X, text.Y, key, PlanView.LayerSit, 0.0, true);
         }
 
         static void HatchSituation(BlockTableRecord ms, Transaction tr, ObjectId loop, List<PlanPt> sit)
@@ -447,9 +452,9 @@ namespace Nvk.Cad
             tr.AddNewlyCreatedDBObject(c, true);
         }
 
-        static bool IsPlanLayer(string layer)
+        static double SitHalf()
         {
-            return LayerIn(layer, LeaderLayers);
+            return PlanGeom.ClampSitHalf(NvkUiState.SitHalfM);
         }
 
         static bool LayerIn(string layer, string[] layers)
@@ -521,7 +526,7 @@ namespace Nvk.Cad
                     var dim = new AlignedDimension();
                     dim.SetDatabaseDefaults();
                     try { dim.DimensionStyle = ms.Database.Dimstyle; } catch (Exc) { }
-                    dim.Layer = PlanView.LayerMh;
+                    dim.Layer = PlanView.LayerDim;
                     dim.XLine1Point = new Point3d(a.X, a.Y, 0.0);
                     dim.XLine2Point = new Point3d(b.X, b.Y, 0.0);
                     dim.DimLinePoint = new Point3d(

@@ -129,6 +129,20 @@ namespace Nvk.Core
 
         /// <summary>Полуширина ситуационного коридора, м. PipeBuild: ±10 м от оси.</summary>
         public const double SitHalfM = 10.0;
+        /// <summary>Бумага ситуационного ВЭ по умолчанию, мм (снимок ~108×104).</summary>
+        public const double SitPaperW = 108.0;
+        public const double SitPaperH = 104.0;
+
+        public static double ClampSitHalf(double m)
+        {
+            return m < 0.5 ? 0.5 : m;
+        }
+
+        public static void ClampSitPaper(ref double w, ref double h)
+        {
+            if (w < 20.0) w = 20.0;
+            if (h < 20.0) h = 20.0;
+        }
         /// <summary>Прореживание коридора: коллинеарные ближе этого (м) выкидываем.</summary>
         public const double SitSimplifyM = 0.25;
 

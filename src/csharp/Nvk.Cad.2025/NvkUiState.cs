@@ -105,6 +105,11 @@ namespace Nvk.Cad
         public static double PlanMin = 15.0;
         /// <summary>Поворот ПСК плана, градусы, против часовой от мировой X. Задаётся двумя точками.</summary>
         public static double PlanRotDeg;
+        /// <summary>Полуширина ситуационного коридора, м. Между чертежами — settings.txt.</summary>
+        public static double SitHalfM = 10.0;
+        /// <summary>Бумага ситуационного ВЭ, мм. Между чертежами — settings.txt.</summary>
+        public static double SitPaperW = 108.0;
+        public static double SitPaperH = 104.0;
         /// <summary>Слои видового плана по листам L1…L5. Пусто = только NVK-* / 0 / Defpoints.</summary>
         public static string PlanVpOnL1 = "";
         public static string PlanVpOnL2 = "";
@@ -407,6 +412,9 @@ namespace Nvk.Cad
             Pair(rb, "PLAN_INT", F(PlanInt, 1));
             Pair(rb, "PLAN_MIN", F(PlanMin, 1));
             Pair(rb, "PLAN_ROT", F(PlanRotDeg, 3));
+            Pair(rb, "SIT_HALF", F(SitHalfM, 2));
+            Pair(rb, "SIT_PAP_W", F(SitPaperW, 1));
+            Pair(rb, "SIT_PAP_H", F(SitPaperH, 1));
             Pair(rb, "PLAN_VP_ON", PlanVpOnL1 ?? "");
             Pair(rb, "PLAN_VP_ON_L1", PlanVpOnL1 ?? "");
             Pair(rb, "PLAN_VP_ON_L2", PlanVpOnL2 ?? "");
@@ -658,6 +666,9 @@ namespace Nvk.Cad
             PlanInt = 50.0;
             PlanMin = 15.0;
             PlanRotDeg = 0.0;
+            SitHalfM = PlanGeom.SitHalfM;
+            SitPaperW = PlanGeom.SitPaperW;
+            SitPaperH = PlanGeom.SitPaperH;
             PlanVpOnL1 = PlanVpOnL2 = PlanVpOnL3 = PlanVpOnL4 = PlanVpOnL5 = "";
             PlanVpOn = "";
             DrawProjections = true;
@@ -818,6 +829,11 @@ namespace Nvk.Cad
                 case "PLAN_INT": PlanInt = D(v, PlanInt); break;
                 case "PLAN_MIN": PlanMin = D(v, PlanMin); break;
                 case "PLAN_ROT": PlanRotDeg = D(v, PlanRotDeg); break;
+                case "SIT_HALF":
+                    SitHalfM = PlanGeom.ClampSitHalf(D(v, SitHalfM));
+                    break;
+                case "SIT_PAP_W": SitPaperW = D(v, SitPaperW); if (SitPaperW < 20.0) SitPaperW = 20.0; break;
+                case "SIT_PAP_H": SitPaperH = D(v, SitPaperH); if (SitPaperH < 20.0) SitPaperH = 20.0; break;
                 case "PLAN_VP_ON": PlanVpOn = v ?? ""; break;
                 case "PLAN_VP_ON_L1": PlanVpOnL1 = v ?? ""; break;
                 case "PLAN_VP_ON_L2": PlanVpOnL2 = v ?? ""; break;

@@ -411,7 +411,7 @@ namespace Nvk.Cad
                 UnionNearby(db, tr, NvkSession.SampWin, new[] { "NVK-VOL-SAMP" });
 
             double px0, py0, px1, py1;
-            string[] planLyrs = { "NVK-PLAN", PlanView.LayerMh, PlanView.LayerSamp, PlanView.LayerSit };
+            string[] planLyrs = { "NVK-PLAN", PlanView.LayerMh, PlanView.LayerDim };
             for (int i = 0; i < planLyrs.Length; i++)
             {
                 if (TryLayerExtents(db, tr, planLyrs[i], out px0, out py0, out px1, out py1))
@@ -665,9 +665,11 @@ namespace Nvk.Cad
             SheetWin samp = (NvkUiState.DoVol && kind != ProfileKind.Truba) ? NvkSession.SampWin : null;
             var specs = PackSpecs(kind, epCells, vol, plan, coord, samp, cells, nEp, nCs, nPlan,
                 xLeft, topY, gap, usableW);
+            ApplySitPaperSize(specs);
             FitSpecs(specs, xLeft, py0 + pad, px1 - pad, py1 - pad);
             ApplySnapPaper(kind, specs);
             AddSnapExtraVps(kind, specs);
+            ApplySitPaperSize(specs);
             if (SpecsOverflow(specs, px0, py0, px1, py1))
                 NvkLog.Write("[НВК] лист " + name + " видовые крупнее области печати, рамки 1:N");
 
@@ -754,8 +756,7 @@ namespace Nvk.Cad
                     }
                     try { vp.Locked = false; } catch { }
                     bool keep = keepPaper.Contains(s.Key)
-                        && !SheetSnap.IsEpKey(s.Key)
-                        && !SheetSnap.IsVolKey(s.Key);
+                        && !KeepLivePaper(s.Key);
                     if (!keep)
                     {
                         try { vp.Width = s.W; } catch { }
@@ -852,6 +853,34 @@ namespace Nvk.Cad
             return n;
         }
 
+        static bool KeepLivePaper(string key)
+        {
+            return SheetSnap.IsEpKey(key)
+                || SheetSnap.IsVolKey(key)
+                || SheetSnap.IsPlanKey(key)
+                || SheetSnap.IsSitKey(key);
+        }
+
+        static void ApplySitPaperSize(List<VpSpec> specs)
+        {
+            if (specs == null) return;
+            double w = NvkUiState.SitPaperW;
+            double h = NvkUiState.SitPaperH;
+            PlanGeom.ClampSitPaper(ref w, ref h);
+            for (int i = 0; i < specs.Count; i++)
+            {
+                if (!SheetSnap.IsSitKey(specs[i].Key)) continue;
+                var s = specs[i];
+                var n = new VpSpec(s.Cx, s.Cy, w, h, s.Win, s.ScaleN, s.Key, s.TwistDeg);
+                n.HasView = s.HasView;
+                n.Vx = s.Vx;
+                n.Vy = s.Vy;
+                n.Vh = s.Vh;
+                n.TwistRad = s.TwistRad;
+                specs[i] = n;
+            }
+        }
+
         static bool IsEpKey(ProfileKind kind, string key)
         {
             if (string.IsNullOrEmpty(key)) return false;
@@ -888,7 +917,7 @@ namespace Nvk.Cad
                 {
                     cx += dx;
                     cy += dy;
-                    if (SheetSnap.IsEpKey(s.Key) || SheetSnap.IsVolKey(s.Key))
+                    if (KeepLivePaper(s.Key))
                     {
                         w = s.W;
                         h = s.H;
@@ -900,7 +929,7 @@ namespace Nvk.Cad
                     cy = s.Cy;
                     w = s.W;
                     h = s.H;
-                    if (!SheetSnap.IsEpKey(s.Key) && !SheetSnap.IsVolKey(s.Key))
+                    if (!KeepLivePaper(s.Key))
                         continue;
                 }
                 SheetSnap.ClampVp(ref cx, ref cy, w, h, pad, pad, fw - pad, fh - pad);

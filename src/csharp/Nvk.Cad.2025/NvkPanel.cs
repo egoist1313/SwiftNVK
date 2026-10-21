@@ -31,7 +31,7 @@ namespace Nvk.Cad
         readonly CheckBox _blockCs, _showTags, _doCs, _doEp, _doPoper, _doVol, _volJoin, _mhStrip, _doPlan, _doSheets;
         readonly CheckBox _showPerm;
         readonly CheckBox _projFact, _singleSc;
-        readonly TextBox _annGap, _zones, _planInt, _planMin;
+        readonly TextBox _annGap, _zones, _planInt, _planMin, _sitHalf, _sitPapW, _sitPapH;
         readonly Label _planRotLbl;
         readonly CheckBox _annot, _pavAll, _pickZones, _planEn, _drawProj;
         readonly TextBox _other, _tblOff, _labRoad, _labEarth, _labBot;
@@ -205,6 +205,9 @@ namespace Nvk.Cad
             };
             pFact.Controls.Add(_planRotLbl);
             pFact.Controls.Add(Btn("Задать поворот точками…", PickPlanRot, 240));
+            _sitHalf = Num(pFact, "Коридор ситуации, ±м", "10");
+            _sitPapW = Num(pFact, "Ситуация ширина, мм", "108");
+            _sitPapH = Num(pFact, "Ситуация высота, мм", "104");
             pFact.Controls.Add(Head("Слои плана по листам"));
             pFact.Controls.Add(Btn("Разработка…", () => PickPlanLayers(ProfileKind.Razrabotka), 240));
             pFact.Controls.Add(Btn("Песок…", () => PickPlanLayers(ProfileKind.Pesok), 240));
@@ -365,6 +368,9 @@ namespace Nvk.Cad
             _planInt.Text      = NvkUiState.PlanInt.ToString("0.#");
             _planMin.Text      = NvkUiState.PlanMin.ToString("0.#");
             _planRotLbl.Text   = "Поворот ПСК: " + NvkUiState.PlanRotDeg.ToString("0.###") + "°";
+            _sitHalf.Text      = NvkUiState.SitHalfM.ToString("0.##");
+            _sitPapW.Text      = NvkUiState.SitPaperW.ToString("0.#");
+            _sitPapH.Text      = NvkUiState.SitPaperH.ToString("0.#");
             _other.Text        = NvkUiState.ThkOther.ToString("0.###");
             SetFill(_fillA, NvkUiState.FillAsph);
             SetFill(_fillT, NvkUiState.FillTrot);
@@ -517,6 +523,10 @@ namespace Nvk.Cad
             NvkUiState.PlanEn         = _planEn.Checked;
             NvkUiState.PlanInt        = Parse(_planInt, 50);
             NvkUiState.PlanMin        = Parse(_planMin, 15);
+            NvkUiState.SitHalfM       = PlanGeom.ClampSitHalf(Parse(_sitHalf, PlanGeom.SitHalfM));
+            NvkUiState.SitPaperW      = Parse(_sitPapW, PlanGeom.SitPaperW);
+            NvkUiState.SitPaperH      = Parse(_sitPapH, PlanGeom.SitPaperH);
+            PlanGeom.ClampSitPaper(ref NvkUiState.SitPaperW, ref NvkUiState.SitPaperH);
             NvkUiState.DrawProjections = _drawProj.Checked;
             NvkUiState.UseTextHeight   = true;
             NvkUiState.DeltaH          = true;

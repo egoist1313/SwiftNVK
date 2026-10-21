@@ -133,6 +133,8 @@ namespace Nvk.Core
 
         public const string LayerMh = "NVK-PLAN-MH";
         public const string LayerSamp = "NVK-PLAN-SAMP";
+        /// <summary>Размеры между колодцами. На ситуационном ВЭ заморожен.</summary>
+        public const string LayerDim = "NVK-PLAN-DIM";
         /// <summary>Ситуационный коридор и выноска «Предъявляемый участок». PipeBuild: PB-PlanSituation.</summary>
         public const string LayerSit = "NVK-PLAN-SIT";
         public const string SitLabel = "Предъявляемый участок";

@@ -135,6 +135,19 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void SitOnListFreezesDims()
+        {
+            var on = new[] { PlanView.LayerSit, "NVK-PLAN", PlanView.LayerMh };
+            Assert.False(PlanView.IsOn(PlanView.LayerDim, on, true));
+            Assert.True(PlanView.IsOn(PlanView.LayerMh, on, true));
+            Assert.True(PlanView.IsOn(PlanView.LayerSit, on, true));
+            Assert.True(PlanView.IsOn("NVK-PLAN", on, true));
+            Assert.True(PlanView.IsOurs(PlanView.LayerDim));
+            Assert.True(PlanView.IsOn(PlanView.LayerDim, null, true));
+            Assert.Equal("NVK-PLAN-DIM", PlanView.LayerDim);
+        }
+
+        [Fact]
         public void CoverIsAlwaysOn()
         {
             Assert.True(PlanView.IsAlwaysOn("0"));
@@ -145,6 +158,22 @@ namespace Nvk.Core.Tests
             Assert.False(PlanView.IsAlwaysOn("NVK-PLAN"));
             Assert.True(PlanView.IsSit(PlanView.LayerSit));
             Assert.True(PlanView.IsCover("Покрытия"));
+        }
+
+        [Fact]
+        public void SitHalfAndPaperClamp()
+        {
+            Assert.Equal(0.5, PlanGeom.ClampSitHalf(0.0), 9);
+            Assert.Equal(0.5, PlanGeom.ClampSitHalf(-3.0), 9);
+            Assert.Equal(10.0, PlanGeom.ClampSitHalf(10.0), 9);
+            double w = 5.0, h = 0.0;
+            PlanGeom.ClampSitPaper(ref w, ref h);
+            Assert.Equal(20.0, w, 9);
+            Assert.Equal(20.0, h, 9);
+            w = 108.0; h = 104.0;
+            PlanGeom.ClampSitPaper(ref w, ref h);
+            Assert.Equal(108.0, w, 9);
+            Assert.Equal(104.0, h, 9);
         }
     }
 }
