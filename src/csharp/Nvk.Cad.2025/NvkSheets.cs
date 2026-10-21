@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
+using Autodesk.AutoCAD.Runtime;
 using Nvk.Core;
 using AcadApp = Autodesk.AutoCAD.ApplicationServices.Application;
 using Exc = System.Exception;
@@ -581,6 +582,7 @@ namespace Nvk.Cad
             {
                 layoutId = lm.CreateLayout(name);
                 createdNew = true;
+                SeedPaperVp(db, layoutId, name);
             }
             try
             {
@@ -622,15 +624,16 @@ namespace Nvk.Cad
             double px0 = 0.0, py0 = 0.0, px1 = 841.0, py1 = 594.0;
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                var layout = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
+                var layout = (Layout)tr.GetObject(layoutId, OpenMode.ForWrite);
                 ReadPrintBox(layout, name, out paperW, out paperH, out px0, out py0, out px1, out py1);
-                var ps = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
+                var ps = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForWrite);
+                EnsurePaperVp(tr, layout, ps, px0, py0, px1, py1, name);
                 int nTagged = 0, nAlien = 0;
                 foreach (ObjectId id in ps)
                 {
                     var vp = tr.GetObject(id, OpenMode.ForRead) as Viewport;
                     if (vp == null || vp.IsErased) continue;
-                    if (vp.Number == 1) continue;
+                    if (IsLayoutVp(vp)) continue;
                     string k = NvkTag.VpKey(vp);
                     if (string.IsNullOrEmpty(k))
                     {
@@ -744,6 +747,11 @@ namespace Nvk.Cad
                     if (!have.TryGetValue(s.Key, out id) || id.IsNull) continue;
                     var vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
                     if (vp == null || vp.IsErased) continue;
+                    if (IsLayoutVp(vp))
+                    {
+                        NvkLog.Write("[НВК] VP " + s.Key + " Number=1 paperspace — пропуск aim");
+                        continue;
+                    }
                     try { vp.Locked = false; } catch { }
                     bool keep = keepPaper.Contains(s.Key)
                         && !SheetSnap.IsEpKey(s.Key)
@@ -1126,9 +1134,7 @@ namespace Nvk.Cad
                     {
                         var vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
                         if (vp == null || vp.IsErased) continue;
-                        int num = 0;
-                        try { num = vp.Number; } catch (Exc) { }
-                        if (num == 1) continue;
+                        if (IsLayoutVp(vp)) continue;
                         string key = NvkTag.VpKey(vp);
                         string layer = "";
                         try { layer = vp.Layer ?? ""; } catch (Exc) { }
@@ -1149,40 +1155,164 @@ namespace Nvk.Cad
                 NvkLog.Write("[НВК] VP вкл " + name + "  On " + on.ToString() + "/" + n.ToString());
         }
 
-        static Viewport MakeVp(Transaction tr, Database db, BlockTableRecord ps, VpSpec s)
+        static int VpNumber(Viewport vp)
         {
-            ObjectId tpl = ObjectId.Null;
+            int n = 0;
+            try { n = vp.Number; } catch (Exc) { }
+            return n;
+        }
+
+        static bool IsLayoutVp(Viewport vp)
+        {
+            return vp != null && VpNumber(vp) == 1;
+        }
+
+        static Viewport FirstViewport(Transaction tr, BlockTableRecord ps)
+        {
+            if (tr == null || ps == null) return null;
             foreach (ObjectId id in ps)
             {
-                var ex = tr.GetObject(id, OpenMode.ForRead) as Viewport;
-                if (ex == null || ex.IsErased) continue;
-                int num = 0;
-                try { num = ex.Number; } catch (Exc) { }
-                if (num == 1) continue;
-                tpl = id;
-                bool on = false;
-                try { on = ex.On; } catch (Exc) { }
-                if (on) break;
+                var vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
+                if (vp != null && !vp.IsErased) return vp;
             }
-            Viewport vp = null;
-            if (!tpl.IsNull)
+            return null;
+        }
+
+        static int CountViewports(Transaction tr, BlockTableRecord ps)
+        {
+            int n = 0;
+            if (tr == null || ps == null) return 0;
+            foreach (ObjectId id in ps)
+            {
+                var vp = tr.GetObject(id, OpenMode.ForRead) as Viewport;
+                if (vp != null && !vp.IsErased) n++;
+            }
+            return n;
+        }
+
+        /// <summary>
+        /// Первый VIEWPORT в BTR листа — paperspace (Number=1). Без него EP
+        /// становится этим экраном и не показывает модель.
+        /// CreateLayout уже переключает вкладку: Initialize пока лист текущий.
+        /// </summary>
+        static void SeedPaperVp(Database db, ObjectId layoutId, string name)
+        {
+            if (db == null || layoutId.IsNull) return;
+            try
+            {
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var layout = (Layout)tr.GetObject(layoutId, OpenMode.ForWrite);
+                    var ps = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForWrite);
+                    int n = CountViewports(tr, ps);
+                    if (n > 0)
+                    {
+                        NvkLog.Write("[НВК] лист " + name + " paperspace уже экранов " + n.ToString());
+                        tr.Commit();
+                        return;
+                    }
+                    try
+                    {
+                        layout.Initialize();
+                        n = CountViewports(tr, ps);
+                        NvkLog.Write("[НВК] лист " + name + " paperspace Initialize экранов " + n.ToString()
+                            + "  Number=" + VpNumber(FirstViewport(tr, ps)).ToString());
+                    }
+                    catch (Exc ex)
+                    {
+                        NvkLog.Write("[НВК] лист " + name + " Initialize: " + ex.Message);
+                    }
+                    tr.Commit();
+                }
+            }
+            catch (Exc ex)
+            {
+                NvkLog.Write("[НВК] лист " + name + " paperspace: " + ex.Message);
+            }
+        }
+
+        static void ClearVpTag(Viewport vp)
+        {
+            if (vp == null) return;
+            try
+            {
+                if (!vp.IsWriteEnabled) vp.UpgradeOpen();
+                vp.XData = new ResultBuffer(new TypedValue(1001, NvkTag.App));
+            }
+            catch (Exc) { }
+        }
+
+        /// <summary>
+        /// Paperspace VP должен быть первым и без метки VP=. Если первый экран —
+        /// наш EP, снимаем метку: на визите вкладки он станет Number=1, EP создадим
+        /// следующим. Dummy только если Initialize не дал ни одного VIEWPORT.
+        /// </summary>
+        static void EnsurePaperVp(Transaction tr, Layout layout, BlockTableRecord ps,
+            double px0, double py0, double px1, double py1, string name)
+        {
+            if (tr == null || layout == null || ps == null) return;
+            var first = FirstViewport(tr, ps);
+            if (first == null)
             {
                 try
                 {
-                    var map = new IdMapping();
-                    db.DeepCloneObjects(new ObjectIdCollection { tpl }, ps.ObjectId, map, false);
-                    if (map.Contains(tpl))
-                        vp = tr.GetObject(map[tpl].Value, OpenMode.ForWrite) as Viewport;
+                    if (!layout.IsWriteEnabled) layout.UpgradeOpen();
+                    layout.Initialize();
                 }
-                catch (Exc) { vp = null; }
+                catch (Exc ex)
+                {
+                    NvkLog.Write("[НВК] лист " + name + " Initialize: " + ex.Message);
+                }
+                first = FirstViewport(tr, ps);
+                if (first != null)
+                {
+                    NvkLog.Write("[НВК] лист " + name + " paperspace Initialize Number="
+                        + VpNumber(first).ToString()
+                        + "  экранов " + CountViewports(tr, ps).ToString());
+                    return;
+                }
+                var dummy = new Viewport();
+                dummy.SetDatabaseDefaults();
+                dummy.CenterPoint = new Point3d((px0 + px1) * 0.5, (py0 + py1) * 0.5, 0.0);
+                dummy.Width = Math.Max(1.0, px1 - px0);
+                dummy.Height = Math.Max(1.0, py1 - py0);
+                try { dummy.Layer = "Defpoints"; } catch (Exc) { }
+                ps.AppendEntity(dummy);
+                tr.AddNewlyCreatedDBObject(dummy, true);
+                try { dummy.On = true; } catch (Exc) { }
+                NvkLog.Write("[НВК] лист " + name + " paperspace dummy "
+                    + dummy.Width.ToString("0") + "x" + dummy.Height.ToString("0"));
+                return;
             }
-            if (vp == null)
+
+            string key = NvkTag.VpKey(first);
+            int num = VpNumber(first);
+            if (num == 1 || string.IsNullOrEmpty(key))
             {
-                vp = new Viewport();
-                vp.SetDatabaseDefaults();
-                ps.AppendEntity(vp);
-                tr.AddNewlyCreatedDBObject(vp, true);
+                NvkLog.Write("[НВК] лист " + name + " paperspace есть Number="
+                    + num.ToString() + "  tag=" + (key ?? "-"));
+                return;
             }
+
+            string old = key;
+            ClearVpTag(first);
+            try { first.Layer = "Defpoints"; } catch (Exc) { }
+            double w = Math.Max(1.0, px1 - px0);
+            double h = Math.Max(1.0, py1 - py0);
+            try { first.CenterPoint = new Point3d((px0 + px1) * 0.5, (py0 + py1) * 0.5, 0.0); } catch (Exc) { }
+            try { first.Width = w; } catch (Exc) { }
+            try { first.Height = h; } catch (Exc) { }
+            try { first.On = true; } catch (Exc) { }
+            NvkLog.Write("[НВК] лист " + name + " paperspace снят с " + old
+                + "  Number=" + VpNumber(first).ToString());
+        }
+
+        static Viewport MakeVp(Transaction tr, Database db, BlockTableRecord ps, VpSpec s)
+        {
+            var vp = new Viewport();
+            vp.SetDatabaseDefaults();
+            ps.AppendEntity(vp);
+            tr.AddNewlyCreatedDBObject(vp, true);
             try { vp.CenterPoint = new Point3d(s.Cx, s.Cy, 0.0); } catch (Exc) { }
             try { vp.Width = s.W; } catch (Exc) { }
             try { vp.Height = s.H; } catch (Exc) { }
@@ -1248,9 +1378,7 @@ namespace Nvk.Cad
                         {
                             var vp = tr.GetObject(id, OpenMode.ForWrite) as Viewport;
                             if (vp == null || vp.IsErased) continue;
-                            int num = 0;
-                            try { num = vp.Number; } catch (Exc) { }
-                            if (num == 1) continue;
+                            if (IsLayoutVp(vp)) continue;
                             try { vp.On = true; } catch (Exc) { }
                             try
                             {
@@ -1325,7 +1453,8 @@ namespace Nvk.Cad
                 + "  cs=" + gotCs.ToString("0.###")
                 + "  пск " + twistDeg.ToString("0.##")
                 + "  twist " + gotDeg.ToString("0.##")
-                + "  On=" + (on ? "1" : "0"));
+                + "  On=" + (on ? "1" : "0")
+                + "  Number=" + VpNumber(vp).ToString());
         }
 
         static void ApplyPlanLayers(Transaction tr, Viewport vp, ProfileKind kind)
