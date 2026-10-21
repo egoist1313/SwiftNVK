@@ -1061,7 +1061,6 @@ namespace Nvk.Cad
                 _layoutHooked = true;
             }
             catch (Exc) { }
-            EnsureLispVpOn();
         }
 
         public static void Unhook()
@@ -1190,19 +1189,6 @@ namespace Nvk.Cad
             return vp;
         }
 
-        static void EnsureLispVpOn()
-        {
-            var doc = AcadApp.DocumentManager.MdiActiveDocument;
-            if (doc == null) return;
-            try
-            {
-                doc.SendStringToExecute(
-                    "(if (not NVK-VP-ON-ALL) (defun NVK-VP-ON-ALL ( / ss i e d n) (setq n 0 ss (ssget \"_X\" '((0 . \"VIEWPORT\")))) (if ss (repeat (setq i (sslength ss)) (setq e (ssname ss (setq i (1- i))) d (entget e)) (if (and d (/= (cdr (assoc 69 d)) 1) (assoc 68 d)) (progn (entmod (subst (cons 68 1) (assoc 68 d) d)) (setq n (1+ n)))))) n)) ",
-                    true, false, false);
-            }
-            catch (Exc) { }
-        }
-
         static int EntModAllVps(Database db)
         {
             int lispN = 0;
@@ -1234,7 +1220,7 @@ namespace Nvk.Cad
                 var doc = AcadApp.DocumentManager.MdiActiveDocument;
                 if (doc != null)
                     doc.SendStringToExecute(
-                        "(if (fboundp 'NVK-VP-ON-ALL) (NVK-VP-ON-ALL)) ",
+                        "(vl-catch-all-apply 'NVK-VP-ON-ALL nil) ",
                         true, false, false);
             }
             catch (Exc) { }

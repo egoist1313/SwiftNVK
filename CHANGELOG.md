@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.244 — 2026-10-21
+
+### Исправлено
+- После Построить на unlock больше нет `no function definition: FBOUNDP`.
+  В очередь идёт `(vl-catch-all-apply 'NVK-VP-ON-ALL nil)`.
+
+### Затронутые файлы
+- `NvkSheets.cs`, версии 0.244
+
 ## 0.243 — 2026-10-21
 
 ### Исправлено
