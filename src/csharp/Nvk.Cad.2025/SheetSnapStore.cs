@@ -228,6 +228,13 @@ namespace Nvk.Cad
             if (br != null)
             {
                 string bn = BlockName(tr, br);
+                if (SheetSnap.IsNorthBlockName(bn)
+                    || (SheetSnap.IsTransientBlock(bn) && LooksLikeNorth(tr, br)))
+                {
+                    ents.Add(NorthInsert(tr, br));
+                    NvkLog.Write("[НВК] снимок стрелка севера " + (bn ?? "Arrow3"));
+                    return;
+                }
                 if (SheetSnap.IsTransientBlock(bn))
                 {
                     int n = ExplodeInto(tr, br, ents, 0);
@@ -240,6 +247,60 @@ namespace Nvk.Cad
             }
             var se = FromEnt(tr, ent);
             if (se != null) ents.Add(se);
+        }
+
+        static SheetSnapEnt NorthInsert(Transaction tr, BlockReference br)
+        {
+            var se = new SheetSnapEnt
+            {
+                T = "INSERT",
+                Name = "Arrow3",
+                Layer = br.Layer ?? "0",
+                Color = ColorOf(br),
+                Lt = br.Linetype
+            };
+            se.X = br.Position.X;
+            se.Y = br.Position.Y;
+            se.Rot = br.Rotation;
+            try
+            {
+                se.Sx = br.ScaleFactors.X;
+                se.Sy = br.ScaleFactors.Y;
+            }
+            catch
+            {
+                se.Sx = 25.4;
+                se.Sy = 25.4;
+            }
+            if (Math.Abs(se.Sx) < 1e-6) se.Sx = 25.4;
+            if (Math.Abs(se.Sy) < 1e-6) se.Sy = 25.4;
+            return se;
+        }
+
+        static bool LooksLikeNorth(Transaction tr, BlockReference br)
+        {
+            if (br == null) return false;
+            DBObjectCollection bits;
+            try
+            {
+                bits = new DBObjectCollection();
+                br.Explode(bits);
+            }
+            catch { return false; }
+            bool hit = false;
+            foreach (DBObject o in bits)
+            {
+                var dt = o as DBText;
+                if (dt != null && string.Equals(dt.TextString, "N", StringComparison.Ordinal))
+                    hit = true;
+                var mt = o as MText;
+                if (mt != null && mt.Contents != null
+                    && mt.Contents.IndexOf("N", StringComparison.Ordinal) >= 0
+                    && mt.Contents.Length < 8)
+                    hit = true;
+                try { o.Dispose(); } catch { }
+            }
+            return hit;
         }
 
         static int ExplodeInto(Transaction tr, BlockReference br, List<SheetSnapEnt> ents, int depth)
@@ -498,6 +559,9 @@ namespace Nvk.Cad
             double dx, dy, fw, fh;
             SheetSnap.ShiftOf(Load(), kind.ToString(), out dx, out dy, out fw, out fh);
             int n = 0, nSkip = 0, nDup = 0;
+            ObjectId northId = EnsureNorthBlock(db, tr);
+            if (!northId.IsNull)
+                EraseNorthDebris(tr, ps);
             for (int i = 0; i < lay.Ents.Count; i++)
             {
                 var e = lay.Ents[i];
@@ -505,6 +569,24 @@ namespace Nvk.Cad
                 if (frame && !SheetSnap.IsNearPaper(e, fx0, fy0, fx1, fy1))
                 {
                     nSkip++;
+                    continue;
+                }
+                if (SheetSnap.IsNorthDebris(e))
+                {
+                    if (northId.IsNull)
+                    {
+                        try
+                        {
+                            if (PutEnt(db, tr, ps, e, dx, dy)) n++;
+                        }
+                        catch (Exc ex)
+                        {
+                            NvkLog.Write("[НВК] снимок ent " + (e.T ?? "?") + ": " + ex.Message);
+                        }
+                        continue;
+                    }
+                    if (!SheetSnap.IsNorthLetter(e)) continue;
+                    if (PutNorth(db, tr, ps, e, dx, dy, northId)) n++;
                     continue;
                 }
                 if (HasTwin(tr, ps, e, dx, dy))
@@ -709,14 +791,19 @@ namespace Nvk.Cad
             else if (string.Equals(t, "INSERT", StringComparison.OrdinalIgnoreCase))
             {
                 if (string.IsNullOrEmpty(e.Name)) return false;
-                var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
                 ObjectId bid = ObjectId.Null;
-                if (bt.Has(e.Name)) bid = bt[e.Name];
-                else
+                if (SheetSnap.IsNorthBlockName(e.Name))
+                    bid = EnsureNorthBlock(db, tr);
+                if (bid.IsNull)
                 {
-                    string baseName = SheetSnap.BlockBaseName(e.Name);
-                    if (!string.IsNullOrEmpty(baseName) && bt.Has(baseName))
-                        bid = bt[baseName];
+                    var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    if (bt.Has(e.Name)) bid = bt[e.Name];
+                    else
+                    {
+                        string baseName = SheetSnap.BlockBaseName(e.Name);
+                        if (!string.IsNullOrEmpty(baseName) && bt.Has(baseName))
+                            bid = bt[baseName];
+                    }
                 }
                 if (bid.IsNull)
                 {
@@ -748,6 +835,269 @@ namespace Nvk.Cad
             if (!string.IsNullOrEmpty(e.Tpl))
                 NvkTag.Put1000(tr, ent, NvkTag.TplKey, e.Tpl);
             return true;
+        }
+
+        static ObjectId EnsureNorthBlock(Database db, Transaction tr)
+        {
+            ObjectId id = FindNorthBlock(db, tr);
+            if (!id.IsNull) return id;
+            if (!ImportNorthDwg(db)) return ObjectId.Null;
+            return FindNorthBlock(db, tr);
+        }
+
+        static ObjectId FindNorthBlock(Database db, Transaction tr)
+        {
+            if (db == null || tr == null) return ObjectId.Null;
+            var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+            string[] prefer = { "Arrow3", "Arrow2", "Arrow1", "ArrowN", "North" };
+            for (int i = 0; i < prefer.Length; i++)
+            {
+                if (bt.Has(prefer[i])) return bt[prefer[i]];
+            }
+            foreach (ObjectId bid in bt)
+            {
+                var rec = (BlockTableRecord)tr.GetObject(bid, OpenMode.ForRead);
+                if (rec == null || rec.IsLayout || rec.IsAnonymous) continue;
+                if (SheetSnap.IsNorthBlockName(rec.Name)) return bid;
+            }
+            return ObjectId.Null;
+        }
+
+        static bool ImportNorthDwg(Database dest)
+        {
+            if (dest == null) return false;
+            foreach (string path in NorthDwgPaths())
+            {
+                if (string.IsNullOrEmpty(path) || !File.Exists(path)) continue;
+                try
+                {
+                    using (var src = new Database(false, true))
+                    {
+                        src.ReadDwgFile(path, FileShare.ReadWrite, true, "");
+                        src.CloseInput(true);
+                        var ids = new ObjectIdCollection();
+                        using (var str = src.TransactionManager.StartTransaction())
+                        {
+                            CollectNorthIds(str, src, ids);
+                            str.Commit();
+                        }
+                        if (ids.Count == 0)
+                        {
+                            NvkLog.Write("[НВК] стрелка севера пусто " + path);
+                            continue;
+                        }
+                        var map = new IdMapping();
+                        dest.WblockCloneObjects(ids, dest.BlockTableId, map,
+                            DuplicateRecordCloning.Ignore, false);
+                        NvkLog.Write("[НВК] стрелка севера из " + Path.GetFileName(path)
+                            + " блоков " + ids.Count.ToString());
+                        return true;
+                    }
+                }
+                catch (Exc ex)
+                {
+                    NvkLog.Write("[НВК] стрелка севера " + path + ": " + ex.Message);
+                }
+            }
+            NvkLog.Write("[НВК] стрелка севера: нет Arrow3");
+            return false;
+        }
+
+        static void CollectNorthIds(Transaction tr, Database src, ObjectIdCollection ids)
+        {
+            if (tr == null || src == null || ids == null) return;
+            var bt = (BlockTable)tr.GetObject(src.BlockTableId, OpenMode.ForRead);
+            ObjectId pick = ObjectId.Null;
+            if (bt.Has("Arrow3")) pick = bt["Arrow3"];
+            if (pick.IsNull)
+            {
+                string[] prefer = { "Arrow2", "Arrow1", "ArrowN", "North" };
+                for (int i = 0; i < prefer.Length; i++)
+                {
+                    if (bt.Has(prefer[i])) { pick = bt[prefer[i]]; break; }
+                }
+            }
+            if (pick.IsNull)
+            {
+                foreach (ObjectId bid in bt)
+                {
+                    var rec = (BlockTableRecord)tr.GetObject(bid, OpenMode.ForRead);
+                    if (rec == null || rec.IsLayout || rec.IsAnonymous) continue;
+                    if (SheetSnap.IsNorthBlockName(rec.Name))
+                    {
+                        pick = bid;
+                        break;
+                    }
+                }
+            }
+            if (pick.IsNull)
+                pick = NorthFromSpace(tr, bt, BlockTableRecord.ModelSpace);
+            if (pick.IsNull)
+                pick = NorthFromSpace(tr, bt, BlockTableRecord.PaperSpace);
+            if (!pick.IsNull) ids.Add(pick);
+        }
+
+        static ObjectId NorthFromSpace(Transaction tr, BlockTable bt, string space)
+        {
+            if (tr == null || bt == null || string.IsNullOrEmpty(space) || !bt.Has(space))
+                return ObjectId.Null;
+            var rec = (BlockTableRecord)tr.GetObject(bt[space], OpenMode.ForRead);
+            foreach (ObjectId id in rec)
+            {
+                var br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+                if (br == null) continue;
+                string bn = null;
+                try { bn = br.Name; } catch { }
+                if (string.IsNullOrEmpty(bn))
+                {
+                    try
+                    {
+                        var def = (BlockTableRecord)tr.GetObject(br.BlockTableRecord, OpenMode.ForRead);
+                        bn = def.Name;
+                    }
+                    catch { }
+                }
+                if (SheetSnap.IsNorthBlockName(bn) || SheetSnap.IsTransientBlock(bn))
+                    return br.BlockTableRecord;
+            }
+            return ObjectId.Null;
+        }
+
+        static IEnumerable<string> NorthDwgPaths()
+        {
+            string root = NvkSession.RootDir;
+            if (!string.IsNullOrEmpty(root))
+                yield return Path.Combine(root, "presets", "sheets", "north.dwg");
+            yield return @"E:\Programs\ACAD2025\AutoCAD 2025\Map\Sample\Symbols\Map - North Arrows.dwg";
+        }
+
+        static bool PutNorth(Database db, Transaction tr, BlockTableRecord ps, SheetSnapEnt e,
+            double dx, double dy, ObjectId northId)
+        {
+            if (db == null || tr == null || ps == null || e == null || northId.IsNull)
+                return false;
+            double x, y;
+            SheetSnap.NorthInsertXY(e, out x, out y);
+            x += dx;
+            y += dy;
+            if (HasNorthTwin(tr, ps, x, y)) return false;
+            var br = new BlockReference(new Point3d(x, y, 0.0), northId);
+            try { br.ScaleFactors = new Scale3d(SheetSnap.NorthScale, SheetSnap.NorthScale, 1.0); }
+            catch { }
+            br.Rotation = e.Rot;
+            br.SetDatabaseDefaults();
+            if (!string.IsNullOrEmpty(e.Layer))
+            {
+                try { br.Layer = e.Layer; } catch { }
+            }
+            ps.AppendEntity(br);
+            tr.AddNewlyCreatedDBObject(br, true);
+            NvkLog.Write("[НВК] снимок стрелка севера Arrow3"
+                + " @ " + x.ToString("0.0") + "," + y.ToString("0.0")
+                + " rot " + e.Rot.ToString("0.###"));
+            return true;
+        }
+
+        static bool HasNorthTwin(Transaction tr, BlockTableRecord ps, double x, double y)
+        {
+            if (tr == null || ps == null) return false;
+            foreach (ObjectId id in ps)
+            {
+                var br = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+                if (br == null || br.IsErased) continue;
+                if (Dist2(br.Position.X, br.Position.Y, x, y) > 36.0) continue;
+                string bn = BlockName(tr, br);
+                if (SheetSnap.IsNorthBlockName(bn)) return true;
+            }
+            return false;
+        }
+
+        static int EraseNorthDebris(Transaction tr, BlockTableRecord ps)
+        {
+            if (tr == null || ps == null) return 0;
+            var letters = new List<Point2d>();
+            var kill = new List<ObjectId>();
+            foreach (ObjectId id in ps)
+            {
+                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null || ent.IsErased || ent is Viewport) continue;
+                double x, y;
+                if (LiveNorthLetter(tr, ent, out x, out y))
+                {
+                    letters.Add(new Point2d(x, y));
+                    kill.Add(id);
+                }
+            }
+            if (letters.Count == 0) return 0;
+            foreach (ObjectId id in ps)
+            {
+                if (kill.Contains(id)) continue;
+                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null || ent.IsErased || ent is Viewport || ent is BlockReference)
+                    continue;
+                if (!LiveNorthGeom(ent)) continue;
+                Point3d p;
+                try { p = ent.GeometricExtents.MinPoint; }
+                catch { continue; }
+                for (int i = 0; i < letters.Count; i++)
+                {
+                    if (Dist2(p.X, p.Y, letters[i].X, letters[i].Y) < 256.0)
+                    {
+                        kill.Add(id);
+                        break;
+                    }
+                }
+            }
+            int n = 0;
+            for (int i = 0; i < kill.Count; i++)
+            {
+                try
+                {
+                    var ent = tr.GetObject(kill[i], OpenMode.ForWrite) as Entity;
+                    if (ent == null || ent.IsErased) continue;
+                    ent.Erase();
+                    n++;
+                }
+                catch { }
+            }
+            if (n > 0)
+                NvkLog.Write("[НВК] снимок снята разобранная стрелка " + n.ToString());
+            return n;
+        }
+
+        static bool LiveNorthLetter(Transaction tr, Entity ent, out double x, out double y)
+        {
+            x = 0.0;
+            y = 0.0;
+            var dt = ent as DBText;
+            if (dt == null) return false;
+            if (!string.Equals(dt.TextString, "N", StringComparison.Ordinal)) return false;
+            string st = "";
+            try
+            {
+                var rec = (TextStyleTableRecord)tr.GetObject(dt.TextStyleId, OpenMode.ForRead);
+                if (rec != null) st = rec.Name ?? "";
+            }
+            catch { }
+            if (st.IndexOf("North", StringComparison.OrdinalIgnoreCase) < 0) return false;
+            x = dt.Position.X;
+            y = dt.Position.Y;
+            return true;
+        }
+
+        static bool LiveNorthGeom(Entity ent)
+        {
+            if (ent == null) return false;
+            try
+            {
+                if (!string.Equals(ent.Layer, "0", StringComparison.OrdinalIgnoreCase))
+                    return false;
+                if (!string.Equals(ent.Linetype, "ByBlock", StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            catch { return false; }
+            return ent is Polyline || ent is Solid || ent is Line
+                || ent is Arc || ent is Circle || ent is DBText;
         }
 
         static List<Point2d> SplitPts(string s)

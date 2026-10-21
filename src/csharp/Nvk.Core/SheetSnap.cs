@@ -516,6 +516,74 @@ namespace Nvk.Core
             return false;
         }
 
+        /// <summary>Видовые, которые пакуем сами — из снимка чужими не докладываем.</summary>
+        public static bool IsPackedVpKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return false;
+            if (string.Equals(key, "COORD", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(key, "SAMP", StringComparison.OrdinalIgnoreCase)) return true;
+            return key.StartsWith("EP:", StringComparison.OrdinalIgnoreCase)
+                || key.StartsWith("CS:", StringComparison.OrdinalIgnoreCase)
+                || key.StartsWith("PLAN:", StringComparison.OrdinalIgnoreCase)
+                || key.StartsWith("VOL:", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsNorthBlockName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            string b = BlockBaseName(name);
+            return b.IndexOf("Arrow", StringComparison.OrdinalIgnoreCase) >= 0
+                || b.IndexOf("North", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        public static bool IsNorthLetter(SheetSnapEnt e)
+        {
+            if (e == null) return false;
+            if (!string.Equals(e.Txt, "N", StringComparison.Ordinal)) return false;
+            string st = e.Style ?? "";
+            return st.IndexOf("North", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>Разобранная стрелка севера (линии/N) — ставим объект Arrow3.</summary>
+        public static bool IsNorthDebris(SheetSnapEnt e)
+        {
+            if (e == null) return false;
+            if (IsNorthLetter(e)) return true;
+            string st = e.Style ?? "";
+            if (st.IndexOf("North Arrow", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (!string.Equals(e.Lt, "ByBlock", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (!string.Equals(e.Layer, "0", StringComparison.OrdinalIgnoreCase))
+                return false;
+            string t = e.T ?? "";
+            return string.Equals(t, "PL", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "SOLID", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "LINE", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "ARC", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "CIRCLE", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "TEXT", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Layout North Arrow в мм бумаги (блок в дюймах).</summary>
+        public const double NorthScale = 25.4;
+
+        /// <summary>Смещение от буквы N разобранной стрелки к точке вставки Arrow3.</summary>
+        public const double NorthOx = 0.3838;
+        public const double NorthOy = -5.7142;
+
+        public static void NorthInsertXY(SheetSnapEnt letter, out double x, out double y)
+        {
+            x = 0.0;
+            y = 0.0;
+            if (letter == null) return;
+            double rot = letter.Rot;
+            double c = Math.Cos(rot);
+            double s = Math.Sin(rot);
+            x = letter.X + NorthOx * c - NorthOy * s;
+            y = letter.Y + NorthOx * s + NorthOy * c;
+        }
+
         /// <summary>Один профиль EP:4, в снимке два окна EP:4:0.</summary>
         public static string EpFallbackKey(string key)
         {

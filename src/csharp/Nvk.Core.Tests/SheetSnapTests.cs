@@ -256,6 +256,50 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void PackedVpKeysAreLiveWindows()
+        {
+            Assert.True(SheetSnap.IsPackedVpKey("EP:5"));
+            Assert.True(SheetSnap.IsPackedVpKey("EP:5:0"));
+            Assert.True(SheetSnap.IsPackedVpKey("CS:4:1"));
+            Assert.True(SheetSnap.IsPackedVpKey("PLAN:1"));
+            Assert.True(SheetSnap.IsPackedVpKey("VOL:2"));
+            Assert.True(SheetSnap.IsPackedVpKey("COORD"));
+            Assert.True(SheetSnap.IsPackedVpKey("SAMP"));
+            Assert.False(SheetSnap.IsPackedVpKey("SIT:4"));
+            Assert.False(SheetSnap.IsPackedVpKey("EXTRA:1"));
+        }
+
+        [Fact]
+        public void NorthBlockAndDebris()
+        {
+            Assert.True(SheetSnap.IsNorthBlockName("Arrow3"));
+            Assert.True(SheetSnap.IsNorthBlockName("$5$Arrow3"));
+            Assert.True(SheetSnap.IsNorthBlockName("North Arrow"));
+            Assert.False(SheetSnap.IsNorthBlockName("GOST_A3"));
+            var n = new SheetSnapEnt
+            {
+                T = "TEXT",
+                Txt = "N",
+                Style = "$4$North Arrow Text",
+                Layer = "0",
+                Lt = "ByBlock",
+                X = 537.2122764950893,
+                Y = 262.773762458254,
+                Rot = 0
+            };
+            Assert.True(SheetSnap.IsNorthLetter(n));
+            Assert.True(SheetSnap.IsNorthDebris(n));
+            double x, y;
+            SheetSnap.NorthInsertXY(n, out x, out y);
+            Assert.Equal(537.596, x, 2);
+            Assert.Equal(257.060, y, 2);
+            var pl = new SheetSnapEnt { T = "PL", Layer = "0", Lt = "ByBlock" };
+            Assert.True(SheetSnap.IsNorthDebris(pl));
+            var frame = new SheetSnapEnt { T = "PL", Layer = "0", Lt = "ByLayer" };
+            Assert.False(SheetSnap.IsNorthDebris(frame));
+        }
+
+        [Fact]
         public void HasSitVpByKey()
         {
             var lay = new SheetSnapLayout

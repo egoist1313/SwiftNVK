@@ -681,7 +681,7 @@ namespace Nvk.Cad
                 NvkLayers.EnsureVpLayer(db, tr);
                 var layout = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
                 var ps = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForWrite);
-                DropStaleEpVps(tr, have, specs, kind);
+                DropStaleVps(tr, have, specs, kind);
                 foreach (var s in specs)
                 {
                     if (have.ContainsKey(s.Key)) continue;
@@ -775,8 +775,11 @@ namespace Nvk.Cad
                     if (SheetSnap.IsSitKey(s.Key))
                         ApplySitLayers(tr, vp);
                     if (s.Win != null && s.Win.Valid)
-                        AimVp(vp, s.Win, s.ScaleN, s.Key, s.TwistDeg);
-                    else if (s.HasView)
+                    {
+                        double twist = SheetSnap.IsSitKey(s.Key) ? 0.0 : s.TwistDeg;
+                        AimVp(vp, s.Win, s.ScaleN, s.Key, twist);
+                    }
+                    else if (s.HasView && !SheetSnap.IsSitKey(s.Key))
                         AimStored(vp, s);
                 }
                 tr.Commit();
@@ -794,7 +797,7 @@ namespace Nvk.Cad
             return nAdd > 0 ? nAdd : specs.Count;
         }
 
-        static int DropStaleEpVps(Transaction tr, Dictionary<string, ObjectId> have,
+        static int DropStaleVps(Transaction tr, Dictionary<string, ObjectId> have,
             List<VpSpec> specs, ProfileKind kind)
         {
             if (have == null || have.Count == 0) return 0;
@@ -810,8 +813,11 @@ namespace Nvk.Cad
             var kill = new List<string>();
             foreach (var kv in have)
             {
-                if (!IsEpKey(kind, kv.Key)) continue;
                 if (want.ContainsKey(kv.Key)) continue;
+                if (!SheetSnap.IsPackedVpKey(kv.Key)
+                    && !SheetSnap.IsSitKey(kv.Key)
+                    && !SheetSnap.IsExtraKey(kv.Key))
+                    continue;
                 kill.Add(kv.Key);
             }
             int n = 0;
@@ -893,20 +899,21 @@ namespace Nvk.Cad
                 if (v == null || string.IsNullOrEmpty(v.Key) || SheetSnap.IsJunkVp(v))
                     continue;
                 if (have.ContainsKey(v.Key)) continue;
+                if (SheetSnap.IsPackedVpKey(v.Key)) continue;
                 int scaleN = v.ScaleN > 0 ? v.ScaleN : 1000;
                 SheetWin win = null;
                 double twist = 0.0;
-                if (SheetSnap.IsSitKey(v.Key))
+                bool sit = SheetSnap.IsSitKey(v.Key);
+                if (sit)
                 {
                     if (scaleN < 2500) scaleN = 5000;
-                    twist = NvkUiState.PlanRotDeg;
-                    if (NvkSession.PlanWin != null && NvkSession.PlanWin.Valid)
-                        win = NvkSession.PlanWin;
-                    else if (NvkSession.SitWin != null && NvkSession.SitWin.Valid)
+                    if (NvkSession.SitWin != null && NvkSession.SitWin.Valid)
                         win = NvkSession.SitWin;
+                    else if (NvkSession.PlanWin != null && NvkSession.PlanWin.Valid)
+                        win = NvkSession.PlanWin;
                 }
                 var spec = new VpSpec(v.Cx + dx, v.Cy + dy, v.W, v.H, win, scaleN, v.Key, twist);
-                if (v.Vh > 1e-9)
+                if (!sit && v.Vh > 1e-9)
                 {
                     spec.HasView = true;
                     spec.Vx = v.Vx;
@@ -970,7 +977,7 @@ namespace Nvk.Cad
                 SheetWin sit = NvkSession.SitWin != null && NvkSession.SitWin.Valid
                     ? NvkSession.SitWin
                     : plan;
-                place(sit, 5000, "SIT:" + ((int)kind).ToString(), planTwist);
+                place(sit, 5000, "SIT:" + ((int)kind).ToString(), 0.0);
             }
 
             if (cells != null && cells.Count > 0)

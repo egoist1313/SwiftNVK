@@ -24,6 +24,7 @@ nvk-log.txt
 
 # AutoCAD lock / backup
 *.dwg
+!presets/sheets/north.dwg
 *.bak
 *.sv$
 *.dwl
