@@ -175,29 +175,11 @@ namespace Nvk.Cad
         static SheetSnapVp ReadVp(Transaction tr, Viewport vp, string kind, List<string> have)
         {
             if (vp == null) return null;
-            string tagged = NvkTag.VpKey(vp);
             int scaleN = 0;
             try { scaleN = SheetSnap.ScaleNFromCustom(vp.CustomScale); }
             catch { }
-            string key = SheetSnap.InferVpKey(tagged, scaleN, kind, have);
-            if (string.IsNullOrEmpty(key)) return null;
-            if (string.IsNullOrEmpty(tagged))
-            {
-                try
-                {
-                    if (!vp.IsWriteEnabled) vp.UpgradeOpen();
-                    NvkTag.StampVp(tr, vp, key);
-                    NvkLog.Write("[НВК] снимок VP метка " + key
-                        + "  1:" + scaleN.ToString());
-                }
-                catch (Exc ex)
-                {
-                    NvkLog.Write("[НВК] снимок VP метка: " + ex.Message);
-                }
-            }
             var rec = new SheetSnapVp
             {
-                Key = key,
                 Cx = vp.CenterPoint.X,
                 Cy = vp.CenterPoint.Y,
                 W = vp.Width,
@@ -212,6 +194,30 @@ namespace Nvk.Cad
             catch { }
             try { rec.Vh = vp.ViewHeight; } catch { }
             try { rec.Twist = vp.TwistAngle; } catch { }
+            if (SheetSnap.IsJunkVp(rec))
+            {
+                NvkLog.Write("[НВК] снимок VP мимо "
+                    + rec.W.ToString("0") + "x" + rec.H.ToString("0"));
+                return null;
+            }
+            string tagged = NvkTag.VpKey(vp);
+            string key = SheetSnap.InferVpKey(tagged, scaleN, kind, have);
+            if (string.IsNullOrEmpty(key)) return null;
+            rec.Key = key;
+            if (string.IsNullOrEmpty(tagged))
+            {
+                try
+                {
+                    if (!vp.IsWriteEnabled) vp.UpgradeOpen();
+                    NvkTag.StampVp(tr, vp, key);
+                    NvkLog.Write("[НВК] снимок VP метка " + key
+                        + "  1:" + scaleN.ToString());
+                }
+                catch (Exc ex)
+                {
+                    NvkLog.Write("[НВК] снимок VP метка: " + ex.Message);
+                }
+            }
             return rec;
         }
 

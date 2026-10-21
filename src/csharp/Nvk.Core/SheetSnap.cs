@@ -504,6 +504,33 @@ namespace Nvk.Core
             return name;
         }
 
+        /// <summary>
+        /// Пустой вид в (0,0), мельче 12 мм или больше листа A3 — не снимкаем.
+        /// </summary>
+        public static bool IsJunkVp(SheetSnapVp v)
+        {
+            if (v == null) return true;
+            if (v.W < 12.0 || v.H < 8.0) return true;
+            if (v.W > 430.0 || v.H > 310.0) return true;
+            if (Math.Abs(v.Vx) < 1.0 && Math.Abs(v.Vy) < 1.0) return true;
+            return false;
+        }
+
+        /// <summary>Один профиль EP:4, в снимке два окна EP:4:0.</summary>
+        public static string EpFallbackKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return null;
+            if (!key.StartsWith("EP:", StringComparison.OrdinalIgnoreCase)) return null;
+            string rest = key.Substring(3);
+            for (int i = 0; i < rest.Length; i++)
+            {
+                if (rest[i] == ':') return null;
+                if (rest[i] < '0' || rest[i] > '9') return null;
+            }
+            if (rest.Length == 0) return null;
+            return key + ":0";
+        }
+
         static bool TryNamedFrame(SheetSnapLayout lay,
             out double x0, out double y0, out double x1, out double y1)
         {

@@ -234,6 +234,28 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void JunkVpIsOriginOrHugeOrTiny()
+        {
+            Assert.True(SheetSnap.IsJunkVp(new SheetSnapVp { W = 269, H = 155, Vx = 0, Vy = 0 }));
+            Assert.True(SheetSnap.IsJunkVp(new SheetSnapVp { W = 2179, H = 1259, Vx = 1e6, Vy = 1e6 }));
+            Assert.True(SheetSnap.IsJunkVp(new SheetSnapVp { W = 9, H = 3, Vx = 1e6, Vy = 1e6 }));
+            Assert.False(SheetSnap.IsJunkVp(new SheetSnapVp
+            {
+                W = 107, H = 103, Vx = 2338934, Vy = 477488, ScaleN = 5000
+            }));
+        }
+
+        [Fact]
+        public void EpFallbackKeyUsesFirstWindow()
+        {
+            Assert.Equal("EP:1:0", SheetSnap.EpFallbackKey("EP:1"));
+            Assert.Equal("EP:4:0", SheetSnap.EpFallbackKey("EP:4"));
+            Assert.Null(SheetSnap.EpFallbackKey("EP:1:0"));
+            Assert.Null(SheetSnap.EpFallbackKey("SIT:1"));
+            Assert.Null(SheetSnap.EpFallbackKey("PLAN:1"));
+        }
+
+        [Fact]
         public void HasSitVpByKey()
         {
             var lay = new SheetSnapLayout

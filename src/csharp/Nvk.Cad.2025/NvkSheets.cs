@@ -858,7 +858,11 @@ namespace Nvk.Cad
                 var s = specs[i];
                 double cx, cy, w, h;
                 if (!SheetSnap.TryVp(lay, s.Key, out cx, out cy, out w, out h))
-                    continue;
+                {
+                    string fb = SheetSnap.EpFallbackKey(s.Key);
+                    if (fb == null || !SheetSnap.TryVp(lay, fb, out cx, out cy, out w, out h))
+                        continue;
+                }
                 specs[i] = new VpSpec(cx + dx, cy + dy, w, h, s.Win, s.ScaleN, s.Key, s.TwistDeg);
                 n++;
                 NvkLog.Write("[НВК] VP снимок " + s.Key
@@ -886,7 +890,7 @@ namespace Nvk.Cad
             for (int i = 0; i < lay.Vps.Count; i++)
             {
                 var v = lay.Vps[i];
-                if (v == null || string.IsNullOrEmpty(v.Key) || v.W < 1.0 || v.H < 1.0)
+                if (v == null || string.IsNullOrEmpty(v.Key) || SheetSnap.IsJunkVp(v))
                     continue;
                 if (have.ContainsKey(v.Key)) continue;
                 int scaleN = v.ScaleN > 0 ? v.ScaleN : 1000;
