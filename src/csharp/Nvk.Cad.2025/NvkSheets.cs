@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Autodesk.AutoCAD.ApplicationServices;
+using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
@@ -716,6 +717,7 @@ namespace Nvk.Cad
                     NvkLayers.EnsureOne(db, tr, TitleLayer, 7, false, false);
                     var title = new MText();
                     title.SetDatabaseDefaults();
+                    title.Color = Color.FromColorIndex(ColorMethod.ByLayer, 256);
                     title.Location = new Point3d(xLeft, py1 - pad * 0.4, 0.0);
                     title.Attachment = AttachmentPoint.TopLeft;
                     title.TextHeight = 7.0;

@@ -572,7 +572,7 @@ namespace Nvk.Cad
                 {
                     double y = y0 + (tickZ - osh) * hSc;
                     AddLine(ms, tr, layer, xL - 0.25 * th, y, xL + 0.25 * th, y, Aci(3), 0);
-                    NvkText.Make(ms, tr, layer, xL - 0.4 * th, y, TableLayout.Rtos(tickZ, 0),
+                    NvkText.Make(ms, tr, LayerTbl, xL - 0.4 * th, y, TableLayout.Rtos(tickZ, 0),
                         th, AttachmentPoint.MiddleRight, 0.0, 6 * th, false);
                 }
                 tickZ += 1.0;
@@ -832,7 +832,7 @@ namespace Nvk.Cad
             if (pts == null || pts.Count < 1 || string.IsNullOrEmpty(tag)) return;
             var p = pts[pts.Count - 1];
             double h = th > 0 ? th * 0.9 : 2.2;
-            NvkText.Make(ms, tr, layer, p.X + 0.35 * h, p.Y, tag, h,
+            NvkText.Make(ms, tr, LayerTbl, p.X + 0.35 * h, p.Y, tag, h,
                 AttachmentPoint.MiddleLeft, 0.0, 8 * h, true);
         }
 
@@ -1263,7 +1263,7 @@ namespace Nvk.Cad
             }
             string title = ProfileAnnot.SheetTitle(last.NetName);
             double topY = o.Y + (zMax - osh) * hSc;
-            NvkText.Make(ms, tr, layer, o.X + 0.5 * w, topY + 2.2 * th,
+            NvkText.Make(ms, tr, LayerTbl, o.X + 0.5 * w, topY + 2.2 * th,
                 title, th, AttachmentPoint.BottomCenter, 0.0, 50 * th, false);
         }
 
@@ -1326,7 +1326,7 @@ namespace Nvk.Cad
             sb.Append(TableLayout.ScaleLegend(
                 TableLayout.LegendDenom(paper, lSc),
                 TableLayout.LegendDenom(paper, hSc), osh));
-            NvkText.Make(ms, tr, layer, xIns, yIns, sb.ToString(),
+            NvkText.Make(ms, tr, LayerTbl, xIns, yIns, sb.ToString(),
                 0.7 * th, AttachmentPoint.BottomLeft, 0.0, 22 * th, false);
         }
 
@@ -1901,6 +1901,7 @@ namespace Nvk.Cad
 
             var mt = new MText();
             mt.SetDatabaseDefaults();
+            mt.Color = AcadColor.FromColorIndex(ColorMethod.ByLayer, 256);
             mt.Contents = contents ?? "";
             mt.TextHeight = NvkLeader.TextH;
             mt.Attachment = textLeft ? AttachmentPoint.MiddleRight : AttachmentPoint.MiddleLeft;

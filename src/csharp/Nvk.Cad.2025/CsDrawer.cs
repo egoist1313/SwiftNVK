@@ -299,7 +299,7 @@ namespace Nvk.Cad
             if (string.IsNullOrEmpty(tag)) return;
             double px = ox + x * sc + 0.35 * th;
             double py = oy + (z - osh) * sc + yOffDraw;
-            NvkText.Make(btr, tr, LayerIns, px, py, tag, th,
+            NvkText.Make(btr, tr, LayerTbl, px, py, tag, th,
                 AttachmentPoint.MiddleLeft, 0.0, 8 * th, true);
         }
 
@@ -439,7 +439,7 @@ namespace Nvk.Cad
             var tbl = NvkSession.Tbl().ForCs();
             double th = tbl.TextH;
             double topY = oy + (e.Surface + g.Pavement - osh) * sc + 2.5 * th;
-            NvkText.Make(btr, tr, LayerIns, ox, topY + th, CsAnnot.Header(idx, kind, e.Station),
+            NvkText.Make(btr, tr, LayerTbl, ox, topY + th, CsAnnot.Header(idx, kind, e.Station),
                 th, AttachmentPoint.MiddleCenter, 0.0, 20.0 * th, false);
             int lv = (int)kind;
             if (!g.InManhole && (lv == 3 || lv == 4))
@@ -482,7 +482,7 @@ namespace Nvk.Cad
                 double y = oy + (z - osh) * sc;
                 AddSeg(btr, tr, xL - tick, y, xL + tick, y, Aci(3), 0);
                 if (y > y0 + 0.6 * th)
-                    NvkText.Make(btr, tr, LayerIns, xL - 0.3 * th, y, TableLayout.Rtos(z, 2),
+                    NvkText.Make(btr, tr, LayerTbl, xL - 0.3 * th, y, TableLayout.Rtos(z, 2),
                         th, AttachmentPoint.MiddleRight, 0.0, 6.0 * th, false);
                 z += 1.0;
             }
@@ -497,7 +497,7 @@ namespace Nvk.Cad
             double ay = cy + reach;
             AddSeg(btr, tr, cx, cy, ax, ay, Aci(5), 0);
             double th = NvkSession.Tbl().ForCs().TextH;
-            NvkText.Make(btr, tr, LayerIns, ax + 0.3 * th, ay, CsAnnot.DiamText(g.Elev.Diam),
+            NvkText.Make(btr, tr, LayerTbl, ax + 0.3 * th, ay, CsAnnot.DiamText(g.Elev.Diam),
                 th, AttachmentPoint.BottomLeft, 0.0, 6.0 * th, true);
         }
 
@@ -812,7 +812,7 @@ namespace Nvk.Cad
 
         static void AddLabel(BlockTableRecord btr, Transaction tr, string text, double x, double y, double h)
         {
-            NvkText.Make(btr, tr, LayerIns, x, y, text, h, AttachmentPoint.BottomCenter, 0.0);
+            NvkText.Make(btr, tr, LayerTbl, x, y, text, h, AttachmentPoint.BottomCenter, 0.0);
         }
 
         static AcadColor Aci(short i)

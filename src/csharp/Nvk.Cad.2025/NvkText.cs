@@ -1,3 +1,4 @@
+using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Exc = System.Exception;
@@ -24,6 +25,9 @@ namespace Nvk.Cad
             var mt = new MText();
             mt.SetDatabaseDefaults();
             if (!string.IsNullOrEmpty(layer)) mt.Layer = layer;
+            // CECOLOR после SetDatabaseDefaults красится в текущий цвет.
+            // Надписи — ПоСлою: слои таблиц белые (ACI 7).
+            mt.Color = Color.FromColorIndex(ColorMethod.ByLayer, 256);
             mt.Contents = contents ?? "";
             mt.Location = new Point3d(x, y, 0.0);
             double h = height > 0.0 ? height : 2.5;

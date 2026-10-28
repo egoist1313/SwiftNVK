@@ -31,7 +31,7 @@ namespace Nvk.Cad
             ("NVK-VOL",      7, false, false),
             ("NVK-VOL-MH",   7, false, false),
             ("NVK-VOL-SAMP", 7, false, false),
-            ("NVK-MARK",     1, false, false),
+            ("NVK-MARK",     7, false, false),
             ("NVK-HATCH",    8, false, false),
             ("NVK-HATCHBND", 8, true,  true),
             ("NVK-DATA",     8, true,  true),
@@ -99,8 +99,12 @@ namespace Nvk.Cad
             var lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
             if (lt.Has(name))
             {
-                if (!force) return;
+                bool paintWhite = color == 7;
+                if (!force && !paintWhite) return;
                 var rec = (LayerTableRecord)tr.GetObject(lt[name], OpenMode.ForWrite);
+                if (paintWhite && (rec.Color == null || rec.Color.ColorIndex != 7))
+                    rec.Color = Color.FromColorIndex(ColorMethod.ByAci, 7);
+                if (!force) return;
                 rec.IsPlottable = !noplot;
                 rec.IsOff = off;
                 if (transPct >= 0)

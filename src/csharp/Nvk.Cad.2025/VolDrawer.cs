@@ -412,6 +412,7 @@ namespace Nvk.Cad
             var mt = new MText();
             mt.SetDatabaseDefaults();
             mt.Layer = layer;
+            mt.Color = AcadColor.FromColorIndex(ColorMethod.ByLayer, 256);
             mt.Location = new Point3d(x, y, 0.0);
             mt.TextHeight = th;
             mt.Width = w;
