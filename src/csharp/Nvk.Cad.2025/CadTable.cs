@@ -49,8 +49,7 @@ namespace Nvk.Cad
         }
 
         /// <summary>
-        /// Координатная таблица: заголовок на всю ширину, затем № / X / Y
-        /// (геодезия: X = север = AutoCAD Y, Y = восток = AutoCAD X).
+        /// Координатная таблица: заголовок на всю ширину, затем № / X / Y.
         /// Ширина колонок от высоты текста и длины строк.
         /// </summary>
         public static Table Coord(BlockTableRecord ms, Transaction tr, Point3d origin,

@@ -66,17 +66,6 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
-        public void CoordTableUsesGeodeticXy()
-        {
-            Assert.Equal("200.000", TableLayout.CoordX(100.0, 200.0));
-            Assert.Equal("100.000", TableLayout.CoordY(100.0, 200.0));
-            var row = TableLayout.CoordRow("К1", 477499.0, 2338936.15);
-            Assert.Equal("К1", row[0]);
-            Assert.Equal("2338936.150", row[1]);
-            Assert.Equal("477499.000", row[2]);
-        }
-
-        [Fact]
         public void MaxLineLenSplitsP()
         {
             Assert.Equal(7, TableLayout.MaxLineLen("Отметка\\Pдна"));

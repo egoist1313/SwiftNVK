@@ -203,34 +203,6 @@ namespace Nvk.Core
             return v.ToString("0.000", CultureInfo.InvariantCulture);
         }
 
-        /// <summary>
-        /// Геодезическая X (север) = AutoCAD Y.
-        /// В таблице колонка «X» — как на приборе, не как ось AutoCAD.
-        /// </summary>
-        public static string CoordX(double acadX, double acadY)
-        {
-            return XyText(acadY);
-        }
-
-        /// <summary>Геодезическая Y (восток) = AutoCAD X.</summary>
-        public static string CoordY(double acadX, double acadY)
-        {
-            return XyText(acadX);
-        }
-
-        /// <summary>
-        /// Строка № / X / Y. Колонка X — север (AutoCAD Y), колонка Y — восток (AutoCAD X).
-        /// </summary>
-        public static string[] CoordRow(string name, double acadX, double acadY)
-        {
-            return new[]
-            {
-                string.IsNullOrEmpty(name) ? "—" : name,
-                CoordX(acadX, acadY),
-                CoordY(acadX, acadY)
-            };
-        }
-
         /// <summary>Ширина колонки координатной таблицы: высота текста × (знаки + поле).</summary>
         public static double TextColW(double textH, IList<string> cells)
         {
