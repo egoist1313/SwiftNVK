@@ -129,9 +129,10 @@ namespace Nvk.Cad
             _stations = Num(pRun, "Станции (AUTO или пикеты)", "AUTO");
 
             pRun.Controls.Add(Head("Действия"));
-            var btns = new FlowLayoutPanel { Width = 244, Height = 248, WrapContents = true, BackColor = Color.Transparent };
+            var btns = new FlowLayoutPanel { Width = 244, Height = 280, WrapContents = true, BackColor = Color.Transparent };
             btns.Controls.Add(Btn("Построить",    Build,                                   118, true));
             btns.Controls.Add(Btn("Обновить",     Build,                                   118));
+            btns.Controls.Add(Btn("Объёмы",       RefreshVol,                              118));
             btns.Controls.Add(Btn("Трубы",        () => Send("НВК-ВВОД "),                 118));
             btns.Controls.Add(Btn("Дамп",         () => Send("НВК-ПАНЕЛЬ-ДАМП "),         118));
             btns.Controls.Add(Btn("Очистить",     () => Send("НВК-ПАНЕЛЬ-ОЧИСТИТЬ "),     118));
@@ -736,6 +737,21 @@ namespace Nvk.Cad
             {
                 ShowStatus("Сбой: " + ex.Message);
                 NvkLog.Write("[НВК] панель Обновить: " + ex.Message);
+            }
+        }
+
+        void RefreshVol()
+        {
+            try
+            {
+                SaveToState();
+                ShowStatus("Объёмы… только текст.");
+                NvkSend.Command("НВК-ПАНЕЛЬ-ОБЪЁМЫ");
+            }
+            catch (Exception ex)
+            {
+                ShowStatus("Сбой: " + ex.Message);
+                NvkLog.Write("[НВК] панель Объёмы: " + ex.Message);
             }
         }
 

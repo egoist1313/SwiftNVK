@@ -85,11 +85,19 @@ namespace Nvk.Cad
         [CommandMethod("НВК-ОБЪЁМЫ", CommandFlags.UsePickSet)]
         public void Vol()
         {
-            NvkPipeline.StageConfig();
-            NvkPipeline.StageInput(false);
-            NvkPipeline.StageDomain();
-            NvkPipeline.StageVol();
-            NvkPipeline.SaveNod();
+            NvkPipeline.RefreshVolTexts();
+        }
+
+        [CommandMethod("НВК-ОБЪЁМЫ-ТЕКСТ")]
+        public void VolText()
+        {
+            NvkPipeline.RefreshVolTexts();
+        }
+
+        [CommandMethod("НВК-ПАНЕЛЬ-ОБЪЁМЫ")]
+        public void PanelVol()
+        {
+            NvkPipeline.RefreshVolTexts();
         }
 
         [CommandMethod("НВК-ПЛАН", CommandFlags.UsePickSet)]

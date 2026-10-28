@@ -429,6 +429,37 @@ namespace Nvk.Cad
             }
         }
 
+        /// <summary>Пересчёт формул объёмов в существующих MText. Профиль, план, колодцы, листы не трогаем.</summary>
+        public static string RefreshVolTexts()
+        {
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return null;
+            var ed = doc.Editor;
+            if (NvkSession.Last == null || NvkSession.Last.Chain == null)
+            {
+                string msg = "[НВК] VOL: нет домена. Сначала Построить.";
+                ed.WriteMessage("\n" + msg);
+                return msg;
+            }
+            try
+            {
+                Point3d? origin = NvkSession.VolInsHas ? NvkSession.VolIns : (Point3d?)null;
+                using (var tr = doc.TransactionManager.StartTransaction())
+                {
+                    var msg = VolDrawer.RefreshTexts(doc.Database, tr, origin);
+                    tr.Commit();
+                    NvkLog.Write(msg);
+                    ed.WriteMessage("\n" + msg);
+                    return msg;
+                }
+            }
+            catch (Exc ex)
+            {
+                ed.WriteMessage("\n[НВК] VOL текст: " + ex.Message);
+                return null;
+            }
+        }
+
         public static string StagePlan()
         {
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
@@ -568,6 +599,7 @@ namespace Nvk.Cad
             ed.WriteMessage("\n╠══════════════════════════════════════════════╣");
             ed.WriteMessage("\n║  НВК-ПАНЕЛЬ     панель                       ║");
             ed.WriteMessage("\n║  НВК-ПОСТРОИТЬ  все этапы                    ║");
+            ed.WriteMessage("\n║  НВК-ОБЪЁМЫ-ТЕКСТ  только текст объёмов      ║");
             ed.WriteMessage("\n║  НВК-ЛИСТЫ      вкладки + видовые экраны     ║");
             ed.WriteMessage("\n║  НВК-ЛИСТ-СНЯТЬ снимок видовых/линий/текста  ║");
             ed.WriteMessage("\n║  НВК-ЛИСТ-ПАРАМ параметры листа всем вкладкам║");
