@@ -37,7 +37,8 @@ namespace Nvk.Core
 
     /// <summary>
     /// Объёмы земляных работ.
-    /// Вертикальные стенки (m=0): V = Sпрофиля × Bдна (как pb-vt-vol-one-level).
+    /// Вертикальные стенки (m=0): V = Sпрофиля × Bдна. S — та же полоса,
+    /// что легенда профиля (ProfileBand: клип, рандом, разрывы колодцев).
     /// Откос (m&gt;0): V = Σ (Sᵢ+Sᵢ₊₁)/2 · ΔL по поперечникам.
     /// L4: из объёма вычитается пересечение трубы со слоем [L2, L4].
     /// </summary>
@@ -51,17 +52,23 @@ namespace Nvk.Core
 
         public static List<VolLevel> All(Chain chain, IList<AxisPt> axis, SectionConfig cfg)
         {
-            return All(chain, axis, cfg, null);
+            return All(chain, axis, cfg, null, null);
         }
 
         public static List<VolLevel> All(Chain chain, IList<AxisPt> axis, SectionConfig cfg, IList<SectionGeom> geoms)
         {
+            return All(chain, axis, cfg, geoms, null);
+        }
+
+        public static List<VolLevel> All(Chain chain, IList<AxisPt> axis, SectionConfig cfg,
+            IList<SectionGeom> geoms, BandOpts band)
+        {
             var list = new List<VolLevel>();
-            Add(list, chain, axis, cfg, geoms, ProfileKind.Razrabotka, "Разработка");
-            Add(list, chain, axis, cfg, geoms, ProfileKind.Pesok, "Песок");
-            Add(list, chain, axis, cfg, geoms, ProfileKind.Truba, "Труба");
-            Add(list, chain, axis, cfg, geoms, ProfileKind.Zashita, "Защитный слой");
-            Add(list, chain, axis, cfg, geoms, ProfileKind.Zasypka, "Обратная засыпка");
+            Add(list, chain, axis, cfg, geoms, band, ProfileKind.Razrabotka, "Разработка");
+            Add(list, chain, axis, cfg, geoms, band, ProfileKind.Pesok, "Песок");
+            Add(list, chain, axis, cfg, geoms, band, ProfileKind.Truba, "Труба");
+            Add(list, chain, axis, cfg, geoms, band, ProfileKind.Zashita, "Защитный слой");
+            Add(list, chain, axis, cfg, geoms, band, ProfileKind.Zasypka, "Обратная засыпка");
             return list;
         }
 
@@ -188,9 +195,9 @@ namespace Nvk.Core
         }
 
         static void Add(List<VolLevel> list, Chain chain, IList<AxisPt> axis, SectionConfig cfg,
-            IList<SectionGeom> geoms, ProfileKind kind, string title)
+            IList<SectionGeom> geoms, BandOpts band, ProfileKind kind, string title)
         {
-            var rows = ForLevel(chain, axis, kind, cfg, geoms);
+            var rows = ForLevel(chain, axis, kind, cfg, geoms, band);
             double t = 0.0;
             foreach (var r in rows) t += r.Volume;
             list.Add(new VolLevel { Kind = kind, Title = title, Rows = rows, TotalVolume = t });
@@ -198,16 +205,25 @@ namespace Nvk.Core
 
         public static List<VolRow> ForLevel(Chain chain, IList<AxisPt> axis, ProfileKind kind, SectionConfig cfg)
         {
-            return ForLevel(chain, axis, kind, cfg, null);
+            return ForLevel(chain, axis, kind, cfg, null, null);
         }
 
         public static List<VolRow> ForLevel(Chain chain, IList<AxisPt> axis, ProfileKind kind, SectionConfig cfg,
             IList<SectionGeom> geoms)
         {
+            return ForLevel(chain, axis, kind, cfg, geoms, null);
+        }
+
+        public static List<VolRow> ForLevel(Chain chain, IList<AxisPt> axis, ProfileKind kind, SectionConfig cfg,
+            IList<SectionGeom> geoms, BandOpts band)
+        {
             var map = new Dictionary<string, VolRow>();
             bool vertical = VerticalWalls(cfg);
             bool splitZas = kind == ProfileKind.Zasypka && cfg != null
                 && cfg.Zones != null && cfg.Zones.Count > 0;
+            List<ChZ> top = null, bot = null;
+            if (vertical && band != null && kind != ProfileKind.Truba && chain != null)
+                ProfileBand.Build(chain, axis, cfg, kind, band, out top, out bot);
             double ch = 0.0;
             foreach (var seg in chain.Segs)
             {
@@ -229,13 +245,13 @@ namespace Nvk.Core
                         double t2 = RoadZones.EndAt(t, cfg.Zones, a1);
                         if (t2 <= t + 1e-6) t2 = a1;
                         var fill = BackfillMap.Of(cfg.ZoneAt((t + t2) * 0.5), cfg);
-                        AccSpan(map, seg, axis, cfg, geoms, kind, vertical, t, t2, B, fill);
+                        AccSpan(map, seg, ch, axis, cfg, geoms, kind, vertical, t, t2, B, fill, band, top, bot);
                         t = t2;
                     }
                 }
                 else
                 {
-                    AccSpan(map, seg, axis, cfg, geoms, kind, vertical, a0, a1, B, null);
+                    AccSpan(map, seg, ch, axis, cfg, geoms, kind, vertical, a0, a1, B, null, band, top, bot);
                 }
                 ch += gross;
             }
@@ -258,9 +274,10 @@ namespace Nvk.Core
             return fa.CompareTo(fb);
         }
 
-        static void AccSpan(Dictionary<string, VolRow> map, PipeSeg seg,
+        static void AccSpan(Dictionary<string, VolRow> map, PipeSeg seg, double chSeg,
             IList<AxisPt> axis, SectionConfig cfg, IList<SectionGeom> geoms,
-            ProfileKind kind, bool vertical, double a0, double a1, double B, BackfillKind? fill)
+            ProfileKind kind, bool vertical, double a0, double a1, double B, BackfillKind? fill,
+            BandOpts band, List<ChZ> top, List<ChZ> bot)
         {
             double useLen = a1 - a0;
             if (useLen < 1e-9) return;
@@ -270,11 +287,22 @@ namespace Nvk.Core
             List<VolTerm> terms = null;
             if (vertical)
             {
-                area = IntegrateBand(axis, a0, a1, cfg, kind);
+                double x0 = a0, x1 = a1;
+                if (band != null && band.GapMh(kind))
+                {
+                    double g0 = chSeg + seg.ShaftR(true);
+                    double g1 = chSeg + seg.Length2d - seg.ShaftR(false);
+                    if (g0 > x0) x0 = g0;
+                    if (g1 < x1) x1 = g1;
+                }
+                if (top != null)
+                    area = x1 > x0 + 1e-9 ? ProfileBand.BandArea(top, bot, x0, x1) : 0.0;
+                else
+                    area = IntegrateBand(axis, x0, x1, cfg, kind);
                 vol = area * B;
                 if (kind == ProfileKind.Zashita && area > 1e-9)
                 {
-                    pipeVol = IntegratePipeHole(axis, a0, a1, cfg);
+                    pipeVol = IntegratePipeHole(axis, x0, x1, cfg);
                     vol -= pipeVol;
                     if (vol < 0.0) vol = 0.0;
                 }

@@ -353,6 +353,96 @@ namespace Nvk.Core.Tests
             Assert.Equal(2.1 * 10.0 * 1.50, rows[0].Volume, 5);
             Assert.Equal(1.50, rows[0].Width, 6);
         }
+
+        [Fact]
+        public void VerticalAreaMatchesProfileBandWithScatterAndManholes()
+        {
+            var cfg = new SectionConfig { Bedding = 0.10, ThkZash = 0.30, Joint = JointType.Socket, SlopeM = 0.0 };
+            var chain = Chain.Sort(new List<PipeSeg>
+            {
+                new PipeSeg
+                {
+                    X0 = 0, Y0 = 0, X1 = 20, Y1 = 0,
+                    InvertStart = 100, InvertEnd = 99.8, Diam = 0.2,
+                    StartR = 0.5, EndR = 0.5
+                }
+            });
+            var axis = new List<AxisPt>
+            {
+                new AxisPt { Ch = 0, X = 0, Y = 0, Invert = 100, Diam = 0.2, Surface = 102 },
+                new AxisPt { Ch = 10, X = 10, Y = 0, Invert = 99.9, Diam = 0.2, Surface = 102.1 },
+                new AxisPt { Ch = 20, X = 20, Y = 0, Invert = 99.8, Diam = 0.2, Surface = 101.9 }
+            };
+            var opts = new BandOpts
+            {
+                AmpTrench = 0.05,
+                AmpSand = 0.05,
+                AmpZash = 0.05,
+                AmpSurf = 0.05,
+                ValsTrench = new List<double> { 0.4, -0.6, 0.2, -0.3 },
+                ValsSand = new List<double> { -0.5, 0.8, -0.2, 0.1 },
+                ValsZash = new List<double> { 0.3, -0.4, 0.7, -0.1 },
+                ValsSurf = new List<double> { -0.2, 0.5, -0.8, 0.4 },
+                GapMhRazr = true,
+                GapMhPesok = true,
+                GapMhZash = true,
+                GapMhZas = true
+            };
+            var kinds = new[]
+            {
+                ProfileKind.Razrabotka, ProfileKind.Pesok,
+                ProfileKind.Zashita, ProfileKind.Zasypka
+            };
+            foreach (var kind in kinds)
+            {
+                var rows = VolumeCalc.ForLevel(chain, axis, kind, cfg, null, opts);
+                var areas = ProfileBand.AreasByDiam(chain, axis, cfg, kind, opts);
+                Assert.Single(rows);
+                Assert.True(areas.ContainsKey(200));
+                Assert.Equal(areas[200], rows[0].Area, 5);
+                Assert.True(rows[0].Area > 0.01);
+            }
+            var l1 = VolumeCalc.ForLevel(chain, axis, ProfileKind.Razrabotka, cfg, null, opts);
+            Assert.Equal(20.0, l1[0].Length, 6);
+            var l2 = VolumeCalc.ForLevel(chain, axis, ProfileKind.Pesok, cfg, null, opts);
+            Assert.Equal(19.0, l2[0].Length, 6);
+            var plain = VolumeCalc.ForLevel(chain, axis, ProfileKind.Pesok, cfg);
+            Assert.True(System.Math.Abs(plain[0].Area - l2[0].Area) > 0.01);
+        }
+
+        [Fact]
+        public void VerticalBandWithoutScatterMatchesPlainSandArea()
+        {
+            var cfg = new SectionConfig { Bedding = 0.10, ThkZash = 0.30, Joint = JointType.Socket, SlopeM = 0.0 };
+            var rows = VolumeCalc.ForLevel(OnePipe(), FlatSurf(102), ProfileKind.Pesok, cfg, null, new BandOpts());
+            Assert.Equal(0.10 * 10.0, rows[0].Area, 6);
+        }
+
+        [Fact]
+        public void ZasypkaBandAreasMatchLegendByZone()
+        {
+            var cfg = new SectionConfig
+            {
+                Bedding = 0.10, ThkZash = 0.30, Joint = JointType.Socket, SlopeM = 0.0,
+                Zones = new List<RoadZone>
+                {
+                    new RoadZone { Type = "ASPH", Ch0 = 0, Ch1 = 5 },
+                    new RoadZone { Type = "GAZN", Ch0 = 5, Ch1 = 10 }
+                }
+            };
+            var opts = new BandOpts { GapMhZas = true };
+            var rows = VolumeCalc.ForLevel(OnePipe(), FlatSurf(102), ProfileKind.Zasypka, cfg, null, opts);
+            var legend = ProfileBand.AreasZasypka(OnePipe(), FlatSurf(102), cfg, opts);
+            Assert.Equal(2, rows.Count);
+            foreach (var row in rows)
+            {
+                string ru = BackfillMap.Ru(row.Fill.Value);
+                double s = 0.0;
+                foreach (var t in legend)
+                    if (t.Item2 == ru) s += t.Item3;
+                Assert.Equal(s, row.Area, 5);
+            }
+        }
     }
 
     public class PlanGeomTests

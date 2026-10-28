@@ -1273,9 +1273,6 @@ namespace Nvk.Cad
         {
             double paper = NvkUiState.VpScaleEp >= 1.0 ? NvkUiState.VpScaleEp
                 : (NvkSession.Cannoscale > 0 ? NvkSession.Cannoscale : 1000);
-            bool gapAtMh = kind == ProfileKind.Razrabotka
-                ? (NvkSession.L1 == null || NvkSession.L1.ShowManholes)
-                : (NvkSession.Sheet(kind) == null || NvkSession.Sheet(kind).ShowManholes);
             var sb = new System.Text.StringBuilder();
             sb.Append("\\pql;");
             if (kind == ProfileKind.Truba)
@@ -1292,7 +1289,7 @@ namespace Nvk.Cad
             }
             else if (kind == ProfileKind.Zasypka)
             {
-                var zrows = BodyAreasZasypka(last, cfg, gapAtMh);
+                var zrows = BodyAreasZasypka(last, cfg);
                 double sand = 0, soil = 0;
                 foreach (var r in zrows)
                 {
@@ -1307,7 +1304,7 @@ namespace Nvk.Cad
             }
             else
             {
-                var areas = BodyAreasByDiam(last, kind, cfg, gapAtMh);
+                var areas = BodyAreasByDiam(last, kind, cfg);
                 if (areas.Count >= 2)
                 {
                     bool firstArea = true;
@@ -1333,306 +1330,18 @@ namespace Nvk.Cad
                 0.7 * th, AttachmentPoint.BottomLeft, 0.0, 22 * th, false);
         }
 
-        // (ch, z) pair — used for exact band area matching drawn hatching
-        struct ChZ { public double Ch; public double Z; public ChZ(double c, double z) { Ch = c; Z = z; } }
-
-        static Dictionary<int, double> BodyAreasByDiam(DomainResult last, ProfileKind kind, SectionConfig cfg, bool gapAtMh = false)
+        static Dictionary<int, double> BodyAreasByDiam(DomainResult last, ProfileKind kind, SectionConfig cfg)
         {
-            var result = new Dictionary<int, double>();
-            if (kind == ProfileKind.Truba || last == null || last.Chain == null) return result;
-            List<ChZ> topChZ, botChZ;
-            BuildDrawnBand(last, kind, cfg, out topChZ, out botChZ);
-            SumBandByDiam(last, topChZ, botChZ, gapAtMh, result);
-            return result;
+            if (last == null || last.Chain == null)
+                return new Dictionary<int, double>();
+            return ProfileBand.AreasByDiam(last.Chain, last.Axis, cfg, kind, NvkSession.BandOptsOf(last));
         }
 
-        static List<System.Tuple<int, string, double>> BodyAreasZasypka(DomainResult last, SectionConfig cfg, bool gapAtMh)
+        static List<System.Tuple<int, string, double>> BodyAreasZasypka(DomainResult last, SectionConfig cfg)
         {
-            var acc = new Dictionary<string, System.Tuple<int, string, double>>();
-            if (last == null || last.Chain == null) return new List<System.Tuple<int, string, double>>();
-            List<ChZ> topChZ, botChZ;
-            BuildDrawnBand(last, ProfileKind.Zasypka, cfg, out topChZ, out botChZ);
-            double ch = 0.0;
-            foreach (var seg in last.Chain.Segs)
-            {
-                double ch0 = gapAtMh ? ch + GapR(seg, true) : ch;
-                double ch1 = gapAtMh ? ch + seg.Length2d - GapR(seg, false) : ch + seg.Length2d;
-                int dmm = seg.DiamMm;
-                double x = ch0;
-                while (x < ch1 - 1e-6)
-                {
-                    double x1 = RoadZones.EndAt(x, cfg != null ? cfg.Zones : null, ch1);
-                    if (x1 <= x + 1e-9) x1 = ch1;
-                    double a = BandAreaInRange(topChZ, botChZ, x, x1);
-                    string zt = cfg != null ? cfg.ZoneAt(x) : null;
-                    string ru = BackfillMap.Ru(BackfillMap.Of(zt, cfg));
-                    string key = dmm.ToString(System.Globalization.CultureInfo.InvariantCulture) + "|" + ru;
-                    if (!acc.ContainsKey(key))
-                        acc[key] = System.Tuple.Create(dmm, ru, 0.0);
-                    var old = acc[key];
-                    acc[key] = System.Tuple.Create(old.Item1, old.Item2, old.Item3 + a);
-                    x = x1;
-                }
-                ch += seg.Length2d;
-            }
-            var list = new List<System.Tuple<int, string, double>>(acc.Values);
-            list.Sort((a, b) => a.Item1 != b.Item1 ? a.Item1.CompareTo(b.Item1) : string.CompareOrdinal(a.Item2, b.Item2));
-            return list;
-        }
-
-        /// <summary>Те же верх/низ, что у штриховки продольника (клип L2/L4/L6 + рандом).</summary>
-        static void BuildDrawnBand(DomainResult last, ProfileKind kind, SectionConfig cfg,
-            out List<ChZ> top, out List<ChZ> bot)
-        {
-            var earth = BuildEarthChZ(last.Axis, cfg);
-            var sand = BuildPipeChZ(last.Chain, HeightSrc.SandTop, cfg);
-            var trench = BuildBotChZ(last.Chain, cfg);
-
-            if (kind == ProfileKind.Razrabotka)
-            {
-                bot = trench;
-                top = earth;
-                double amp = RowScatter.Amp(HeightSrc.TrenchBottom);
-                if (amp > 1e-9)
-                {
-                    bot = ScatterChZ(bot, last, amp, HeightSrc.TrenchBottom);
-                    bot = ClipChZBelow(bot, sand);
-                }
-                top = ClipChZAbove(top, bot);
-                return;
-            }
-            if (kind == ProfileKind.Pesok)
-            {
-                top = sand;
-                bot = trench;
-                double aTop = RowScatter.Amp(HeightSrc.SandTop);
-                double aBot = RowScatter.Amp(HeightSrc.TrenchBottom);
-                if (aTop > 1e-9)
-                    top = ScatterChZ(top, last, aTop, HeightSrc.SandTop);
-                if (aBot > 1e-9)
-                {
-                    bot = ScatterChZ(bot, last, aBot, HeightSrc.TrenchBottom);
-                    bot = ClipChZBelow(bot, top);
-                }
-                if (top != null && top.Count >= 2 && bot != null && bot.Count >= 2)
-                    top = ClipChZAbove(top, bot);
-                return;
-            }
-            if (kind == ProfileKind.Zashita)
-            {
-                List<ChZ> pesokTop, pesokBot;
-                BuildDrawnBand(last, ProfileKind.Pesok, cfg, out pesokTop, out pesokBot);
-                bot = pesokTop;
-                top = BuildPipeChZ(last.Chain, HeightSrc.ZashTop, cfg);
-                double amp = RowScatter.Amp(HeightSrc.ZashTop);
-                if (amp > 1e-9)
-                    top = ScatterChZ(top, last, amp, HeightSrc.ZashTop);
-                top = ClipChZAbove(top, bot);
-                var ceil = ClipChZAbove(earth, bot);
-                top = ClipChZBelow(top, ceil);
-                return;
-            }
-            // L5: низ засыпки = верх защиты
-            List<ChZ> zashTop, zashBot;
-            BuildDrawnBand(last, ProfileKind.Zashita, cfg, out zashTop, out zashBot);
-            bot = zashTop;
-            top = BuildSurfChZ(last.Axis, cfg, HeightSrc.Surface);
-            top = ClipChZAbove(top, bot);
-            double amp5 = RowScatter.Amp(HeightSrc.Surface);
-            if (amp5 > 1e-9)
-            {
-                top = ScatterChZ(top, last, amp5, HeightSrc.Surface);
-                top = ClipChZAbove(top, bot);
-            }
-        }
-
-        static void SumBandByDiam(DomainResult last, List<ChZ> top, List<ChZ> bot, bool gapAtMh, Dictionary<int, double> result)
-        {
-            double ch = 0.0;
-            foreach (var seg in last.Chain.Segs)
-            {
-                double ch0 = gapAtMh ? ch + GapR(seg, true) : ch;
-                double ch1 = gapAtMh ? ch + seg.Length2d - GapR(seg, false) : ch + seg.Length2d;
-                double a = (ch1 > ch0 + 1e-6) ? BandAreaInRange(top, bot, ch0, ch1) : 0.0;
-                int dmm = seg.DiamMm;
-                if (!result.ContainsKey(dmm)) result[dmm] = 0.0;
-                result[dmm] += a;
-                ch += seg.Length2d;
-            }
-        }
-
-        static List<ChZ> BuildZashChZ(Chain chain, IList<AxisPt> axis, SectionConfig cfg)
-        {
-            var raw = BuildPipeChZ(chain, HeightSrc.ZashTop, cfg);
-            var sand = BuildPipeChZ(chain, HeightSrc.SandTop, cfg);
-            var earth = BuildEarthChZ(axis, cfg);
-            var pts = new List<ChZ>(raw.Count);
-            foreach (var p in raw)
-            {
-                double s = InterpChZ(sand, p.Ch);
-                double e = InterpChZ(earth, p.Ch);
-                pts.Add(new ChZ(p.Ch, LineClamp.AfterScatterZash(p.Z, s, e)));
-            }
-            pts = ClipChZAbove(pts, sand);
-            var ceil = ClipChZAbove(earth, sand);
-            pts = ClipChZBelow(pts, ceil);
-            return pts;
-        }
-
-        static List<ChZ> ScatterChZ(List<ChZ> src, DomainResult last, double amp, HeightSrc line)
-        {
-            double total = last.Chain != null ? last.Chain.Total : 1.0;
-            var vals = RowScatter.Vals(last, line);
-            var r = new List<ChZ>(src.Count);
-            foreach (var p in src)
-                r.Add(new ChZ(p.Ch, p.Z + Scatter.Meters(p.Ch, total, vals, amp)));
-            return r;
-        }
-
-        static List<ChZ> ClipChZAbove(List<ChZ> pts, List<ChZ> floor)
-        {
-            return ClipChZ(pts, floor, true);
-        }
-
-        static List<ChZ> ClipChZBelow(List<ChZ> pts, List<ChZ> ceil)
-        {
-            return ClipChZ(pts, ceil, false);
-        }
-
-        static List<ChZ> ClipChZ(List<ChZ> pts, List<ChZ> bound, bool above)
-        {
-            if (pts == null || pts.Count < 2 || bound == null || bound.Count < 2) return pts;
-            var a = new List<PolylineClip.Pt>(pts.Count);
-            var b = new List<PolylineClip.Pt>(bound.Count);
-            foreach (var p in pts) a.Add(new PolylineClip.Pt(p.Ch, p.Z));
-            foreach (var p in bound) b.Add(new PolylineClip.Pt(p.Ch, p.Z));
-            var c = above ? PolylineClip.KeepAbove(a, b) : PolylineClip.KeepBelow(a, b);
-            var r = new List<ChZ>(c.Count);
-            foreach (var p in c) r.Add(new ChZ(p.X, p.Y));
-            return r;
-        }
-
-        static double AvgZ(List<ChZ> pts)
-        {
-            if (pts == null || pts.Count == 0) return 0;
-            double s = 0;
-            foreach (var p in pts) s += p.Z;
-            return s / pts.Count;
-        }
-
-        // Mirrors EarthPts: axis-dense points using BlackEarth (= TIN-pav)
-        static List<ChZ> BuildEarthChZ(IList<AxisPt> axis, SectionConfig cfg)
-        {
-            var pts = new List<ChZ>();
-            double prevZ = double.NaN, prevCh = -1e9;
-            foreach (var p in axis)
-            {
-                double z = ProfileRows.ZAt(HeightSrc.BlackEarth, p, cfg);
-                if (!double.IsNaN(prevZ) && Math.Abs(p.Ch - prevCh) < 1e-6 && Math.Abs(z - prevZ) > 1e-4)
-                    pts.Add(new ChZ(p.Ch, z));
-                else if (Math.Abs(p.Ch - prevCh) > 1e-6 || pts.Count == 0)
-                    pts.Add(new ChZ(p.Ch, z));
-                else if (Math.Abs(z - prevZ) > 1e-4) { pts.Add(new ChZ(p.Ch, prevZ)); pts.Add(new ChZ(p.Ch, z)); }
-                prevZ = z; prevCh = p.Ch;
-            }
-            return pts;
-        }
-
-        // Mirrors SurfacePts: axis-dense for TIN sources
-        static List<ChZ> BuildSurfChZ(IList<AxisPt> axis, SectionConfig cfg, HeightSrc src)
-        {
-            var pts = new List<ChZ>();
-            double lastCh = -1e9, lastZ = 0.0;
-            foreach (var p in axis)
-            {
-                double z = ProfileRows.ZAt(src, p, cfg);
-                if (pts.Count > 0 && AxisBuilder.IsDupVertex(p.Ch, z, lastCh, lastZ))
-                    continue;
-                pts.Add(new ChZ(p.Ch, z));
-                lastCh = p.Ch;
-                lastZ = z;
-            }
-            return pts;
-        }
-
-        // Mirrors TrenchBottomPts: manhole-only
-        static List<ChZ> BuildBotChZ(Chain chain, SectionConfig cfg)
-        {
-            var pts = new List<ChZ>();
-            double bed = cfg != null ? cfg.Bedding : 0.1;
-            double ch = 0.0;
-            int n = chain.Segs.Count;
-            for (int i = 0; i < n; i++)
-            {
-                var s = chain.Segs[i];
-                double wall = cfg != null ? cfg.WallAt(s.Diam) : 0.0;
-                if (i == 0) pts.Add(new ChZ(ch, s.InvertStart - wall - bed));
-                ch += s.Length2d;
-                pts.Add(new ChZ(ch, s.InvertEnd - wall - bed));
-                if (i + 1 < n && Math.Abs(chain.Segs[i + 1].InvertStart - s.InvertEnd) > 0.001)
-                {
-                    double wallNx = cfg != null ? cfg.WallAt(chain.Segs[i + 1].Diam) : 0.0;
-                    pts.Add(new ChZ(ch, chain.Segs[i + 1].InvertStart - wallNx - bed));
-                }
-            }
-            return pts;
-        }
-
-        // Mirrors PipePts: manhole-only for pipe-based sources
-        static List<ChZ> BuildPipeChZ(Chain chain, HeightSrc src, SectionConfig cfg)
-        {
-            var pts = new List<ChZ>();
-            double ch = 0.0;
-            int n = chain.Segs.Count;
-            for (int i = 0; i < n; i++)
-            {
-                var s = chain.Segs[i];
-                if (i == 0) pts.Add(new ChZ(ch, PipeEndZ(s, true, src, cfg)));
-                ch += s.Length2d;
-                pts.Add(new ChZ(ch, PipeEndZ(s, false, src, cfg)));
-                if (i + 1 < n)
-                {
-                    var nx = chain.Segs[i + 1];
-                    if (Math.Abs(PipeEndZ(nx, true, src, cfg) - PipeEndZ(s, false, src, cfg)) > 0.001)
-                        pts.Add(new ChZ(ch, PipeEndZ(nx, true, src, cfg)));
-                }
-            }
-            return pts;
-        }
-
-        static double InterpChZ(List<ChZ> pts, double ch)
-        {
-            if (pts.Count == 0) return 0.0;
-            if (ch <= pts[0].Ch) return pts[0].Z;
-            if (ch >= pts[pts.Count - 1].Ch) return pts[pts.Count - 1].Z;
-            for (int i = 0; i < pts.Count - 1; i++)
-            {
-                if (pts[i].Ch <= ch && pts[i + 1].Ch >= ch)
-                {
-                    double span = pts[i + 1].Ch - pts[i].Ch;
-                    if (span < 1e-9) return pts[i + 1].Z;
-                    return pts[i].Z + (ch - pts[i].Ch) / span * (pts[i + 1].Z - pts[i].Z);
-                }
-            }
-            return pts[pts.Count - 1].Z;
-        }
-
-        static double BandAreaInRange(List<ChZ> top, List<ChZ> bot, double ch0, double ch1)
-        {
-            // Exact band area: merge all breakpoints in range, trapezoid rule
-            var breaks = new System.Collections.Generic.SortedSet<double> { ch0, ch1 };
-            foreach (var p in top) if (p.Ch > ch0 + 1e-9 && p.Ch < ch1 - 1e-9) breaks.Add(p.Ch);
-            foreach (var p in bot) if (p.Ch > ch0 + 1e-9 && p.Ch < ch1 - 1e-9) breaks.Add(p.Ch);
-            double area = 0.0, prevCh = double.NaN, prevH = double.NaN;
-            foreach (double brk in breaks)
-            {
-                double h = InterpChZ(top, brk) - InterpChZ(bot, brk);
-                if (h < 0.0) h = 0.0;
-                if (!double.IsNaN(prevCh) && brk > prevCh + 1e-9)
-                    area += 0.5 * (h + prevH) * (brk - prevCh);
-                prevCh = brk; prevH = h;
-            }
-            return area < 0 ? 0 : area;
+            if (last == null || last.Chain == null)
+                return new List<System.Tuple<int, string, double>>();
+            return ProfileBand.AreasZasypka(last.Chain, last.Axis, cfg, NvkSession.BandOptsOf(last));
         }
 
         static double Lerp(double a, double b, double t) => a + (b - a) * t;

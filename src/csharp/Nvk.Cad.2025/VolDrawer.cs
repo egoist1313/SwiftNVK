@@ -67,7 +67,7 @@ namespace Nvk.Cad
                 {
                     Run = run,
                     Cfg = cfg,
-                    Levels = VolumeCalc.All(run.Chain, run.Axis, cfg, run.Geoms),
+                    Levels = VolumeCalc.All(run.Chain, run.Axis, cfg, run.Geoms, NvkSession.BandOptsOf(run)),
                     Index = nRun
                 });
             }

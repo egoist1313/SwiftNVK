@@ -49,7 +49,7 @@ namespace Nvk.Cad
 
     static class NvkSession
     {
-        public const string Version = "0.247";
+        public const string Version = "0.248";
         public static int RunId;
         public static DomainResult Last;
         public static List<DomainResult> Runs = new List<DomainResult>();
@@ -84,6 +84,27 @@ namespace Nvk.Cad
                 default: return L2;
             }
         }
+
+        /// <summary>Рандом строк и разрывы колодцев для площади продольника и объёмов.</summary>
+        public static BandOpts BandOptsOf(DomainResult last)
+        {
+            return new BandOpts
+            {
+                AmpTrench = RowScatter.Amp(HeightSrc.TrenchBottom),
+                AmpSand = RowScatter.Amp(HeightSrc.SandTop),
+                AmpZash = RowScatter.Amp(HeightSrc.ZashTop),
+                AmpSurf = RowScatter.Amp(HeightSrc.Surface),
+                ValsTrench = RowScatter.Vals(last, HeightSrc.TrenchBottom),
+                ValsSand = RowScatter.Vals(last, HeightSrc.SandTop),
+                ValsZash = RowScatter.Vals(last, HeightSrc.ZashTop),
+                ValsSurf = RowScatter.Vals(last, HeightSrc.Surface),
+                GapMhRazr = L1 == null || L1.ShowManholes,
+                GapMhPesok = Sheet(ProfileKind.Pesok) == null || Sheet(ProfileKind.Pesok).ShowManholes,
+                GapMhZash = Sheet(ProfileKind.Zashita) == null || Sheet(ProfileKind.Zashita).ShowManholes,
+                GapMhZas = Sheet(ProfileKind.Zasypka) == null || Sheet(ProfileKind.Zasypka).ShowManholes
+            };
+        }
+
         public static List<double> CacheScatter;
         public static List<double> CacheScatter2;
         public static List<double> CacheScatter3;
