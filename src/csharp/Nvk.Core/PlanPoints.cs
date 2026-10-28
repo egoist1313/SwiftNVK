@@ -51,6 +51,45 @@ namespace Nvk.Core
         public static List<NamedXy> Samples(Chain chain, SectionConfig cfg,
             IList<double> targets, IList<double> latOffs, int nextNum)
         {
+            var rows = Collect(chain, cfg, targets, latOffs, nextNum);
+            if (rows.Count > 0 || chain == null) return rows;
+            if (cfg != null && !cfg.PlanEn) return rows;
+            var fb = FallbackTargets(chain);
+            if (fb.Count == 0) return rows;
+            return Collect(chain, cfg, fb, null, nextNum);
+        }
+
+        /// <summary>
+        /// Середины труб длиннее 10 м, дальше 5 м от колодца.
+        /// Когда зональный шаг (50 м) попадает в колодец, Обновить стирает
+        /// выноски и без этого запасного плана они не возвращаются.
+        /// </summary>
+        public static List<double> FallbackTargets(Chain chain)
+        {
+            var t = new List<double>();
+            if (chain == null || chain.Segs == null) return t;
+            double acc = 0.0;
+            foreach (var s in chain.Segs)
+            {
+                double len = s.Length2d;
+                double mid = acc + len * 0.5;
+                acc += len;
+                if (len <= 10.0) continue;
+                if (NearManhole(chain, mid, 5.0)) continue;
+                t.Add(mid);
+            }
+            return t;
+        }
+
+        public static int CountFromTargets(Chain chain, SectionConfig cfg,
+            IList<double> targets, IList<double> latOffs, int nextNum)
+        {
+            return Collect(chain, cfg, targets, latOffs, nextNum).Count;
+        }
+
+        static List<NamedXy> Collect(Chain chain, SectionConfig cfg,
+            IList<double> targets, IList<double> latOffs, int nextNum)
+        {
             var rows = new List<NamedXy>();
             if (chain == null || targets == null) return rows;
             if (cfg != null && !cfg.PlanEn) return rows;

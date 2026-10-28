@@ -57,5 +57,80 @@ namespace Nvk.Core.Tests
             Assert.DoesNotContain("::", b[0].Name);
             Assert.Equal("ABC;DEF", b[0].Pipes);
         }
+
+        [Fact]
+        public void PreferPackedWinsOverKeysAndMemory()
+        {
+            var packed = SitePack.Join(new[]
+            {
+                new SiteRec("U1", "А", "AA"),
+                new SiteRec("U2", "Б", "BB")
+            });
+            var keys = new[] { new SiteRec("U9", "X", "") };
+            var mem = new[] { new SiteRec("U1", "старый", "") };
+            var r = SitePack.Prefer(packed, keys, mem);
+            Assert.Equal(2, r.Count);
+            Assert.Equal("U1", r[0].Id);
+            Assert.Equal("Б", r[1].Name);
+        }
+
+        [Fact]
+        public void PreferEmptyPackedUsesSRecords()
+        {
+            var keys = new[]
+            {
+                new SiteRec("U1", "61-62", "AA"),
+                new SiteRec("U2", "65-66", "BB")
+            };
+            var r = SitePack.Prefer("", keys, null);
+            Assert.Equal(2, r.Count);
+            Assert.Equal("U2", r[1].Id);
+        }
+
+        [Fact]
+        public void PreferEmptyDoesNotWipeMemoryList()
+        {
+            var mem = new[]
+            {
+                new SiteRec("U1", "61-62", "AA"),
+                new SiteRec("U2", "65-66", "BB")
+            };
+            var r = SitePack.Prefer("", null, mem);
+            Assert.Equal(2, r.Count);
+            Assert.Equal("U1", r[0].Id);
+            Assert.Equal("U2", r[1].Id);
+        }
+
+        [Fact]
+        public void PreferEmptySingleMemoryStaysEmpty()
+        {
+            var mem = new[] { new SiteRec("U1", "Участок 1", "") };
+            var r = SitePack.Prefer("", new SiteRec[0], mem);
+            Assert.Empty(r);
+        }
+
+        [Fact]
+        public void PreferLongerSRecordsBeatStalePacked()
+        {
+            var packed = SitePack.Join(new[] { new SiteRec("U1", "А", "AA") });
+            var keys = new[]
+            {
+                new SiteRec("U1", "А", "AA"),
+                new SiteRec("U2", "Б", "BB")
+            };
+            var r = SitePack.Prefer(packed, keys, null);
+            Assert.Equal(2, r.Count);
+            Assert.Equal("U2", r[1].Id);
+        }
+
+        [Fact]
+        public void SameComparesIdNamePipes()
+        {
+            var a = new[] { new SiteRec("U1", "А", "AA"), new SiteRec("U2", "Б", "BB") };
+            var b = new[] { new SiteRec("u1", "А", "aa"), new SiteRec("U2", "Б", "BB") };
+            Assert.True(SitePack.Same(a, b));
+            Assert.False(SitePack.Same(a, new[] { new SiteRec("U1", "А", "AA") }));
+            Assert.False(SitePack.Same(a, new[] { new SiteRec("U1", "А", "AA"), new SiteRec("U2", "В", "BB") }));
+        }
     }
 }

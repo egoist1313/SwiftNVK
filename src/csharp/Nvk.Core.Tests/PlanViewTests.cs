@@ -137,13 +137,14 @@ namespace Nvk.Core.Tests
         [Fact]
         public void SitOnListFreezesDims()
         {
-            var on = new[] { PlanView.LayerSit, "NVK-PLAN", PlanView.LayerMh };
+            var on = new[] { PlanView.LayerSit, "NVK-PLAN" };
             Assert.False(PlanView.IsOn(PlanView.LayerDim, on, true));
-            Assert.True(PlanView.IsOn(PlanView.LayerMh, on, true));
+            Assert.False(PlanView.IsOn(PlanView.LayerMh, on, true));
             Assert.True(PlanView.IsOn(PlanView.LayerSit, on, true));
             Assert.True(PlanView.IsOn("NVK-PLAN", on, true));
             Assert.True(PlanView.IsOurs(PlanView.LayerDim));
             Assert.True(PlanView.IsOn(PlanView.LayerDim, null, true));
+            Assert.True(PlanView.IsOn(PlanView.LayerMh, null, true));
             Assert.Equal("NVK-PLAN-DIM", PlanView.LayerDim);
         }
 

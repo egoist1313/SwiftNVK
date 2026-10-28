@@ -71,10 +71,14 @@ namespace Nvk.Cad
             var map = NvkUiState.Serialize();
             AddLayout(map, db);
             NvkSites.PutInto(map);
+            var cur = NvkSites.Current;
+            if (cur != null)
+                map["NAME"] = cur.Name ?? "";
             string seg = NvkSites.CurrentId;
             if (string.IsNullOrEmpty(seg) && NvkSession.Last != null)
                 seg = NvkSession.Last.SegId;
             Write(db, map, seg);
+            NvkSites.PersistOthers(db);
         }
 
         public static void CaptureLayout(Dictionary<string, string> map)
@@ -92,6 +96,67 @@ namespace Nvk.Cad
         public static string SegKeyPublic(string s)
         {
             return SegKey(s);
+        }
+
+        /// <summary>
+        /// Участки из XRECORD S_*. packedFromChild — SITES, если он лежит
+        /// в записи участка (STATE мог потерять ключ).
+        /// </summary>
+        public static List<SiteRec> ListStoredSites(Database db, out string packedFromChild)
+        {
+            packedFromChild = "";
+            var recs = new List<SiteRec>();
+            if (db == null) return recs;
+            try
+            {
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var nod = (DBDictionary)tr.GetObject(db.NamedObjectsDictionaryId, OpenMode.ForRead);
+                    if (nod == null || !nod.Contains("NVK"))
+                    {
+                        tr.Commit();
+                        return recs;
+                    }
+                    var nvk = tr.GetObject(nod.GetAt("NVK"), OpenMode.ForRead) as DBDictionary;
+                    if (nvk == null)
+                    {
+                        tr.Commit();
+                        return recs;
+                    }
+                    foreach (DBDictionaryEntry e in nvk)
+                    {
+                        string k = e.Key;
+                        if (string.IsNullOrEmpty(k) || k.Length < 3) continue;
+                        if (!k.StartsWith("S_", StringComparison.OrdinalIgnoreCase)) continue;
+                        var xr = tr.GetObject(e.Value, OpenMode.ForRead) as Xrecord;
+                        if (xr == null || xr.Data == null) continue;
+                        var lines = new List<string>();
+                        foreach (TypedValue tv in xr.Data)
+                        {
+                            if (tv.TypeCode == 1 && tv.Value is string s && s.Length > 0)
+                                lines.Add(s);
+                        }
+                        var map = NodPairs.Parse(lines);
+                        string child;
+                        if (string.IsNullOrEmpty(packedFromChild)
+                            && map.TryGetValue("SITES", out child)
+                            && SitePack.Split(child).Count > 0)
+                            packedFromChild = child;
+                        string id = Get(map, "SEG");
+                        if (string.IsNullOrEmpty(id)) id = k.Substring(2);
+                        if (string.IsNullOrEmpty(id)) continue;
+                        string name = Get(map, "NAME");
+                        if (string.IsNullOrEmpty(name)) name = id;
+                        recs.Add(new SiteRec(id, name, Get(map, "PIPES")));
+                    }
+                    tr.Commit();
+                }
+            }
+            catch
+            {
+                return recs;
+            }
+            return recs;
         }
 
         public static Dictionary<string, string> ReadKey(Database db, string key)

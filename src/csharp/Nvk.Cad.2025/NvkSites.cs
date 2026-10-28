@@ -91,32 +91,71 @@ namespace Nvk.Cad
                 map.TryGetValue("SITES", out packed);
                 map.TryGetValue("SITE", out active);
             }
-            var recs = SitePack.Split(packed);
-            All.Clear();
-            NvkSession.Last = null;
-            NvkSession.Runs = new List<DomainResult>();
+            string packedChild = "";
+            List<SiteRec> stored = null;
+            if (db != null)
+                stored = NvkNod.ListStoredSites(db, out packedChild);
+            var recs = SitePack.Prefer(
+                SitePack.Split(packedChild).Count > SitePack.Split(packed).Count
+                    ? packedChild
+                    : packed,
+                stored,
+                Recs());
             if (recs.Count == 0)
             {
+                if (All.Count > 1) return;
                 string seg = Get(map, "SEG");
                 string pipes = Get(map, "PIPES");
                 string id = string.IsNullOrEmpty(seg) ? "U1" : seg;
                 var one = Make(id, "Участок 1");
                 one.Pipes = pipes ?? "";
                 one.State = Clone(map);
+                All.Clear();
                 All.Add(one);
                 Index = 0;
                 return;
             }
+            if (SitePack.Same(recs, Recs()))
+            {
+                int keep = IndexOfId(recs, active);
+                if (keep >= 0) Index = keep;
+                BindPipes(db);
+                return;
+            }
+
+            var prev = new Dictionary<string, NvkSite>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < All.Count; i++)
+            {
+                var old = All[i];
+                if (old != null && !string.IsNullOrEmpty(old.Id) && !prev.ContainsKey(old.Id))
+                    prev[old.Id] = old;
+            }
+            string prevId = All.Count > 0 ? CurrentId : "";
+
+            All.Clear();
             int want = 0;
             for (int i = 0; i < recs.Count; i++)
             {
                 var rec = recs[i];
                 var s = Make(rec.Id, rec.Name);
                 s.Pipes = rec.Pipes ?? "";
-                var stored = NvkNod.ReadKey(db, "S_" + NvkNod.SegKeyPublic(rec.Id));
-                if (stored != null && stored.Count > 0) s.State = stored;
+                var storedMap = db != null
+                    ? NvkNod.ReadKey(db, "S_" + NvkNod.SegKeyPublic(rec.Id))
+                    : null;
+                if (storedMap != null && storedMap.Count > 0) s.State = storedMap;
                 else if (string.Equals(rec.Id, active, StringComparison.OrdinalIgnoreCase))
                     s.State = Clone(map);
+                NvkSite old;
+                if (prev.TryGetValue(s.Id, out old) && old != null)
+                {
+                    s.Runs = old.Runs;
+                    if ((s.State == null || s.State.Count == 0) && old.State != null)
+                        s.State = old.State;
+                    if (string.IsNullOrEmpty(s.Pipes)) s.Pipes = old.Pipes ?? "";
+                    if (!string.IsNullOrEmpty(old.Name)
+                        && (string.IsNullOrEmpty(s.Name) || s.Name == s.Id))
+                        s.Name = old.Name;
+                }
                 All.Add(s);
                 if (!string.IsNullOrEmpty(active)
                     && string.Equals(rec.Id, active, StringComparison.OrdinalIgnoreCase))
@@ -124,10 +163,59 @@ namespace Nvk.Cad
             }
             Index = want;
             var cur = Current;
+            if (cur != null && cur.Runs != null && cur.Runs.Count > 0)
+                NvkSession.SetRuns(cur.Runs);
+            else if (!string.Equals(cur != null ? cur.Id : "", prevId, StringComparison.OrdinalIgnoreCase))
+            {
+                NvkSession.Last = null;
+                NvkSession.Runs = new List<DomainResult>();
+            }
+            BindPipes(db);
+            try
+            {
+                NvkLog.Write("[НВК] участки из NOD " + All.Count.ToString()
+                    + "  активный «" + (cur != null ? cur.Name : "") + "»");
+            }
+            catch { }
+        }
+
+        public static void PersistOthers(Database db)
+        {
+            if (db == null) return;
+            EnsureOne();
+            for (int i = 0; i < All.Count; i++)
+            {
+                if (i == Index) continue;
+                var s = All[i];
+                if (s == null || string.IsNullOrEmpty(s.Id)) continue;
+                var m = Clone(s.State);
+                m["SEG"] = s.Id;
+                m["PIPES"] = s.Pipes ?? "";
+                m["NAME"] = s.Name ?? "";
+                PutInto(m);
+                NvkNod.WriteSite(db, s.Id, m);
+            }
+        }
+
+        static void BindPipes(Database db)
+        {
+            var cur = Current;
             if (db != null && cur != null && !string.IsNullOrEmpty(cur.Pipes))
                 NvkSession.LastPipes = NvkNod.PipesFromHandles(db, cur.Pipes);
             else if (cur != null && string.IsNullOrEmpty(cur.Pipes))
                 NvkSession.LastPipes = new List<ObjectId>();
+        }
+
+        static int IndexOfId(IList<SiteRec> recs, string id)
+        {
+            if (recs == null || string.IsNullOrEmpty(id)) return -1;
+            for (int i = 0; i < recs.Count; i++)
+            {
+                if (recs[i] != null
+                    && string.Equals(recs[i].Id, id, StringComparison.OrdinalIgnoreCase))
+                    return i;
+            }
+            return -1;
         }
 
         public static void Capture()
@@ -141,6 +229,7 @@ namespace Nvk.Cad
             s.Pipes = NvkNod.HandlesOf(NvkSession.LastPipes);
             map["PIPES"] = s.Pipes ?? "";
             map["SEG"] = s.Id ?? "";
+            map["NAME"] = s.Name ?? "";
             s.Runs = CopyRuns(NvkSession.AllRuns());
             var doc = AcadApp.DocumentManager.MdiActiveDocument;
             if (doc != null) NvkNod.WriteSite(doc.Database, s.Id, map);

@@ -109,6 +109,15 @@ namespace Nvk.Cad
             var latOffs = ReuseOrLat(NvkSession.CacheLatOff, stations.Count, hw, seed, NvkSession.FreshRandom && fk == 0);
             var planTgt = ReuseOrGenPlan(NvkSession.CachePlanTgt, chain.Total, cfg.PlanInt, seed, NvkSession.FreshRandom && fk == 0);
             var planLat = ReuseOrPlanLat(NvkSession.CachePlanLat, planTgt.Count, hw, seed, NvkSession.FreshRandom && fk == 0);
+            if (cfg.PlanEn && PlanPoints.CountFromTargets(chain, cfg, planTgt, planLat, 1) == 0)
+            {
+                var fb = PlanPoints.FallbackTargets(chain);
+                if (fb.Count > 0)
+                {
+                    planTgt = fb;
+                    planLat = ReuseOrPlanLat(null, planTgt.Count, hw, seed, true);
+                }
+            }
             NvkSession.FreshRandom = false;
             NvkSession.FreshRandomKind = 0;
 

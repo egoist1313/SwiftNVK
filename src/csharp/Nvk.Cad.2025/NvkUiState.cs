@@ -508,7 +508,11 @@ namespace Nvk.Cad
                 if (!force && IsCurrent(key) && HasNod) return true;
                 return false;
             }
-            if (!force && IsCurrent(key) && HasNod) return true;
+            if (!force && IsCurrent(key) && HasNod)
+            {
+                NvkSites.TakeFrom(map, db);
+                return true;
+            }
             FromMap(map);
             NvkNod.ApplyLayout(db, map);
             NvkSites.TakeFrom(map, db);
@@ -516,7 +520,8 @@ namespace Nvk.Cad
             HasNod = true;
             try
             {
-                NvkLog.Write("[НВК] STATE из чертежа, ключей " + map.Count.ToString());
+                NvkLog.Write("[НВК] STATE из чертежа, ключей " + map.Count.ToString()
+                    + "  участки " + NvkSites.All.Count.ToString());
             }
             catch { }
             return true;

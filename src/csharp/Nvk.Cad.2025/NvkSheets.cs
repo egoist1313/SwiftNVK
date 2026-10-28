@@ -1540,8 +1540,7 @@ namespace Nvk.Cad
             var on = new List<string>
             {
                 PlanView.LayerSit,
-                "NVK-PLAN",
-                PlanView.LayerMh
+                "NVK-PLAN"
             };
             try
             {

@@ -100,6 +100,52 @@ namespace Nvk.Core
             return s.Replace(FieldSep, " ").Replace(SiteSep, " ").Trim();
         }
 
+        /// <summary>
+        /// Берётся самый длинный из: SITES STATE, записи S_*, список в памяти
+        /// (один «Участок 1» в памяти не считается). Пустой packed не затирает.
+        /// </summary>
+        public static List<SiteRec> Prefer(string packed, IList<SiteRec> fromKeys, IList<SiteRec> current)
+        {
+            var recs = Split(packed);
+            var keys = Copy(fromKeys);
+            var mem = Copy(current);
+            if (mem.Count <= 1) mem = new List<SiteRec>();
+            var best = recs;
+            if (keys.Count > best.Count) best = keys;
+            if (mem.Count > best.Count) best = mem;
+            return best;
+        }
+
+        static List<SiteRec> Copy(IList<SiteRec> src)
+        {
+            var r = new List<SiteRec>();
+            if (src == null) return r;
+            for (int i = 0; i < src.Count; i++)
+                if (src[i] != null) r.Add(src[i]);
+            return r;
+        }
+
+        public static bool Same(IList<SiteRec> a, IList<SiteRec> b)
+        {
+            if (a == null && b == null) return true;
+            if (a == null || b == null) return false;
+            if (a.Count != b.Count) return false;
+            for (int i = 0; i < a.Count; i++)
+            {
+                var x = a[i];
+                var y = b[i];
+                if (x == null && y == null) continue;
+                if (x == null || y == null) return false;
+                if (!string.Equals(x.Id ?? "", y.Id ?? "", StringComparison.OrdinalIgnoreCase))
+                    return false;
+                if (!string.Equals(x.Name ?? "", y.Name ?? "", StringComparison.Ordinal))
+                    return false;
+                if (!string.Equals(x.Pipes ?? "", y.Pipes ?? "", StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            return true;
+        }
+
         public static string NextId(IList<SiteRec> list)
         {
             int max = 0;

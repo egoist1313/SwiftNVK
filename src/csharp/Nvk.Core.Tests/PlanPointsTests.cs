@@ -168,5 +168,51 @@ namespace Nvk.Core.Tests
             var rows = PlanPoints.Samples(chain, cfg, new List<double> { 10.0 }, null, 1);
             Assert.Empty(rows);
         }
+
+        [Fact]
+        public void SamplesFallbackWhenZonalTargetHitsManhole()
+        {
+            var chain = Chain.Sort(new List<PipeSeg>
+            {
+                Seg(0, 2.155, "61", "62"),
+                Seg(2.155, 23.272, "62", "65"),
+                Seg(23.272, 35.380, "65", "66"),
+                Seg(35.380, 42.076, "66", "ГП12")
+            });
+            var cfg = new SectionConfig { PlanEn = true, PlanMin = 15.0, Joint = JointType.Socket };
+            var rows = PlanPoints.Samples(chain, cfg, new List<double> { 21.0 }, null, 1);
+            Assert.Equal(2, rows.Count);
+            Assert.Equal("Т1", rows[0].Name);
+            Assert.Equal("Т2", rows[1].Name);
+            Assert.InRange(rows[0].X, 10.0, 16.0);
+            Assert.InRange(rows[1].X, 26.0, 33.0);
+        }
+
+        [Fact]
+        public void FallbackTargetsAreMidsOfLongSpans()
+        {
+            var chain = Chain.Sort(new List<PipeSeg>
+            {
+                Seg(0, 2.155, "61", "62"),
+                Seg(2.155, 23.272, "62", "65"),
+                Seg(23.272, 35.380, "65", "66"),
+                Seg(35.380, 42.076, "66", "ГП12")
+            });
+            var t = PlanPoints.FallbackTargets(chain);
+            Assert.Equal(2, t.Count);
+            Assert.Equal(2.155 + 21.117 * 0.5, t[0], 2);
+            Assert.Equal(23.272 + 12.108 * 0.5, t[1], 2);
+        }
+
+        static PipeSeg Seg(double x0, double x1, string a, string b)
+        {
+            return new PipeSeg
+            {
+                X0 = x0, Y0 = 0, X1 = x1, Y1 = 0,
+                InvertStart = 100, InvertEnd = 99.6, Diam = 0.25,
+                StartName = a, StartR = 0.5,
+                EndName = b, EndR = 0.5
+            };
+        }
     }
 }

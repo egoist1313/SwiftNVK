@@ -73,8 +73,15 @@ namespace Nvk.Cad
         {
             try
             {
-                NvkEpLive.Attach(e.Document);
-                NvkPalette.SyncFromDoc(e.Document, false);
+                var doc = e.Document;
+                NvkEpLive.Attach(doc);
+                bool force = false;
+                if (doc != null)
+                {
+                    string key = NvkUiState.MakeDocKey(doc.Database, doc.Name);
+                    force = !NvkUiState.IsCurrent(key);
+                }
+                NvkPalette.SyncFromDoc(doc, force);
                 NvkSheets.Hook();
             }
             catch { }

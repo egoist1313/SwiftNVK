@@ -78,7 +78,7 @@ namespace Nvk.Cad
                 AddPline(ms, tr, trench, true, 5, 30);
                 DrawSituation(ms, tr, axis, poses, nRun);
 
-                if (cfg.PlanEn && last.PlanTargets != null)
+                if (cfg.PlanEn)
                 {
                     var samples = PlanPoints.Samples(last.Chain, cfg, last.PlanTargets, last.PlanLatOffs, nLead + 1);
                     foreach (var p in samples)
