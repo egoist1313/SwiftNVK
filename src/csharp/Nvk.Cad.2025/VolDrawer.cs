@@ -431,12 +431,7 @@ namespace Nvk.Cad
             var body = new List<string[]>();
             foreach (var p in pts)
             {
-                body.Add(new[]
-                {
-                    p.Name ?? "—",
-                    TableLayout.XyText(p.X),
-                    TableLayout.XyText(p.Y)
-                });
+                body.Add(TableLayout.CoordRow(p.Name, p.X, p.Y));
             }
             var table = CadTable.Coord(ms, tr, origin, layer, title, body, th);
             return table != null ? table.ObjectId : ObjectId.Null;
