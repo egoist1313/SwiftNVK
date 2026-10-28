@@ -35,6 +35,7 @@ namespace Nvk.Cad
                 WalkSpace(tr, layout.BlockTableRecordId, net, seg, tol, type, planN, out a, out b);
                 n += a;
                 nPlan += b;
+                SheetSnapStore.PaintPaperText(tr, layout.BlockTableRecordId);
             }
             string msg = "[НВК] коды net=\"" + (net ?? "") + "\" seg=\"" + (seg ?? "")
                 + "\"  листов " + nLay.ToString()

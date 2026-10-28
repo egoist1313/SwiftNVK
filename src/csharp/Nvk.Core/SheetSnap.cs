@@ -106,6 +106,22 @@ namespace Nvk.Core
 
     public static class SheetSnap
     {
+        /// <summary>
+        /// Надписи штампа (Подпись, Дата, Изм. …) в снимке приходят ACI 18
+        /// (тонкие линии СПДС). На бумаге текст — чёрно-белый, ACI 7.
+        /// Линии рамки 18 не трогаем.
+        /// </summary>
+        public static short PaperTextColor(short color)
+        {
+            return color == 18 ? (short)7 : color;
+        }
+
+        public static bool IsPaperText(string t)
+        {
+            return string.Equals(t, "TEXT", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "MTEXT", StringComparison.OrdinalIgnoreCase);
+        }
+
         public static SheetSnapLayout Find(SheetSnapFile file, string kind)
         {
             if (file == null || file.Layouts == null || string.IsNullOrEmpty(kind))

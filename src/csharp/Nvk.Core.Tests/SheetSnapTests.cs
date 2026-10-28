@@ -73,6 +73,18 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void PaperTextColorMapsStampAci18ToBlack()
+        {
+            Assert.Equal(7, SheetSnap.PaperTextColor(18));
+            Assert.Equal(7, SheetSnap.PaperTextColor(7));
+            Assert.Equal(256, SheetSnap.PaperTextColor(256));
+            Assert.Equal(1, SheetSnap.PaperTextColor(1));
+            Assert.True(SheetSnap.IsPaperText("MTEXT"));
+            Assert.True(SheetSnap.IsPaperText("TEXT"));
+            Assert.False(SheetSnap.IsPaperText("LINE"));
+        }
+
+        [Fact]
         public void HasPageNeedsDevice()
         {
             Assert.False(SheetSnap.HasPage(null));

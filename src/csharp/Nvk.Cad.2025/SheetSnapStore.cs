@@ -526,10 +526,69 @@ namespace Nvk.Cad
         {
             try
             {
-                if (ent.Color == null || ent.Color.IsByLayer) return 256;
-                return (short)ent.Color.ColorIndex;
+                short c = 256;
+                if (ent.Color != null && !ent.Color.IsByLayer)
+                    c = (short)ent.Color.ColorIndex;
+                if (ent is DBText || ent is MText || ent is AttributeReference)
+                    c = SheetSnap.PaperTextColor(c);
+                return c;
             }
             catch { return 256; }
+        }
+
+        public static int PaintPaperText(Transaction tr, ObjectId spaceId)
+        {
+            if (tr == null || spaceId.IsNull) return 0;
+            BlockTableRecord btr;
+            try { btr = (BlockTableRecord)tr.GetObject(spaceId, OpenMode.ForRead); }
+            catch { return 0; }
+            return PaintPaperText(tr, btr);
+        }
+
+        public static int PaintPaperText(Transaction tr, BlockTableRecord btr)
+        {
+            int n = 0;
+            if (tr == null || btr == null) return 0;
+            foreach (ObjectId id in btr)
+            {
+                Entity ent;
+                try { ent = tr.GetObject(id, OpenMode.ForRead) as Entity; }
+                catch { continue; }
+                if (ent == null || ent.IsErased) continue;
+                if (PaintOneText(ent)) n++;
+                var br = ent as BlockReference;
+                if (br == null) continue;
+                AttributeCollection col;
+                try { col = br.AttributeCollection; }
+                catch { continue; }
+                if (col == null) continue;
+                foreach (ObjectId aid in col)
+                {
+                    AttributeReference att;
+                    try { att = tr.GetObject(aid, OpenMode.ForRead) as AttributeReference; }
+                    catch { continue; }
+                    if (att != null && PaintOneText(att)) n++;
+                }
+            }
+            return n;
+        }
+
+        static bool PaintOneText(Entity ent)
+        {
+            if (ent == null) return false;
+            if (!(ent is MText || ent is DBText || ent is AttributeReference))
+                return false;
+            try
+            {
+                var c = ent.Color;
+                if (c == null || c.IsByLayer) return false;
+                short neu = SheetSnap.PaperTextColor((short)c.ColorIndex);
+                if (neu == c.ColorIndex) return false;
+                if (!ent.IsWriteEnabled) ent.UpgradeOpen();
+                ApplyColor(ent, neu);
+                return true;
+            }
+            catch { return false; }
         }
 
         public static void PlaceTitle(MText title, ProfileKind kind)
@@ -606,6 +665,9 @@ namespace Nvk.Cad
             NvkLog.Write("[НВК] снимок " + kind.ToString()
                 + " объектов +" + n.ToString()
                 + (nDup > 0 ? "  уже " + nDup.ToString() : ""));
+            int nPaint = PaintPaperText(tr, ps);
+            if (nPaint > 0)
+                NvkLog.Write("[НВК] штамп текст ч/б " + nPaint.ToString());
             return n;
         }
 
@@ -820,7 +882,10 @@ namespace Nvk.Cad
             {
                 try { ent.Layer = e.Layer; } catch { }
             }
-            ApplyColor(ent, e.Color);
+            short col = e.Color;
+            if (SheetSnap.IsPaperText(t))
+                col = SheetSnap.PaperTextColor(col);
+            ApplyColor(ent, col);
             ApplyLt(tr, db, ent, e.Lt);
             ps.AppendEntity(ent);
             tr.AddNewlyCreatedDBObject(ent, true);
