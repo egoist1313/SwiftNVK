@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
     <PlatformTarget>x64</PlatformTarget>
-    <Version>0.271.0</Version>
+    <Version>0.272.0</Version>
     <AssemblyName>Nvk.Cad</AssemblyName>
     <RootNamespace>Nvk.Cad</RootNamespace>
     <Nullable>disable</Nullable>
@@ -50,6 +50,7 @@
       <NvkBin>$(MSBuildProjectDirectory)\..\..\..\bin</NvkBin>
     </PropertyGroup>
     <MakeDir Directories="$(NvkBin)" />
+    <MakeDir Directories="$(NvkBin)\v272" />
     <MakeDir Directories="$(NvkBin)\v271" />
     <MakeDir Directories="$(NvkBin)\v270" />
     <MakeDir Directories="$(NvkBin)\v269" />
@@ -72,6 +73,7 @@
     <MakeDir Directories="$(NvkBin)\v252" />
     <MakeDir Directories="$(MSBuildProjectDirectory)\out_build" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(NvkBin)" SkipUnchangedFiles="false" ContinueOnError="true" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(NvkBin)\v272" SkipUnchangedFiles="false" ContinueOnError="true" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(NvkBin)\v271" SkipUnchangedFiles="false" ContinueOnError="true" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(NvkBin)\v270" SkipUnchangedFiles="false" ContinueOnError="true" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(NvkBin)\v269" SkipUnchangedFiles="false" ContinueOnError="true" />

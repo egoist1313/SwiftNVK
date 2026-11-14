@@ -12,6 +12,11 @@ namespace Nvk.Core
         public double SlopeM = 0.20;
         /// <summary>Толщина подсыпки под подошвой, м. Квадрат дна = отстойник − подсыпка.</summary>
         public double Bedding = 0.10;
+        /// <summary>
+        /// true — веер 30°/60° из угла квадрата колодца;
+        /// false — прямоугольный угол (биссектриса, стороны бровки параллельны дну).
+        /// </summary>
+        public bool CornerFan = true;
     }
 
     /// <summary>Труба, подходящая к колодцу. Линии — в пределах траншеи до центра / радиуса.</summary>
@@ -297,7 +302,7 @@ namespace Nvk.Core
             var berm = new List<WellPt>();
             var faces = new List<WellPt[]>();
             var rays = new List<WellPt[]>();
-            GradeSquare(bot, c.SlopeM, zBot, zMid, tinZ, tris, berm, faces, rays);
+            GradeSquare(bot, c.SlopeM, zBot, zMid, tinZ, tris, berm, faces, rays, bot, c.CornerFan);
             double maxOff = 0.0;
             for (int i = 0; i < berm.Count; i++)
             {
@@ -370,6 +375,26 @@ namespace Nvk.Core
             by /= L;
             double d = bx * n1x + by * n1y;
             runScale = Math.Abs(d) < 1e-9 ? 1.0 : 1.0 / d;
+        }
+
+        /// <summary>
+        /// Два луча веера в секторе откоса. n1, n2 — единичные внешние нормали
+        /// смежных рёбер. Для квадрата — 30° и 60°.
+        /// </summary>
+        public static void CornerRayDirs(double n1x, double n1y, double n2x, double n2y,
+            out double r1x, out double r1y, out double r2x, out double r2y)
+        {
+            double a1 = Math.Atan2(n1y, n1x);
+            double a2 = Math.Atan2(n2y, n2x);
+            double da = a2 - a1;
+            while (da > Math.PI) da -= 2.0 * Math.PI;
+            while (da < -Math.PI) da += 2.0 * Math.PI;
+            double aMid1 = a1 + da / 3.0;
+            double aMid2 = a1 + 2.0 * da / 3.0;
+            r1x = Math.Cos(aMid1);
+            r1y = Math.Sin(aMid1);
+            r2x = Math.Cos(aMid2);
+            r2y = Math.Sin(aMid2);
         }
 
         /// <summary>
@@ -605,7 +630,7 @@ namespace Nvk.Core
 
         static void GradeSquare(List<WellPt> bot, double m, double zBot, double zHint,
             Func<double, double, double> tinZ, IList<TinTri> tris, List<WellPt> berm, List<WellPt[]> faces,
-            List<WellPt[]> rays)
+            List<WellPt[]> rays, IList<WellPt> pitCorners, bool fan)
         {
             int n = bot.Count;
             if (n < 3) return;
@@ -646,8 +671,8 @@ namespace Nvk.Core
                             n1x = -pdy / plen;
                             n1y = pdx / plen;
                         }
-                        if (ConvexCw(p, a, b))
-                            EmitCorner(a, n1x, n1y, nx, ny, zEdge, m, zHint, tinZ, berm, faces, rays, ref lastG);
+                        if (ConvexCw(p, a, b) && IsPitCorner(pitCorners, a))
+                            EmitCornerMode(fan, a, n1x, n1y, nx, ny, zEdge, m, zHint, tinZ, berm, faces, rays, ref lastG);
                         faces.Add(new[] { a, a, h.P, lastG });
                     }
                     berm.Add(h.P);
@@ -668,10 +693,27 @@ namespace Nvk.Core
                 var a0 = bot[0];
                 var b0 = bot[1];
                 double z0 = a0.Z > 1.0 ? a0.Z : zBot;
-                if (ConvexCw(p, a0, b0))
-                    EmitCorner(a0, lastNx, lastNy, firstNx, firstNy, z0, m, zHint, tinZ, berm, faces, rays, ref lastG);
+                if (ConvexCw(p, a0, b0) && IsPitCorner(pitCorners, a0))
+                    EmitCornerMode(fan, a0, lastNx, lastNy, firstNx, firstNy, z0, m, zHint, tinZ, berm, faces, rays, ref lastG);
                 faces.Add(new[] { a0, a0, berm[0], lastG });
             }
+        }
+
+        /// <summary>
+        /// Веер/биссектриса только у исходных углов квадрата колодца.
+        /// Вершины коридора траншеи (плечи гантели) пропускаем.
+        /// </summary>
+        static bool IsPitCorner(IList<WellPt> pitCorners, WellPt a)
+        {
+            if (pitCorners == null || pitCorners.Count == 0) return true;
+            const double eps2 = 0.05 * 0.05;
+            for (int i = 0; i < pitCorners.Count; i++)
+            {
+                double dx = pitCorners[i].X - a.X;
+                double dy = pitCorners[i].Y - a.Y;
+                if (dx * dx + dy * dy <= eps2) return true;
+            }
+            return false;
         }
 
         static bool ConvexCw(WellPt p, WellPt a, WellPt b)
@@ -679,6 +721,18 @@ namespace Nvk.Core
             double v1x = a.X - p.X, v1y = a.Y - p.Y;
             double v2x = b.X - a.X, v2y = b.Y - a.Y;
             return v1x * v2y - v1y * v2x < -1e-12;
+        }
+
+        static void EmitCornerMode(bool fan, WellPt corner,
+            double n1x, double n1y, double n2x, double n2y,
+            double zBot, double m, double zHint,
+            Func<double, double, double> tinZ,
+            List<WellPt> berm, List<WellPt[]> faces, List<WellPt[]> rays, ref WellPt lastG)
+        {
+            if (fan)
+                EmitCornerRays(corner, n1x, n1y, n2x, n2y, zBot, m, zHint, tinZ, berm, faces, rays, ref lastG);
+            else
+                EmitCorner(corner, n1x, n1y, n2x, n2y, zBot, m, zHint, tinZ, berm, faces, rays, ref lastG);
         }
 
         static void EmitCorner(WellPt corner,
@@ -695,6 +749,27 @@ namespace Nvk.Core
             berm.Add(g);
             if (rays != null) rays.Add(new[] { corner, g });
             lastG = g;
+        }
+
+        static void EmitCornerRays(WellPt corner,
+            double n1x, double n1y, double n2x, double n2y,
+            double zBot, double m, double zHint,
+            Func<double, double, double> tinZ,
+            List<WellPt> berm, List<WellPt[]> faces, List<WellPt[]> rays, ref WellPt lastG)
+        {
+            if (m < 1e-9) return;
+            double r1x, r1y, r2x, r2y;
+            CornerRayDirs(n1x, n1y, n2x, n2y, out r1x, out r1y, out r2x, out r2y);
+            var g1 = GradeAlong(corner.X, corner.Y, zBot, r1x, r1y, m, tinZ, zHint, 1.0);
+            faces.Add(new[] { corner, corner, g1, lastG });
+            berm.Add(g1);
+            if (rays != null) rays.Add(new[] { corner, g1 });
+            lastG = g1;
+            var g2 = GradeAlong(corner.X, corner.Y, zBot, r2x, r2y, m, tinZ, zHint, 1.0);
+            faces.Add(new[] { corner, corner, g2, lastG });
+            berm.Add(g2);
+            if (rays != null) rays.Add(new[] { corner, g2 });
+            lastG = g2;
         }
 
         public static bool PointInPoly(IList<WellPt> poly, double x, double y)
@@ -1012,6 +1087,14 @@ namespace Nvk.Core
                     if (extraPolys[i] != null && extraPolys[i].Count >= 3)
                         gradeSrc.Add(extraPolys[i]);
             }
+            var pitCorners = new List<WellPt>();
+            for (int i = 0; i < outers.Count; i++)
+            {
+                var o = outers[i];
+                if (o == null) continue;
+                for (int j = 0; j < o.Count; j++)
+                    pitCorners.Add(o[j]);
+            }
             var gradeLoops = UnionPolygons(gradeSrc, zMin);
             var berm = new List<WellPt>();
             var faces = new List<WellPt[]>();
@@ -1027,14 +1110,14 @@ namespace Nvk.Core
                 var gp = new List<WellPt>(gradeLoops[i].Pts);
                 if (SignedArea(gp) > 0.0) gp.Reverse();
                 AssignNearestZ(gp, sites);
-                GradeSquare(gp, c.SlopeM, zMin, zMid, tinZ, tris, berm, faces, rays);
+                GradeSquare(gp, c.SlopeM, zMin, zMid, tinZ, tris, berm, faces, rays, pitCorners, c.CornerFan);
                 nGrade++;
             }
             if (nGrade == 0 && bottoms.Count > 0)
             {
                 var gp = new List<WellPt>(bottoms[0]);
                 if (SignedArea(gp) > 0.0) gp.Reverse();
-                GradeSquare(gp, c.SlopeM, zMin, zMid, tinZ, tris, berm, faces, rays);
+                GradeSquare(gp, c.SlopeM, zMin, zMid, tinZ, tris, berm, faces, rays, pitCorners, c.CornerFan);
             }
             for (int i = 0; i < stepFaces.Count; i++)
                 faces.Add(stepFaces[i]);

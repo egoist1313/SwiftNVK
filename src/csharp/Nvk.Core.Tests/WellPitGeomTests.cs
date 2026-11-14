@@ -378,6 +378,55 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void CorridorDoesNotTreatShoulderAsCorner()
+        {
+            Func<double, double, double> tin = (x, y) => 105.0;
+            var a = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
+            var b = new WellPitInput { X = 4, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
+            List<WellPt> corridor;
+            Assert.True(WellPitGeom.TrenchCorridor(
+                a, new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 4, Y1 = 0, Invert0 = 100, Diam = 0.3 },
+                0.80, 0.80, out corridor));
+            bool fanOk = NoShoulderRays(a, b, corridor, tin, true);
+            bool rectOk = NoShoulderRays(a, b, corridor, tin, false);
+            Assert.True(fanOk);
+            Assert.True(rectOk);
+        }
+
+        static bool NoShoulderRays(WellPitInput a, WellPitInput b, List<WellPt> corridor,
+            Func<double, double, double> tin, bool fan)
+        {
+            var cfg = new WellPitCfg { TrenchGap = 0.50, SlopeM = 1.0, Bedding = 0.0, CornerFan = fan };
+            var sa = WellPitGeom.Build(a, cfg, tin);
+            var sb = WellPitGeom.Build(b, cfg, tin);
+            var u = WellPitGeom.UnionPits(
+                new List<WellPitShape> { sa, sb },
+                new List<List<WellPt>> { corridor },
+                cfg, tin, null, 105);
+            if (u == null || u.SlopeRays == null) return false;
+            bool hasReal = false;
+            for (int i = 0; i < u.SlopeRays.Count; i++)
+            {
+                if (u.SlopeRays[i] == null || u.SlopeRays[i].Length < 2) continue;
+                var p = u.SlopeRays[i][0];
+                var g = u.SlopeRays[i][1];
+                double dx = Math.Abs(g.X - p.X);
+                double dy = Math.Abs(g.Y - p.Y);
+                bool diag = dx > 1.0 && dy > 1.0;
+                if (diag && (IsShoulder(p.X, p.Y, 1.0, 0.80) || IsShoulder(p.X, p.Y, 3.0, 0.80)))
+                    return false;
+                if (diag && Math.Abs(p.X - 1.0) < 0.08 && Math.Abs(p.Y - 1.0) < 0.08)
+                    hasReal = true;
+            }
+            return hasReal;
+        }
+
+        static bool IsShoulder(double x, double y, double sx, double sy)
+        {
+            return Math.Abs(x - sx) < 0.08 && Math.Abs(Math.Abs(y) - sy) < 0.08;
+        }
+
+        [Fact]
         public void TwoWellsOnPipeStayParallelNoCross()
         {
             var a = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100 };
@@ -655,6 +704,17 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void CornerRaysAre120FromSides()
+        {
+            double r1x, r1y, r2x, r2y;
+            WellPitGeom.CornerRayDirs(0, 1, 1, 0, out r1x, out r1y, out r2x, out r2y);
+            Assert.Equal(0.5, r1x, 6);
+            Assert.Equal(Math.Sqrt(3.0) / 2.0, r1y, 6);
+            Assert.Equal(Math.Sqrt(3.0) / 2.0, r2x, 6);
+            Assert.Equal(0.5, r2y, 6);
+        }
+
+        [Fact]
         public void BermCornerIsOffsetSquareNotArc()
         {
             var w = Well();
@@ -663,7 +723,7 @@ namespace Nvk.Core.Tests
             w.Diam = 1.0;
             w.Sump = 100;
             w.Rim = 105;
-            var c = new WellPitCfg { TrenchGap = 0.50, SlopeM = 1.0, Bedding = 0.0 };
+            var c = new WellPitCfg { TrenchGap = 0.50, SlopeM = 1.0, Bedding = 0.0, CornerFan = false };
             var s = WellPitGeom.Build(w, c, (x, y) => 105.0);
             double half = s.AlongHalf;
             bool hit45 = false, hit30 = false, hit60 = false;
@@ -683,6 +743,34 @@ namespace Nvk.Core.Tests
             Assert.True(hit45);
             Assert.False(hit30);
             Assert.False(hit60);
+        }
+
+        [Fact]
+        public void CornerRaysRoundBermOnFlatTin()
+        {
+            var w = Well();
+            w.X = 0;
+            w.Y = 0;
+            w.Diam = 1.0;
+            w.Sump = 100;
+            w.Rim = 105;
+            var c = new WellPitCfg { TrenchGap = 0.50, SlopeM = 1.0, Bedding = 0.0, CornerFan = true };
+            var s = WellPitGeom.Build(w, c, (x, y) => 105.0);
+            double half = s.AlongHalf;
+            var corner = new WellPt(half, half, 100);
+            bool hit30 = false, hit60 = false;
+            for (int i = 0; i < s.Berm.Count; i++)
+            {
+                double dx = s.Berm[i].X - corner.X;
+                double dy = s.Berm[i].Y - corner.Y;
+                double ang = Math.Atan2(dy, dx) * 180.0 / Math.PI;
+                double run = Math.Sqrt(dx * dx + dy * dy);
+                if (Math.Abs(run - 5.0) > 0.08) continue;
+                if (Math.Abs(ang - 30.0) < 3.0) hit30 = true;
+                if (Math.Abs(ang - 60.0) < 3.0) hit60 = true;
+            }
+            Assert.True(hit30);
+            Assert.True(hit60);
         }
 
         [Fact]

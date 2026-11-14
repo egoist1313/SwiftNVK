@@ -270,7 +270,8 @@ namespace Nvk.Cad
             {
                 TrenchGap = Math.Max(0.0, NvkUiState.WellTrenchGap),
                 SlopeM = Math.Max(0.0, NvkUiState.WellSlopeM),
-                Bedding = Math.Max(0.0, NvkUiState.WellBedding)
+                Bedding = Math.Max(0.0, NvkUiState.WellBedding),
+                CornerFan = NvkUiState.WellCornerFan
             };
         }
 

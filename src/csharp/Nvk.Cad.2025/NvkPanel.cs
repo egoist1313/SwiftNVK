@@ -43,7 +43,7 @@ namespace Nvk.Cad
         readonly Button _btnRoad, _btnEarth, _btnBot, _btnHat, _btnPav, _btnCs;
         readonly ComboBox _cL0, _cL6;
         readonly TextBox _mhGap, _mhSlope, _mhBed;
-        readonly ComboBox _mhSurf;
+        readonly ComboBox _mhSurf, _mhCorners;
         readonly Label _mhInfo;
         readonly SheetUi _s2, _s3, _s4, _s5;
         readonly CheckBox _useWall;
@@ -333,6 +333,7 @@ namespace Nvk.Cad
             _mhGap   = Num(pMh, "Отступ от колодца, м", "0.50");
             _mhBed   = Num(pMh, "Подсыпка, м", "0.10");
             _mhSlope = Num(pMh, "Откос m (0=вертикаль)", "0.20");
+            _mhCorners = Combo(pMh, "Углы бровки", new[] { "Веером", "Прямоугольные" });
             pMh.Controls.Add(Head("Поверхность бровки"));
             _mhSurf = SurfCombo(pMh, "TIN бровки (пусто = L0)");
             pMh.Controls.Add(Btn("Обновить список TIN", RefreshSurfaces, 240));
@@ -413,6 +414,8 @@ namespace Nvk.Cad
             if (_mhGap != null) _mhGap.Text = NvkUiState.WellTrenchGap.ToString("0.###");
             if (_mhBed != null) _mhBed.Text = NvkUiState.WellBedding.ToString("0.###");
             if (_mhSlope != null) _mhSlope.Text = NvkUiState.WellSlopeM.ToString("0.###");
+            if (_mhCorners != null)
+                _mhCorners.SelectedIndex = NvkUiState.WellCornerFan ? 0 : 1;
             _l1mh.Checked    = NvkUiState.L1ShowMh;
             _tblOff.Text     = NvkUiState.TableOffsetM.ToString("0.##");
             _labRoad.Text    = string.IsNullOrEmpty(NvkUiState.LabelRoad)   ? "Проектно-планировочное покрытие, м"   : NvkUiState.LabelRoad;
@@ -590,6 +593,7 @@ namespace Nvk.Cad
             if (_mhGap != null) NvkUiState.WellTrenchGap = Math.Max(0.0, Parse(_mhGap, 0.50));
             if (_mhBed != null) NvkUiState.WellBedding = Math.Max(0.0, Parse(_mhBed, 0.10));
             if (_mhSlope != null) NvkUiState.WellSlopeM = Math.Max(0.0, Parse(_mhSlope, 0.20));
+            if (_mhCorners != null) NvkUiState.WellCornerFan = _mhCorners.SelectedIndex != 1;
             if (_mhSurf != null && _mhSurf.Items.Count > 0)
             {
                 NvkUiState.WellSurfHandle = SurfHandle(_mhSurf);
