@@ -97,7 +97,7 @@ namespace Nvk.Cad
                     ErasePlan(doc.Database, tr);
                     ObjectId surfId = SurfaceId(doc.Database, tr);
                     var ms = Ms(doc.Database, tr);
-                    var batch = new PipeBatch();
+                    var items = new List<WellItem>();
                     foreach (var id in ids)
                     {
                         var st = tr.GetObject(id, OpenMode.ForRead) as CivilDb.Structure;
@@ -141,8 +141,15 @@ namespace Nvk.Cad
                             well.X - half - pad, well.Y - half - pad,
                             well.X + half + pad, well.Y + half + pad);
                         var shape = WellPitGeom.Build(well, cfg, tin, tris);
-                        DrawPlan(ms, tr, well, shape);
-                        CollectPipes(batch, well, shape);
+                        items.Add(new WellItem
+                        {
+                            W = well,
+                            S = shape,
+                            Cfg = cfg,
+                            Tin = tin,
+                            ZHint = zHint,
+                            Handle = h
+                        });
                         var geom = MakeGeom(well, shape, cfg, tin);
                         csItems.Add(new WellCsDraw
                         {
@@ -166,6 +173,21 @@ namespace Nvk.Cad
                             + "  бровка=" + shape.Berm.Count);
                         ed.WriteMessage("\n" + axisMsg);
                         nOk++;
+                    }
+                    var groups = ClusterItems(items);
+                    var batch = new PipeBatch();
+                    for (int g = 0; g < groups.Count; g++)
+                    {
+                        var grp = groups[g];
+                        var shape = ShapeOfGroup(grp, cfg, surfId, tr);
+                        DrawPit(ms, tr, grp, shape);
+                        for (int i = 0; i < grp.Count; i++)
+                            DrawName(ms, tr, grp[i].W, grp[i].S != null ? grp[i].S : shape);
+                        var berm = shape != null && shape.Berm != null && shape.Berm.Count >= 3
+                            ? shape.Berm
+                            : (shape != null ? shape.Outer : null);
+                        for (int i = 0; i < grp.Count; i++)
+                            CollectPipes(batch, grp[i].W, berm);
                     }
                     DrawPipeBatch(ms, tr, batch);
                     tr.Commit();
@@ -345,14 +367,16 @@ namespace Nvk.Cad
                 var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                 if (ent == null) continue;
                 if (!string.Equals(ent.Layer, LayerPit, StringComparison.OrdinalIgnoreCase)) continue;
-                string h = NvkTag.Get1000(ent, "MH=");
-                if (string.IsNullOrEmpty(h)) continue;
+                string raw = NvkTag.Get1000(ent, "MH=");
+                if (string.IsNullOrEmpty(raw)) continue;
                 var xs = new List<double>();
                 var ys = new List<double>();
                 var pl2 = ent as Polyline;
+                int nVert = 0;
                 if (pl2 != null && pl2.NumberOfVertices >= 4)
                 {
-                    int n = pl2.NumberOfVertices < 4 ? pl2.NumberOfVertices : 4;
+                    nVert = pl2.NumberOfVertices;
+                    int n = nVert == 4 ? 4 : 0;
                     for (int i = 0; i < n; i++)
                     {
                         var p = pl2.GetPoint2dAt(i);
@@ -370,13 +394,24 @@ namespace Nvk.Cad
                         if (v == null) continue;
                         xs.Add(v.Position.X);
                         ys.Add(v.Position.Y);
-                        if (xs.Count >= 4) break;
                     }
+                    nVert = xs.Count;
+                    if (nVert != 4) xs.Clear();
                 }
-                if (xs.Count < 4) continue;
-                double ax, ay;
-                WellPitGeom.AxisFromRect(xs, ys, out ax, out ay);
-                map[h] = new[] { ax, ay };
+                double[] rot = null;
+                if (xs.Count == 4)
+                {
+                    double ax, ay;
+                    WellPitGeom.AxisFromRect(xs, ys, out ax, out ay);
+                    rot = new[] { ax, ay };
+                }
+                var parts = raw.Split(',');
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    string h = parts[i].Trim();
+                    if (h.Length == 0) continue;
+                    if (!map.ContainsKey(h) || rot != null) map[h] = rot;
+                }
             }
             return map;
         }
@@ -400,9 +435,37 @@ namespace Nvk.Cad
             return ids;
         }
 
-        static void DrawPlan(BlockTableRecord ms, Transaction tr, WellPitInput w, WellPitShape s)
+        sealed class WellItem
         {
-            AddPline3(ms, tr, s.Outer, true, LayerPit, 1, w.Handle);
+            public WellPitInput W;
+            public WellPitShape S;
+            public WellPitCfg Cfg;
+            public Func<double, double, double> Tin;
+            public double ZHint;
+            public string Handle;
+        }
+
+        static string HandlesOf(List<WellItem> grp)
+        {
+            if (grp == null || grp.Count == 0) return null;
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < grp.Count; i++)
+            {
+                string h = grp[i] != null ? grp[i].Handle : null;
+                if (string.IsNullOrEmpty(h) && grp[i] != null && grp[i].W != null)
+                    h = grp[i].W.Handle;
+                if (string.IsNullOrEmpty(h)) continue;
+                if (sb.Length > 0) sb.Append(',');
+                sb.Append(h);
+            }
+            return sb.Length > 0 ? sb.ToString() : null;
+        }
+
+        static void DrawPit(BlockTableRecord ms, Transaction tr, List<WellItem> grp, WellPitShape s)
+        {
+            if (s == null) return;
+            string mh = HandlesOf(grp);
+            AddPline3(ms, tr, s.Outer, true, LayerPit, 1, mh);
             AddPline3(ms, tr, s.Berm, true, LayerBerm, 3, null);
             if (s.SlopeRays != null)
             {
@@ -414,6 +477,11 @@ namespace Nvk.Cad
                 for (int i = 0; i < s.Faces.Count; i++)
                     AddFace(ms, tr, s.Faces[i], LayerSlope, 4);
             }
+        }
+
+        static void DrawName(BlockTableRecord ms, Transaction tr, WellPitInput w, WellPitShape s)
+        {
+            if (w == null || s == null) return;
             string name = string.IsNullOrWhiteSpace(w.Name) ? "колодец" : w.Name;
             double lx = w.X + s.Px * (s.BermAcross + 0.4);
             double ly = w.Y + s.Py * (s.BermAcross + 0.4);
@@ -421,25 +489,175 @@ namespace Nvk.Cad
                 AttachmentPoint.BottomLeft, 0.0, 8.0, true);
         }
 
+        static List<List<WellItem>> ClusterItems(List<WellItem> items)
+        {
+            var groups = new List<List<WellItem>>();
+            if (items == null || items.Count == 0) return groups;
+            int n = items.Count;
+            var parent = new int[n];
+            for (int i = 0; i < n; i++) parent[i] = i;
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = i + 1; j < n; j++)
+                {
+                    if (WellsConnect(items[i], items[j]))
+                        Join(parent, i, j);
+                }
+            }
+            var map = new Dictionary<int, List<WellItem>>();
+            for (int i = 0; i < n; i++)
+            {
+                int r = Find(parent, i);
+                List<WellItem> g;
+                if (!map.TryGetValue(r, out g))
+                {
+                    g = new List<WellItem>();
+                    map[r] = g;
+                    groups.Add(g);
+                }
+                g.Add(items[i]);
+            }
+            return groups;
+        }
+
+        static int Find(int[] p, int i)
+        {
+            while (p[i] != i) { p[i] = p[p[i]]; i = p[i]; }
+            return i;
+        }
+
+        static void Join(int[] p, int a, int b)
+        {
+            int ra = Find(p, a), rb = Find(p, b);
+            if (ra != rb) p[rb] = ra;
+        }
+
+        static bool WellsConnect(WellItem a, WellItem b)
+        {
+            if (a == null || b == null || a.S == null || b.S == null) return false;
+            if (WellPitGeom.PolysOverlap(a.S.Outer, b.S.Outer)) return true;
+            if (WellPitGeom.PolysOverlap(a.S.Berm, b.S.Berm)) return true;
+            var scfg = PipeCfg();
+            if (a.W != null && a.W.Pipes != null && b.W != null && b.W.Pipes != null)
+            {
+                var ra = new List<List<WellPt>>();
+                var rb = new List<List<WellPt>>();
+                CollectRects(a, scfg, ra);
+                CollectRects(b, scfg, rb);
+                for (int i = 0; i < ra.Count; i++)
+                    for (int j = 0; j < rb.Count; j++)
+                        if (WellPitGeom.PolysOverlap(ra[i], rb[j])) return true;
+            }
+            return false;
+        }
+
+        static List<List<WellPt>> BridgesOf(List<WellItem> grp)
+        {
+            var extra = new List<List<WellPt>>();
+            if (grp == null) return extra;
+            var scfg = PipeCfg();
+            for (int i = 0; i < grp.Count; i++)
+            {
+                var w = grp[i] != null ? grp[i].W : null;
+                if (w == null || w.Pipes == null) continue;
+                for (int k = 0; k < w.Pipes.Count; k++)
+                {
+                    var p = w.Pipes[k];
+                    if (p == null || !FarInGroup(grp, p)) continue;
+                    List<WellPt> rect;
+                    if (WellPitGeom.TrenchCorridor(w, p, scfg.BottomLeft(p.Diam), scfg.BottomRight(p.Diam), out rect))
+                        extra.Add(rect);
+                }
+            }
+            return extra;
+        }
+
+        static bool FarInGroup(List<WellItem> grp, WellPipeSeg p)
+        {
+            if (grp == null || p == null) return false;
+            for (int i = 0; i < grp.Count; i++)
+            {
+                var w = grp[i] != null ? grp[i].W : null;
+                if (w == null) continue;
+                double dx = p.X1 - w.X, dy = p.Y1 - w.Y;
+                double r = Math.Max(0.5, WellPitGeom.Radius(w));
+                if (dx * dx + dy * dy <= r * r + 0.05) return true;
+            }
+            return false;
+        }
+
+        static void CollectRects(WellItem it, SectionConfig scfg, List<List<WellPt>> dst)
+        {
+            if (it == null || it.W == null || it.W.Pipes == null || it.S == null) return;
+            var berm = it.S.Berm != null && it.S.Berm.Count >= 3 ? it.S.Berm : it.S.Outer;
+            for (int i = 0; i < it.W.Pipes.Count; i++)
+            {
+                var p = it.W.Pipes[i];
+                if (p == null) continue;
+                List<WellPt> rect;
+                if (WellPitGeom.TrenchRect(it.W, p, berm, scfg.BottomLeft(p.Diam), scfg.BottomRight(p.Diam), out rect))
+                    dst.Add(rect);
+            }
+        }
+
+        static WellPitShape ShapeOfGroup(List<WellItem> grp, WellPitCfg cfg,
+            ObjectId surfId, Transaction tr)
+        {
+            if (grp == null || grp.Count == 0) return null;
+            if (grp.Count == 1) return grp[0].S;
+            var shapes = new List<WellPitShape>();
+            double zHint = grp[0].ZHint;
+            double minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+            for (int i = 0; i < grp.Count; i++)
+            {
+                if (grp[i].S == null) continue;
+                shapes.Add(grp[i].S);
+                if (grp[i].ZHint > zHint) zHint = grp[i].ZHint;
+                var o = grp[i].S.Outer;
+                if (o == null) continue;
+                for (int k = 0; k < o.Count; k++)
+                {
+                    if (o[k].X < minX) minX = o[k].X;
+                    if (o[k].Y < minY) minY = o[k].Y;
+                    if (o[k].X > maxX) maxX = o[k].X;
+                    if (o[k].Y > maxY) maxY = o[k].Y;
+                }
+            }
+            if (shapes.Count == 0) return grp[0].S;
+            double pad = cfg != null && cfg.SlopeM > 1e-9 ? Math.Max(8.0, cfg.SlopeM * 20.0) : 2.0;
+            if (pad > 80.0) pad = 80.0;
+            var tris = SurfaceSampler.TrianglesInBox(tr, surfId,
+                minX - pad, minY - pad, maxX + pad, maxY + pad);
+            var tin = grp[0].Tin;
+            var extra = BridgesOf(grp);
+            var u = WellPitGeom.UnionPits(shapes, extra, cfg, tin, tris, zHint);
+            return u != null ? u : grp[0].S;
+        }
+
         sealed class PipeBatch
         {
             public List<List<WellPt>> Rects = new List<List<WellPt>>();
-            public List<List<WellPt>> Through = new List<List<WellPt>>();
             public List<double> Wx = new List<double>();
             public List<double> Wy = new List<double>();
             public List<double> WR = new List<double>();
             public double Z;
         }
 
-        static void CollectPipes(PipeBatch batch, WellPitInput w, WellPitShape s)
+        static SectionConfig PipeCfg()
         {
-            if (batch == null || w == null || w.Pipes == null) return;
-            var scfg = new SectionConfig
+            return new SectionConfig
             {
                 TrenchLeft = Math.Max(0.0, NvkUiState.TrenchLeft),
                 TrenchRight = Math.Max(0.0, NvkUiState.TrenchRight),
                 Joint = ParseJoint(NvkUiState.Joint)
             };
+        }
+
+        static void CollectPipes(PipeBatch batch, WellPitInput w, IList<WellPt> berm)
+        {
+            if (batch == null || w == null || w.Pipes == null) return;
+            if (berm == null || berm.Count < 3) return;
+            var scfg = PipeCfg();
             AddDisk(batch, w.X, w.Y, w.Sump, WellPitGeom.Radius(w));
             for (int i = 0; i < w.Pipes.Count; i++)
             {
@@ -447,14 +665,8 @@ namespace Nvk.Cad
                 if (p == null) continue;
                 double l = scfg.BottomLeft(p.Diam);
                 double r = scfg.BottomRight(p.Diam);
-                List<WellPt> cross, axis;
-                if (WellPitGeom.ThroughLines(w, p, l, r, out cross, out axis))
-                {
-                    batch.Through.Add(cross);
-                    batch.Through.Add(axis);
-                }
                 List<WellPt> rect;
-                if (WellPitGeom.TrenchRect(w, p, l, r, out rect))
+                if (WellPitGeom.TrenchRect(w, p, berm, l, r, out rect))
                     batch.Rects.Add(rect);
                 batch.Z = p.Invert0;
                 if (p.FarR > 0.05)
@@ -477,13 +689,18 @@ namespace Nvk.Cad
         static void DrawPipeBatch(BlockTableRecord ms, Transaction tr, PipeBatch batch)
         {
             if (batch == null) return;
-            for (int i = 0; i < batch.Through.Count; i++)
-                AddPline3(ms, tr, batch.Through[i], false, LayerPipeC, 1, null);
-            var outlines = WellPitGeom.UnionTrenchesAll(
-                batch.Rects, batch.Wx, batch.Wy, batch.WR, batch.Z);
-            for (int i = 0; i < outlines.Count; i++)
+            var red = WellPitGeom.UnionRects(batch.Rects, batch.Z);
+            for (int i = 0; i < red.Count; i++)
             {
-                var loop = outlines[i];
+                var loop = red[i];
+                if (loop == null || loop.Pts == null) continue;
+                AddPline3(ms, tr, loop.Pts, loop.Closed, LayerPipeC, 1, null);
+            }
+            var blue = WellPitGeom.UnionTrenchesAll(
+                batch.Rects, batch.Wx, batch.Wy, batch.WR, batch.Z);
+            for (int i = 0; i < blue.Count; i++)
+            {
+                var loop = blue[i];
                 if (loop == null || loop.Pts == null) continue;
                 AddPline3(ms, tr, loop.Pts, loop.Closed, LayerPipeR, 5, null);
             }

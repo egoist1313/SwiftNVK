@@ -174,11 +174,11 @@ namespace Nvk.Core.Tests
                     if (d > maxD) maxD = d;
                     if (p.X < minX) minX = p.X;
                     if (p.X > maxX) maxX = p.X;
-                    if (Math.Abs(p.Y - 0.8) < 0.12 && Math.Abs(p.X) > 15) hasTop = true;
-                    if (Math.Abs(p.Y + 0.8) < 0.12 && Math.Abs(p.X) > 15) hasBot = true;
+                    if (Math.Abs(p.Y - 0.8) < 0.12 && Math.Abs(p.X) > 4) hasTop = true;
+                    if (Math.Abs(p.Y + 0.8) < 0.12 && Math.Abs(p.X) > 4) hasBot = true;
                 }
                 if (loops[k].Closed && pts.Count >= 20 && minD > 0.4 && maxD < 0.6) hole = true;
-                if (maxX - minX > 30) span = true;
+                if (maxX - minX > 8) span = true;
             }
             Assert.False(hitsCenter);
             Assert.True(hole);
@@ -211,20 +211,159 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void TrenchRectStopsAtBerm()
+        {
+            var w = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100 };
+            var berm = SquareBerm(5);
+            var pipe = new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 20, Y1 = 0, Invert0 = 99.5, Diam = 0.3 };
+            List<WellPt> rect;
+            Assert.True(WellPitGeom.TrenchRect(w, pipe, berm, 0.30, 0.30, out rect));
+            double maxX = -1e9;
+            for (int i = 0; i < rect.Count; i++)
+                if (rect[i].X > maxX) maxX = rect[i].X;
+            Assert.True(maxX < 5.2);
+            Assert.True(maxX > 4.5);
+        }
+
+        [Fact]
+        public void RedUnionGoesThroughWellWithoutHole()
+        {
+            var w = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100 };
+            var berm = SquareBerm(5);
+            var pipes = new List<WellPipeSeg>
+            {
+                new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 20, Y1 = 0, Invert0 = 99.5, Diam = 0.3 },
+                new WellPipeSeg { X0 = 0, Y0 = 0, X1 = -20, Y1 = 0, Invert0 = 99.5, Diam = 0.3 }
+            };
+            var hw = new List<double> { 0.80, 0.80 };
+            var blue = WellPitGeom.UnionTrenches(w, berm, pipes, hw, hw);
+            var rects = new List<List<WellPt>>();
+            for (int i = 0; i < pipes.Count; i++)
+            {
+                List<WellPt> r;
+                Assert.True(WellPitGeom.TrenchRect(w, pipes[i], berm, 0.80, 0.80, out r));
+                rects.Add(r);
+            }
+            var red = WellPitGeom.UnionRects(rects, 99.5);
+            bool blueHole = false, redHole = false;
+            for (int k = 0; k < blue.Count; k++)
+            {
+                if (!blue[k].Closed || blue[k].Pts.Count < 20) continue;
+                double minD = 1e9, maxD = -1e9;
+                for (int i = 0; i < blue[k].Pts.Count; i++)
+                {
+                    double d = Math.Sqrt(blue[k].Pts[i].X * blue[k].Pts[i].X + blue[k].Pts[i].Y * blue[k].Pts[i].Y);
+                    if (d < minD) minD = d;
+                    if (d > maxD) maxD = d;
+                }
+                if (minD > 0.4 && maxD < 0.6) blueHole = true;
+            }
+            for (int k = 0; k < red.Count; k++)
+            {
+                if (!red[k].Closed || red[k].Pts.Count < 20) continue;
+                double minD = 1e9, maxD = -1e9;
+                for (int i = 0; i < red[k].Pts.Count; i++)
+                {
+                    double d = Math.Sqrt(red[k].Pts[i].X * red[k].Pts[i].X + red[k].Pts[i].Y * red[k].Pts[i].Y);
+                    if (d < minD) minD = d;
+                    if (d > maxD) maxD = d;
+                }
+                if (minD > 0.4 && maxD < 0.6) redHole = true;
+            }
+            Assert.True(blueHole);
+            Assert.False(redHole);
+            Assert.True(WellPitGeom.PointInPoly(rects[0], 0, 0) || red.Count >= 1);
+        }
+
+        [Fact]
+        public void OverlappingPitsUnionToOneBottom()
+        {
+            var cfg = new WellPitCfg { TrenchGap = 0.50, SlopeM = 0.0, Bedding = 0.0 };
+            var a = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
+            var b = new WellPitInput { X = 1.2, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
+            Func<double, double, double> tin = (x, y) => 105.0;
+            var sa = WellPitGeom.Build(a, cfg, tin);
+            var sb = WellPitGeom.Build(b, cfg, tin);
+            Assert.True(WellPitGeom.PolysOverlap(sa.Outer, sb.Outer));
+            var u = WellPitGeom.UnionPits(new List<WellPitShape> { sa, sb }, cfg, tin, null, 105);
+            Assert.NotNull(u);
+            Assert.NotNull(u.Outer);
+            double minX = 1e9, maxX = -1e9;
+            for (int i = 0; i < u.Outer.Count; i++)
+            {
+                if (u.Outer[i].X < minX) minX = u.Outer[i].X;
+                if (u.Outer[i].X > maxX) maxX = u.Outer[i].X;
+            }
+            Assert.True(maxX - minX > 2.5);
+        }
+
+        [Fact]
+        public void NearbyDisjointPitsUnionByHull()
+        {
+            var cfg = new WellPitCfg { TrenchGap = 0.50, SlopeM = 0.50, Bedding = 0.0 };
+            var a = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
+            var b = new WellPitInput { X = 2.5, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
+            Func<double, double, double> tin = (x, y) => 105.0;
+            var sa = WellPitGeom.Build(a, cfg, tin);
+            var sb = WellPitGeom.Build(b, cfg, tin);
+            Assert.False(WellPitGeom.PolysOverlap(sa.Outer, sb.Outer));
+            Assert.True(WellPitGeom.PolysOverlap(sa.Berm, sb.Berm));
+            var u = WellPitGeom.UnionPits(new List<WellPitShape> { sa, sb }, cfg, tin, null, 105);
+            Assert.NotNull(u);
+            Assert.NotNull(u.Outer);
+            double minX = 1e9, maxX = -1e9;
+            for (int i = 0; i < u.Outer.Count; i++)
+            {
+                if (u.Outer[i].X < minX) minX = u.Outer[i].X;
+                if (u.Outer[i].X > maxX) maxX = u.Outer[i].X;
+            }
+            Assert.True(maxX - minX > 4.0);
+            Assert.True(u.Berm != null && u.Berm.Count >= 4);
+        }
+
+        [Fact]
+        public void CorridorJoinsTwoPitsIntoOneBottom()
+        {
+            var cfg = new WellPitCfg { TrenchGap = 0.50, SlopeM = 0.0, Bedding = 0.0 };
+            var a = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
+            var b = new WellPitInput { X = 4, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
+            Func<double, double, double> tin = (x, y) => 105.0;
+            var sa = WellPitGeom.Build(a, cfg, tin);
+            var sb = WellPitGeom.Build(b, cfg, tin);
+            List<WellPt> corridor;
+            Assert.True(WellPitGeom.TrenchCorridor(
+                a, new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 4, Y1 = 0, Invert0 = 100, Diam = 0.3 },
+                0.80, 0.80, out corridor));
+            var u = WellPitGeom.UnionPits(
+                new List<WellPitShape> { sa, sb },
+                new List<List<WellPt>> { corridor },
+                cfg, tin, null, 105);
+            Assert.NotNull(u);
+            double minX = 1e9, maxX = -1e9;
+            for (int i = 0; i < u.Outer.Count; i++)
+            {
+                if (u.Outer[i].X < minX) minX = u.Outer[i].X;
+                if (u.Outer[i].X > maxX) maxX = u.Outer[i].X;
+            }
+            Assert.True(maxX - minX > 4.5);
+        }
+
+        [Fact]
         public void TwoWellsOnPipeStayParallelNoCross()
         {
             var a = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100 };
-            var b = new WellPitInput { X = 12, Y = 0, Diam = 1.0, Sump = 100 };
-            var pa = new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 12, Y1 = 0, Invert0 = 99.5, Diam = 0.3, FarR = 0.5 };
-            var pb = new WellPipeSeg { X0 = 12, Y0 = 0, X1 = 0, Y1 = 0, Invert0 = 99.5, Diam = 0.3, FarR = 0.5 };
+            var b = new WellPitInput { X = 4, Y = 0, Diam = 1.0, Sump = 100 };
+            var pa = new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 4, Y1 = 0, Invert0 = 99.5, Diam = 0.3, FarR = 0.5 };
+            var pb = new WellPipeSeg { X0 = 4, Y0 = 0, X1 = 0, Y1 = 0, Invert0 = 99.5, Diam = 0.3, FarR = 0.5 };
             List<WellPt> ra, rb;
-            Assert.True(WellPitGeom.TrenchRect(a, pa, 0.80, 0.80, out ra));
-            Assert.True(WellPitGeom.TrenchRect(b, pb, 0.80, 0.80, out rb));
+            Assert.True(WellPitGeom.TrenchRect(a, pa, SquareBermAt(0, 0, 3), 0.80, 0.80, out ra));
+            Assert.True(WellPitGeom.TrenchRect(b, pb, SquareBermAt(4, 0, 3), 0.80, 0.80, out rb));
             var loops = WellPitGeom.UnionTrenchesAll(
                 new List<List<WellPt>> { ra, rb },
-                new[] { 0.0, 12.0 }, new[] { 0.0, 0.0 }, new[] { 0.5, 0.5 }, 99.5);
+                new[] { 0.0, 4.0 }, new[] { 0.0, 0.0 }, new[] { 0.5, 0.5 }, 99.5);
             Assert.True(loops.Count >= 1);
             bool arcA = false, arcB = false, longTop = false, longBot = false, cross = false, hitsCenter = false;
+            double topMin = 1e9, topMax = -1e9, botMin = 1e9, botMax = -1e9;
             for (int k = 0; k < loops.Count; k++)
             {
                 var pts = loops[k].Pts;
@@ -233,22 +372,30 @@ namespace Nvk.Core.Tests
                 {
                     var p = pts[i];
                     if (Math.Abs(p.X) < 0.02 && Math.Abs(p.Y) < 0.02) hitsCenter = true;
-                    if (Math.Abs(p.X - 12) < 0.02 && Math.Abs(p.Y) < 0.02) hitsCenter = true;
+                    if (Math.Abs(p.X - 4) < 0.02 && Math.Abs(p.Y) < 0.02) hitsCenter = true;
                     double da = Math.Sqrt(p.X * p.X + p.Y * p.Y);
-                    double db = Math.Sqrt((p.X - 12) * (p.X - 12) + p.Y * p.Y);
+                    double db = Math.Sqrt((p.X - 4) * (p.X - 4) + p.Y * p.Y);
                     if (Math.Abs(da - 0.5) < 0.08 && p.X > 0.05) arcA = true;
-                    if (Math.Abs(db - 0.5) < 0.08 && p.X < 11.95) arcB = true;
+                    if (Math.Abs(db - 0.5) < 0.08 && p.X < 3.95) arcB = true;
+                    if (Math.Abs(p.Y - 0.8) < 0.15)
+                    {
+                        if (p.X < topMin) topMin = p.X;
+                        if (p.X > topMax) topMax = p.X;
+                    }
+                    if (Math.Abs(p.Y + 0.8) < 0.15)
+                    {
+                        if (p.X < botMin) botMin = p.X;
+                        if (p.X > botMax) botMax = p.X;
+                    }
                     if (i >= nSeg) continue;
                     var q = pts[(i + 1) % pts.Count];
-                    if (Math.Abs(p.Y - 0.8) < 0.15 && Math.Abs(q.Y - 0.8) < 0.15
-                        && Math.Abs(p.X - q.X) > 5) longTop = true;
-                    if (Math.Abs(p.Y + 0.8) < 0.15 && Math.Abs(q.Y + 0.8) < 0.15
-                        && Math.Abs(p.X - q.X) > 5) longBot = true;
                     double mx = 0.5 * (p.X + q.X);
-                    if (mx > 2.0 && mx < 10.0 && p.Y * q.Y < -0.2)
+                    if (mx > 1.0 && mx < 3.0 && p.Y * q.Y < -0.2)
                         cross = true;
                 }
             }
+            if (topMax - topMin > 2) longTop = true;
+            if (botMax - botMin > 2) longBot = true;
             Assert.False(hitsCenter);
             Assert.False(cross);
             Assert.True(arcA);
@@ -275,12 +422,17 @@ namespace Nvk.Core.Tests
 
         static List<WellPt> SquareBerm(double h)
         {
+            return SquareBermAt(0, 0, h);
+        }
+
+        static List<WellPt> SquareBermAt(double cx, double cy, double h)
+        {
             return new List<WellPt>
             {
-                new WellPt(-h, -h, 105),
-                new WellPt(h, -h, 105),
-                new WellPt(h, h, 105),
-                new WellPt(-h, h, 105)
+                new WellPt(cx - h, cy - h, 105),
+                new WellPt(cx + h, cy - h, 105),
+                new WellPt(cx + h, cy + h, 105),
+                new WellPt(cx - h, cy + h, 105)
             };
         }
 

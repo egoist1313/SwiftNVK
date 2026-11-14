@@ -599,7 +599,7 @@ namespace Nvk.Core
             List<WellPt[]> rays)
         {
             int n = bot.Count;
-            if (n < 4) return;
+            if (n < 3) return;
             WellPt lastG = default(WellPt);
             bool hasLast = false;
             double firstNx = 0.0, firstNy = 1.0;
@@ -747,9 +747,24 @@ namespace Nvk.Core
         }
 
         /// <summary>
-        /// Прямоугольник траншеи вдоль трубы: ось этого колодца → ось дальнего.
+        /// Прямоугольник траншеи: от оси колодца до бровки (обрезается по бровке).
         /// </summary>
-        public static bool TrenchRect(WellPitInput w, WellPipeSeg p,
+        public static bool TrenchRect(WellPitInput w, WellPipeSeg p, IList<WellPt> berm,
+            double hwL, double hwR, out List<WellPt> rect)
+        {
+            rect = null;
+            WellPt bermL, L0, R0, bermR, C;
+            double ux, uy, lx, ly, cx, cy, R, z0;
+            if (!PipeFrame(w, p, berm, hwL, hwR,
+                out ux, out uy, out lx, out ly, out cx, out cy, out R, out z0,
+                out bermL, out L0, out R0, out bermR, out C))
+                return false;
+            rect = new List<WellPt> { bermL, L0, R0, bermR };
+            return true;
+        }
+
+        /// <summary>Прямоугольник траншеи вдоль всей трубы (без обрезки по бровке).</summary>
+        public static bool TrenchCorridor(WellPitInput w, WellPipeSeg p,
             double hwL, double hwR, out List<WellPt> rect)
         {
             rect = null;
@@ -802,7 +817,7 @@ namespace Nvk.Core
                 double l = hwL != null && i < hwL.Count ? hwL[i] : 0.30;
                 double r = hwR != null && i < hwR.Count ? hwR[i] : 0.30;
                 List<WellPt> rect;
-                if (!TrenchRect(w, p, l, r, out rect)) continue;
+                if (!TrenchRect(w, p, berm, l, r, out rect)) continue;
                 rects.Add(rect);
                 z = p.Invert0;
                 if (p.FarR > 0.05)
@@ -812,14 +827,221 @@ namespace Nvk.Core
                     dR.Add(p.FarR);
                 }
             }
-            return PolyUnion.UnionMinusDisks(rects, dx, dy, dR, z, false);
+            return PolyUnion.UnionMinusDisks(rects, dx, dy, dR, z, true);
         }
 
         public static List<PolyLoop> UnionTrenchesAll(
             IList<List<WellPt>> rects,
             IList<double> wx, IList<double> wy, IList<double> wR, double z)
         {
-            return PolyUnion.UnionMinusDisks(rects, wx, wy, wR, z, false);
+            return PolyUnion.UnionMinusDisks(rects, wx, wy, wR, z, true);
+        }
+
+        /// <summary>Объединение прямоугольников без выреза колодца (красная линия).</summary>
+        public static List<PolyLoop> UnionRects(IList<List<WellPt>> rects, double z)
+        {
+            return PolyUnion.UnionMinusDisks(rects, null, null, null, z, true);
+        }
+
+        public static List<PolyLoop> UnionPolygons(IList<List<WellPt>> polys, double z)
+        {
+            return PolyUnion.UnionMinusDisks(polys, null, null, null, z, false);
+        }
+
+        public static bool PolysOverlap(IList<WellPt> a, IList<WellPt> b)
+        {
+            if (a == null || b == null || a.Count < 3 || b.Count < 3) return false;
+            for (int i = 0; i < a.Count; i++)
+                if (PointInPoly(b, a[i].X, a[i].Y)) return true;
+            for (int i = 0; i < b.Count; i++)
+                if (PointInPoly(a, b[i].X, b[i].Y)) return true;
+            int na = a.Count, nb = b.Count;
+            for (int i = 0; i < na; i++)
+            {
+                var p = a[i];
+                var q = a[(i + 1) % na];
+                for (int j = 0; j < nb; j++)
+                {
+                    var r = b[j];
+                    var s = b[(j + 1) % nb];
+                    double t, u;
+                    if (SegSeg(p.X, p.Y, q.X, q.Y, r.X, r.Y, s.X, s.Y, out t, out u))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Один котлован из пересекающихся подошв: объединение дна и новая бровка.
+        /// Если подошвы не сливаются в один контур — выпуклая оболочка.
+        /// </summary>
+        public static WellPitShape UnionPits(IList<WellPitShape> shapes, WellPitCfg c,
+            Func<double, double, double> tinZ, IList<TinTri> tris, double zHint)
+        {
+            return UnionPits(shapes, null, c, tinZ, tris, zHint);
+        }
+
+        public static WellPitShape UnionPits(IList<WellPitShape> shapes, IList<List<WellPt>> extraPolys,
+            WellPitCfg c, Func<double, double, double> tinZ, IList<TinTri> tris, double zHint)
+        {
+            if (shapes == null || shapes.Count == 0) return null;
+            if (shapes.Count == 1 && (extraPolys == null || extraPolys.Count == 0)) return shapes[0];
+            if (c == null) c = new WellPitCfg();
+            var bots = new List<List<WellPt>>();
+            double zBot = 1e9;
+            double ax = 1.0, ay = 0.0, px = 0.0, py = 1.0;
+            double along = 0.0, across = 0.0;
+            for (int i = 0; i < shapes.Count; i++)
+            {
+                var s = shapes[i];
+                if (s == null || s.Outer == null || s.Outer.Count < 3) continue;
+                bots.Add(s.Outer);
+                if (bots.Count == 1)
+                {
+                    ax = s.Ax;
+                    ay = s.Ay;
+                    px = s.Px;
+                    py = s.Py;
+                    along = s.AlongHalf;
+                    across = s.AcrossHalf;
+                }
+                for (int k = 0; k < s.Outer.Count; k++)
+                    if (s.Outer[k].Z < zBot) zBot = s.Outer[k].Z;
+            }
+            if (bots.Count == 0) return null;
+            if (zBot > 1e8) zBot = 0.0;
+            var extra = extraPolys;
+            if (extra != null)
+            {
+                for (int i = 0; i < extra.Count; i++)
+                    if (extra[i] != null && extra[i].Count >= 3)
+                        bots.Add(extra[i]);
+            }
+            var loops = UnionPolygons(bots, zBot);
+            List<WellPt> bot = null;
+            double best = -1.0;
+            int nGood = 0;
+            for (int i = 0; i < loops.Count; i++)
+            {
+                if (loops[i] == null || loops[i].Pts == null || loops[i].Pts.Count < 3) continue;
+                double ar = Math.Abs(SignedArea(loops[i].Pts));
+                if (ar < 1e-4) continue;
+                nGood++;
+                if (ar > best)
+                {
+                    best = ar;
+                    bot = new List<WellPt>(loops[i].Pts);
+                }
+            }
+            if (nGood != 1)
+            {
+                var all = new List<WellPt>();
+                for (int i = 0; i < bots.Count; i++)
+                    for (int k = 0; k < bots[i].Count; k++)
+                        all.Add(bots[i][k]);
+                var hull = ConvexHull(all);
+                if (hull != null && hull.Count >= 3) bot = hull;
+            }
+            if (bot == null || bot.Count < 3) return shapes[0];
+            if (SignedArea(bot) > 0.0) bot.Reverse();
+            for (int i = 0; i < bot.Count; i++)
+                bot[i] = new WellPt(bot[i].X, bot[i].Y, zBot);
+
+            var berm = new List<WellPt>();
+            var faces = new List<WellPt[]>();
+            var rays = new List<WellPt[]>();
+            double zMid = zHint;
+            if (double.IsNaN(zMid) || zMid < 1.0) zMid = zBot + 2.0;
+            GradeSquare(bot, c.SlopeM, zBot, zMid, tinZ, tris, berm, faces, rays);
+            double maxOff = 0.0;
+            for (int i = 0; i < berm.Count; i++)
+            {
+                double dx = berm[i].X - bot[0].X, dy = berm[i].Y - bot[0].Y;
+                double d = Math.Sqrt(dx * dx + dy * dy);
+                if (d > maxOff) maxOff = d;
+            }
+            return new WellPitShape
+            {
+                AlongHalf = along,
+                AcrossHalf = across,
+                InnerHalf = along,
+                Ax = ax,
+                Ay = ay,
+                Px = px,
+                Py = py,
+                Outer = bot,
+                Berm = berm,
+                Faces = faces,
+                SlopeRays = rays,
+                HasInner = false,
+                BermAlong = along + maxOff,
+                BermAcross = across + maxOff
+            };
+        }
+
+        static double SignedArea(IList<WellPt> p)
+        {
+            double a = 0.0;
+            int n = p.Count;
+            for (int i = 0; i < n; i++)
+            {
+                var q = p[(i + 1) % n];
+                a += p[i].X * q.Y - q.X * p[i].Y;
+            }
+            return 0.5 * a;
+        }
+
+        static double Cross(WellPt o, WellPt a, WellPt b)
+        {
+            return (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
+        }
+
+        /// <summary>Выпуклая оболочка в плане (CCW). Нужна, когда подошвы рядом, но не пересекаются.</summary>
+        public static List<WellPt> ConvexHull(IList<WellPt> pts)
+        {
+            var src = new List<WellPt>();
+            if (pts == null) return src;
+            for (int i = 0; i < pts.Count; i++)
+            {
+                bool dup = false;
+                for (int j = 0; j < src.Count; j++)
+                {
+                    if (Math.Abs(src[j].X - pts[i].X) < 1e-9
+                        && Math.Abs(src[j].Y - pts[i].Y) < 1e-9)
+                    {
+                        dup = true;
+                        break;
+                    }
+                }
+                if (!dup) src.Add(pts[i]);
+            }
+            if (src.Count <= 3) return src;
+            src.Sort((a, b) =>
+            {
+                int c = a.X.CompareTo(b.X);
+                return c != 0 ? c : a.Y.CompareTo(b.Y);
+            });
+            var lower = new List<WellPt>();
+            for (int i = 0; i < src.Count; i++)
+            {
+                while (lower.Count >= 2
+                    && Cross(lower[lower.Count - 2], lower[lower.Count - 1], src[i]) <= 1e-12)
+                    lower.RemoveAt(lower.Count - 1);
+                lower.Add(src[i]);
+            }
+            var upper = new List<WellPt>();
+            for (int i = src.Count - 1; i >= 0; i--)
+            {
+                while (upper.Count >= 2
+                    && Cross(upper[upper.Count - 2], upper[upper.Count - 1], src[i]) <= 1e-12)
+                    upper.RemoveAt(upper.Count - 1);
+                upper.Add(src[i]);
+            }
+            if (lower.Count > 0) lower.RemoveAt(lower.Count - 1);
+            if (upper.Count > 0) upper.RemoveAt(upper.Count - 1);
+            lower.AddRange(upper);
+            return lower;
         }
 
         static bool PipeStrip(WellPitInput w, WellPipeSeg p, double hwL, double hwR,
