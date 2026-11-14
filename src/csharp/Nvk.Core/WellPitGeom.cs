@@ -20,6 +20,7 @@ namespace Nvk.Core
         public double X0, Y0, X1, Y1;
         public double Invert0, Invert1;
         public double Diam;
+        public double FarR;
     }
 
     /// <summary>Колодец Civil: план, отметки, ось трубы.</summary>
@@ -746,34 +747,54 @@ namespace Nvk.Core
         }
 
         /// <summary>
-        /// Прямоугольник траншеи: бровка → ось колодца (L0–R0) → бровка.
-        /// Замыкающее ребро — по бровке; при объединении его выкидываем.
+        /// Прямоугольник траншеи вдоль трубы: ось этого колодца → ось дальнего.
         /// </summary>
-        public static bool TrenchRect(WellPitInput w, WellPipeSeg p, IList<WellPt> berm,
+        public static bool TrenchRect(WellPitInput w, WellPipeSeg p,
             double hwL, double hwR, out List<WellPt> rect)
         {
             rect = null;
-            WellPt bermL, L0, R0, bermR, C;
+            WellPt L0, R0, farL, farR, C, far;
             double ux, uy, lx, ly, cx, cy, R, z0;
-            if (!PipeFrame(w, p, berm, hwL, hwR,
+            if (!PipeStrip(w, p, hwL, hwR,
                 out ux, out uy, out lx, out ly, out cx, out cy, out R, out z0,
-                out bermL, out L0, out R0, out bermR, out C))
+                out L0, out R0, out farL, out farR, out C, out far))
                 return false;
-            rect = new List<WellPt> { bermL, L0, R0, bermR };
+            rect = new List<WellPt> { L0, farL, farR, R0 };
+            return true;
+        }
+
+        /// <summary>Красная сквозная: поперечина на оси колодца и ось трубы до дальнего.</summary>
+        public static bool ThroughLines(WellPitInput w, WellPipeSeg p,
+            double hwL, double hwR, out List<WellPt> cross, out List<WellPt> axis)
+        {
+            cross = axis = null;
+            WellPt L0, R0, farL, farR, C, far;
+            double ux, uy, lx, ly, cx, cy, R, z0;
+            if (!PipeStrip(w, p, hwL, hwR,
+                out ux, out uy, out lx, out ly, out cx, out cy, out R, out z0,
+                out L0, out R0, out farL, out farR, out C, out far))
+                return false;
+            cross = new List<WellPt> { L0, C, R0 };
+            axis = new List<WellPt> { C, far };
             return true;
         }
 
         /// <summary>
-        /// Синие контуры: объединение пересекающихся прямоугольников траншей
-        /// минус колодец. Наложение рёбер убирается.
+        /// Синие контуры одного колодца. Для нескольких колодцев — UnionTrenchesAll.
         /// </summary>
         public static List<PolyLoop> UnionTrenches(
             WellPitInput w, IList<WellPt> berm,
             IList<WellPipeSeg> pipes, IList<double> hwL, IList<double> hwR)
         {
             var rects = new List<List<WellPt>>();
+            var dx = new List<double>();
+            var dy = new List<double>();
+            var dR = new List<double>();
             if (w == null || pipes == null) return new List<PolyLoop>();
             double z = w.Sump;
+            dx.Add(w.X);
+            dy.Add(w.Y);
+            dR.Add(Radius(w));
             for (int i = 0; i < pipes.Count; i++)
             {
                 var p = pipes[i];
@@ -781,11 +802,61 @@ namespace Nvk.Core
                 double l = hwL != null && i < hwL.Count ? hwL[i] : 0.30;
                 double r = hwR != null && i < hwR.Count ? hwR[i] : 0.30;
                 List<WellPt> rect;
-                if (!TrenchRect(w, p, berm, l, r, out rect)) continue;
+                if (!TrenchRect(w, p, l, r, out rect)) continue;
                 rects.Add(rect);
                 z = p.Invert0;
+                if (p.FarR > 0.05)
+                {
+                    dx.Add(p.X1);
+                    dy.Add(p.Y1);
+                    dR.Add(p.FarR);
+                }
             }
-            return PolyUnion.UnionMinusDisk(rects, w.X, w.Y, Radius(w), z, true);
+            return PolyUnion.UnionMinusDisks(rects, dx, dy, dR, z, false);
+        }
+
+        public static List<PolyLoop> UnionTrenchesAll(
+            IList<List<WellPt>> rects,
+            IList<double> wx, IList<double> wy, IList<double> wR, double z)
+        {
+            return PolyUnion.UnionMinusDisks(rects, wx, wy, wR, z, false);
+        }
+
+        static bool PipeStrip(WellPitInput w, WellPipeSeg p, double hwL, double hwR,
+            out double ux, out double uy, out double lx, out double ly,
+            out double cx, out double cy, out double R, out double z0,
+            out WellPt L0, out WellPt R0, out WellPt farL, out WellPt farR,
+            out WellPt C, out WellPt far)
+        {
+            ux = uy = lx = ly = cx = cy = R = z0 = 0.0;
+            L0 = R0 = farL = farR = C = far = new WellPt();
+            if (w == null || p == null) return false;
+            if (hwL < 0.05) hwL = 0.05;
+            if (hwR < 0.05) hwR = 0.05;
+            double dx = p.X1 - w.X, dy = p.Y1 - w.Y;
+            double len = Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-6)
+            {
+                dx = p.X1 - p.X0;
+                dy = p.Y1 - p.Y0;
+                len = Math.Sqrt(dx * dx + dy * dy);
+            }
+            if (len < 1e-6) return false;
+            ux = dx / len;
+            uy = dy / len;
+            lx = -uy;
+            ly = ux;
+            cx = w.X;
+            cy = w.Y;
+            R = Radius(w);
+            z0 = p.Invert0;
+            L0 = new WellPt(cx + lx * hwL, cy + ly * hwL, z0);
+            R0 = new WellPt(cx - lx * hwR, cy - ly * hwR, z0);
+            farL = new WellPt(p.X1 + lx * hwL, p.Y1 + ly * hwL, z0);
+            farR = new WellPt(p.X1 - lx * hwR, p.Y1 - ly * hwR, z0);
+            C = new WellPt(cx, cy, z0);
+            far = new WellPt(p.X1, p.Y1, z0);
+            return true;
         }
 
         static bool PipeFrame(WellPitInput w, WellPipeSeg p, IList<WellPt> berm,

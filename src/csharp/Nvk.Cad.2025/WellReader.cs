@@ -20,13 +20,7 @@ namespace Nvk.Cad
             {
                 pos = Safe.Prop(st, "Location") is Point3d p ? p : Point3d.Origin;
             }
-            double diam = Safe.PropDouble(st, "StructureInnerDiameterOrWidth", 0.0);
-            if (diam <= 0.0) diam = Safe.PropDouble(st, "InnerDiameterOrWidth", 0.0);
-            if (diam <= 0.0) diam = Safe.PropDouble(st, "InnerDiameter", 0.0);
-            if (diam <= 0.0) diam = Safe.PropDouble(st, "Diameter", 0.0);
-            if (diam <= 0.0) diam = Safe.PropDouble(st, "BoundingShapeWidth", 0.0);
-            if (diam > 0.0) diam = Safe.Meters(diam);
-            if (diam < 0.10) diam = 1.0;
+            double diam = StructureDiam(st);
 
             double rim = Safe.PropDouble(st, "RimElevation", pos.Z);
             double sump = Safe.PropDouble(st, "SumpElevation", 0.0);
@@ -115,6 +109,23 @@ namespace Nvk.Cad
             return a;
         }
 
+        static double StructureDiam(CivilDb.Structure st)
+        {
+            double diam = Safe.PropDouble(st, "StructureInnerDiameterOrWidth", 0.0);
+            if (diam <= 0.0) diam = Safe.PropDouble(st, "InnerDiameterOrWidth", 0.0);
+            if (diam <= 0.0) diam = Safe.PropDouble(st, "InnerDiameter", 0.0);
+            if (diam <= 0.0) diam = Safe.PropDouble(st, "Diameter", 0.0);
+            if (diam <= 0.0) diam = Safe.PropDouble(st, "BoundingShapeWidth", 0.0);
+            if (diam > 0.0) diam = Safe.Meters(diam);
+            if (diam < 0.10) diam = 1.0;
+            return diam;
+        }
+
+        static double StructureRadius(CivilDb.Structure st)
+        {
+            return 0.5 * StructureDiam(st);
+        }
+
         static WellPipeSeg MakePipeSeg(Transaction tr, CivilDb.Pipe pipe, WellPitInput well, double diam)
         {
             Point3d a = pipe.StartPoint;
@@ -137,6 +148,16 @@ namespace Nvk.Cad
             double eiCtr = Safe.PropDouble(pipe, "EndCenterlineElevation", b.Z);
             double si = siCtr - diam * 0.5;
             double ei = eiCtr - diam * 0.5;
+            double farR = 0.0;
+            if (!farId.IsNull && tr != null)
+            {
+                try
+                {
+                    var other = tr.GetObject(farId, OpenMode.ForRead) as CivilDb.Structure;
+                    if (other != null) farR = StructureRadius(other);
+                }
+                catch (Exc) { }
+            }
             return new WellPipeSeg
             {
                 X0 = well.X,
@@ -145,7 +166,8 @@ namespace Nvk.Cad
                 Y1 = far.Y,
                 Invert0 = startNear ? si : ei,
                 Invert1 = startNear ? ei : si,
-                Diam = diam > 0.05 ? diam : 0.20
+                Diam = diam > 0.05 ? diam : 0.20,
+                FarR = farR
             };
         }
 

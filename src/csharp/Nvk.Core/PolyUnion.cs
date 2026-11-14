@@ -20,10 +20,19 @@ namespace Nvk.Core
         const int WellN = 36;
         const double Quant = 1e7;
 
-        /// <param name="dropClose">Выкинуть замыкающее ребро каждого входа (бровка).</param>
         public static List<PolyLoop> UnionMinusDisk(
             IList<List<WellPt>> rects, double cx, double cy, double R, double z,
             bool dropClose)
+        {
+            return UnionMinusDisks(rects,
+                new[] { cx }, new[] { cy }, new[] { R }, z, dropClose);
+        }
+
+        /// <param name="dropClose">Выкинуть замыкающее ребро каждого входа.</param>
+        public static List<PolyLoop> UnionMinusDisks(
+            IList<List<WellPt>> rects,
+            IList<double> wx, IList<double> wy, IList<double> wR,
+            double z, bool dropClose)
         {
             var loops = new List<PolyLoop>();
             if (rects == null || rects.Count == 0) return loops;
@@ -39,12 +48,23 @@ namespace Nvk.Core
             }
             if (subjects.Count == 0) return loops;
 
-            var well = WellPoly(cx, cy, R, z);
+            var wells = new List<List<WellPt>>();
+            if (wx != null)
+            {
+                int n = wx.Count;
+                for (int i = 0; i < n; i++)
+                {
+                    double R = wR != null && i < wR.Count ? wR[i] : 0.0;
+                    double cy = wy != null && i < wy.Count ? wy[i] : 0.0;
+                    var well = WellPoly(wx[i], cy, R, z);
+                    if (well != null && well.Count >= 3) wells.Add(well);
+                }
+            }
             var raw = new List<Raw>();
             for (int i = 0; i < subjects.Count; i++)
                 AddClosed(raw, subjects[i]);
-            if (well != null && well.Count >= 3)
-                AddClosed(raw, well);
+            for (int i = 0; i < wells.Count; i++)
+                AddClosed(raw, wells[i]);
 
             var weld = new Weld();
             var cuts = new List<double>[raw.Count];
@@ -95,8 +115,8 @@ namespace Nvk.Core
                 double len = Math.Sqrt(dx * dx + dy * dy);
                 if (len < 1e-9) continue;
                 double nx = -dy / len, ny = dx / len;
-                bool inL = InUnion(mx + nx * Off, my + ny * Off, subjects, well);
-                bool inR = InUnion(mx - nx * Off, my - ny * Off, subjects, well);
+                bool inL = InUnion(mx + nx * Off, my + ny * Off, subjects, wells);
+                bool inR = InUnion(mx - nx * Off, my - ny * Off, subjects, wells);
                 if (inL == inR) continue;
                 keep.Add(f);
             }
@@ -128,9 +148,13 @@ namespace Nvk.Core
             }
         }
 
-        static bool InUnion(double x, double y, List<List<WellPt>> subjects, List<WellPt> well)
+        static bool InUnion(double x, double y, List<List<WellPt>> subjects, List<List<WellPt>> wells)
         {
-            if (well != null && WellPitGeom.PointInPoly(well, x, y)) return false;
+            if (wells != null)
+            {
+                for (int i = 0; i < wells.Count; i++)
+                    if (WellPitGeom.PointInPoly(wells[i], x, y)) return false;
+            }
             for (int i = 0; i < subjects.Count; i++)
                 if (WellPitGeom.PointInPoly(subjects[i], x, y)) return true;
             return false;

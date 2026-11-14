@@ -160,36 +160,31 @@ namespace Nvk.Core.Tests
             };
             var hw = new List<double> { 0.80, 0.80 };
             var loops = WellPitGeom.UnionTrenches(w, berm, pipes, hw, hw);
-            bool hole = false;
-            bool longTop = false;
-            bool longBot = false;
-            bool hitsCenter = false;
+            bool hole = false, hitsCenter = false, hasTop = false, hasBot = false, span = false;
             for (int k = 0; k < loops.Count; k++)
             {
                 var pts = loops[k].Pts;
-                bool allOnWell = pts.Count >= 8;
-                double minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+                double minD = 1e9, maxD = -1e9, minX = 1e9, maxX = -1e9;
                 for (int i = 0; i < pts.Count; i++)
                 {
                     var p = pts[i];
                     if (Math.Abs(p.X) < 0.02 && Math.Abs(p.Y) < 0.02) hitsCenter = true;
                     double d = Math.Sqrt(p.X * p.X + p.Y * p.Y);
-                    if (Math.Abs(d - 0.5) > 0.06) allOnWell = false;
+                    if (d < minD) minD = d;
+                    if (d > maxD) maxD = d;
                     if (p.X < minX) minX = p.X;
                     if (p.X > maxX) maxX = p.X;
-                    if (p.Y < minY) minY = p.Y;
-                    if (p.Y > maxY) maxY = p.Y;
+                    if (Math.Abs(p.Y - 0.8) < 0.12 && Math.Abs(p.X) > 15) hasTop = true;
+                    if (Math.Abs(p.Y + 0.8) < 0.12 && Math.Abs(p.X) > 15) hasBot = true;
                 }
-                if (loops[k].Closed && allOnWell) hole = true;
-                if (maxX - minX > 8.0 && Math.Abs(minY - 0.8) < 0.15 && Math.Abs(maxY - 0.8) < 0.15)
-                    longTop = true;
-                if (maxX - minX > 8.0 && Math.Abs(minY + 0.8) < 0.15 && Math.Abs(maxY + 0.8) < 0.15)
-                    longBot = true;
+                if (loops[k].Closed && pts.Count >= 20 && minD > 0.4 && maxD < 0.6) hole = true;
+                if (maxX - minX > 30) span = true;
             }
             Assert.False(hitsCenter);
             Assert.True(hole);
-            Assert.True(longTop);
-            Assert.True(longBot);
+            Assert.True(hasTop);
+            Assert.True(hasBot);
+            Assert.True(span);
         }
 
         [Fact]
@@ -213,6 +208,53 @@ namespace Nvk.Core.Tests
                     if (Math.Abs(pts[i].X) < 0.02 && Math.Abs(pts[i].Y) < 0.02) hitsCenter = true;
             }
             Assert.False(hitsCenter);
+        }
+
+        [Fact]
+        public void TwoWellsOnPipeStayParallelNoCross()
+        {
+            var a = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100 };
+            var b = new WellPitInput { X = 12, Y = 0, Diam = 1.0, Sump = 100 };
+            var pa = new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 12, Y1 = 0, Invert0 = 99.5, Diam = 0.3, FarR = 0.5 };
+            var pb = new WellPipeSeg { X0 = 12, Y0 = 0, X1 = 0, Y1 = 0, Invert0 = 99.5, Diam = 0.3, FarR = 0.5 };
+            List<WellPt> ra, rb;
+            Assert.True(WellPitGeom.TrenchRect(a, pa, 0.80, 0.80, out ra));
+            Assert.True(WellPitGeom.TrenchRect(b, pb, 0.80, 0.80, out rb));
+            var loops = WellPitGeom.UnionTrenchesAll(
+                new List<List<WellPt>> { ra, rb },
+                new[] { 0.0, 12.0 }, new[] { 0.0, 0.0 }, new[] { 0.5, 0.5 }, 99.5);
+            Assert.True(loops.Count >= 1);
+            bool arcA = false, arcB = false, longTop = false, longBot = false, cross = false, hitsCenter = false;
+            for (int k = 0; k < loops.Count; k++)
+            {
+                var pts = loops[k].Pts;
+                int nSeg = loops[k].Closed ? pts.Count : pts.Count - 1;
+                for (int i = 0; i < pts.Count; i++)
+                {
+                    var p = pts[i];
+                    if (Math.Abs(p.X) < 0.02 && Math.Abs(p.Y) < 0.02) hitsCenter = true;
+                    if (Math.Abs(p.X - 12) < 0.02 && Math.Abs(p.Y) < 0.02) hitsCenter = true;
+                    double da = Math.Sqrt(p.X * p.X + p.Y * p.Y);
+                    double db = Math.Sqrt((p.X - 12) * (p.X - 12) + p.Y * p.Y);
+                    if (Math.Abs(da - 0.5) < 0.08 && p.X > 0.05) arcA = true;
+                    if (Math.Abs(db - 0.5) < 0.08 && p.X < 11.95) arcB = true;
+                    if (i >= nSeg) continue;
+                    var q = pts[(i + 1) % pts.Count];
+                    if (Math.Abs(p.Y - 0.8) < 0.15 && Math.Abs(q.Y - 0.8) < 0.15
+                        && Math.Abs(p.X - q.X) > 5) longTop = true;
+                    if (Math.Abs(p.Y + 0.8) < 0.15 && Math.Abs(q.Y + 0.8) < 0.15
+                        && Math.Abs(p.X - q.X) > 5) longBot = true;
+                    double mx = 0.5 * (p.X + q.X);
+                    if (mx > 2.0 && mx < 10.0 && p.Y * q.Y < -0.2)
+                        cross = true;
+                }
+            }
+            Assert.False(hitsCenter);
+            Assert.False(cross);
+            Assert.True(arcA);
+            Assert.True(arcB);
+            Assert.True(longTop);
+            Assert.True(longBot);
         }
 
         static bool OnXY(WellPt p, double x, double y, double e)
