@@ -71,6 +71,8 @@ namespace Nvk.Core
     {
         public List<WellPt> Inner;
         public List<WellPt> Outer;
+        public List<List<WellPt>> Bottoms;
+        public List<List<WellPt>> Steps;
         public List<WellPt> Berm;
         public List<WellPt[]> Faces;
         public List<WellPt[]> SlopeRays;
@@ -459,19 +461,22 @@ namespace Nvk.Core
                 nx = -ty;
                 ny = tx;
             }
+            double za = a.Z > 1.0 ? a.Z : zBot;
+            double zb = b.Z > 1.0 ? b.Z : zBot;
+            double zEdge = 0.5 * (za + zb);
             var hits = new List<BermHit>();
-            AddHit(hits, 0.0, a, zBot, nx, ny, m, tinZ, zHint);
-            AddHit(hits, len, b, zBot, nx, ny, m, tinZ, zHint);
+            AddHit(hits, 0.0, a, za, nx, ny, m, tinZ, zHint);
+            AddHit(hits, len, b, zb, nx, ny, m, tinZ, zHint);
             if (tris != null && tris.Count > 0)
             {
                 for (int i = 0; i < tris.Count; i++)
                 {
                     var t = tris[i];
-                    IntersectTinEdge(a.X, a.Y, zBot, tx, ty, nx, ny, len, m,
+                    IntersectTinEdge(a.X, a.Y, zEdge, tx, ty, nx, ny, len, m,
                         t.X1, t.Y1, t.Z1, t.X2, t.Y2, t.Z2, hits);
-                    IntersectTinEdge(a.X, a.Y, zBot, tx, ty, nx, ny, len, m,
+                    IntersectTinEdge(a.X, a.Y, zEdge, tx, ty, nx, ny, len, m,
                         t.X2, t.Y2, t.Z2, t.X3, t.Y3, t.Z3, hits);
-                    IntersectTinEdge(a.X, a.Y, zBot, tx, ty, nx, ny, len, m,
+                    IntersectTinEdge(a.X, a.Y, zEdge, tx, ty, nx, ny, len, m,
                         t.X3, t.Y3, t.Z3, t.X1, t.Y1, t.Z1, hits);
                 }
             }
@@ -480,8 +485,9 @@ namespace Nvk.Core
                 for (int k = 1; k < EdgeSamples; k++)
                 {
                     double s = len * k / (double)EdgeSamples;
-                    var bot = new WellPt(a.X + tx * s, a.Y + ty * s, zBot);
-                    AddHit(hits, s, bot, zBot, nx, ny, m, tinZ, zHint);
+                    double zs = za + (zb - za) * (s / len);
+                    var bot = new WellPt(a.X + tx * s, a.Y + ty * s, zs);
+                    AddHit(hits, s, bot, zs, nx, ny, m, tinZ, zHint);
                 }
             }
             hits.Sort((p, q) => p.S.CompareTo(q.S));
@@ -610,12 +616,9 @@ namespace Nvk.Core
                 var b = bot[(e + 1) % n];
                 double edx = b.X - a.X, edy = b.Y - a.Y;
                 double elen = Math.Sqrt(edx * edx + edy * edy);
-                double nx = 0.0, ny = 1.0;
-                if (elen > 1e-9)
-                {
-                    nx = -edy / elen;
-                    ny = edx / elen;
-                }
+                if (elen < 1e-9) continue;
+                double nx = -edy / elen;
+                double ny = edx / elen;
                 if (e == 0)
                 {
                     firstNx = nx;
@@ -623,7 +626,8 @@ namespace Nvk.Core
                 }
                 lastNx = nx;
                 lastNy = ny;
-                var hits = HitsOnEdge(a, b, zBot, m, zHint, tinZ, tris);
+                double zEdge = a.Z > 1.0 ? a.Z : zBot;
+                var hits = HitsOnEdge(a, b, zEdge, m, zHint, tinZ, tris);
                 if (hits.Count == 0) continue;
                 for (int k = 0; k < hits.Count; k++)
                 {
@@ -639,7 +643,8 @@ namespace Nvk.Core
                             n1x = -pdy / plen;
                             n1y = pdx / plen;
                         }
-                        EmitCornerRays(a, n1x, n1y, nx, ny, zBot, m, zHint, tinZ, berm, faces, rays, ref lastG);
+                        if (ConvexCw(p, a, b))
+                            EmitCornerRays(a, n1x, n1y, nx, ny, zEdge, m, zHint, tinZ, berm, faces, rays, ref lastG);
                         faces.Add(new[] { a, a, h.P, lastG });
                     }
                     berm.Add(h.P);
@@ -656,9 +661,21 @@ namespace Nvk.Core
             }
             if (hasLast && berm.Count > 0)
             {
-                EmitCornerRays(bot[0], lastNx, lastNy, firstNx, firstNy, zBot, m, zHint, tinZ, berm, faces, rays, ref lastG);
-                faces.Add(new[] { bot[0], bot[0], berm[0], lastG });
+                var p = bot[n - 1];
+                var a0 = bot[0];
+                var b0 = bot[1];
+                double z0 = a0.Z > 1.0 ? a0.Z : zBot;
+                if (ConvexCw(p, a0, b0))
+                    EmitCornerRays(a0, lastNx, lastNy, firstNx, firstNy, z0, m, zHint, tinZ, berm, faces, rays, ref lastG);
+                faces.Add(new[] { a0, a0, berm[0], lastG });
             }
+        }
+
+        static bool ConvexCw(WellPt p, WellPt a, WellPt b)
+        {
+            double v1x = a.X - p.X, v1y = a.Y - p.Y;
+            double v2x = b.X - a.X, v2y = b.Y - a.Y;
+            return v1x * v2y - v1y * v2x < -1e-12;
         }
 
         static void EmitCornerRays(WellPt corner,
@@ -873,8 +890,8 @@ namespace Nvk.Core
         }
 
         /// <summary>
-        /// Один котлован из пересекающихся подошв: объединение дна и новая бровка.
-        /// Если подошвы не сливаются в один контур — выпуклая оболочка.
+        /// Общий котлован: пересекающиеся подошвы сливаются с перепадом по середине;
+        /// непересекающиеся остаются отдельными, откос — по коридору траншеи.
         /// </summary>
         public static WellPitShape UnionPits(IList<WellPitShape> shapes, WellPitCfg c,
             Func<double, double, double> tinZ, IList<TinTri> tris, double zHint)
@@ -888,16 +905,20 @@ namespace Nvk.Core
             if (shapes == null || shapes.Count == 0) return null;
             if (shapes.Count == 1 && (extraPolys == null || extraPolys.Count == 0)) return shapes[0];
             if (c == null) c = new WellPitCfg();
-            var bots = new List<List<WellPt>>();
-            double zBot = 1e9;
+            var sites = new List<PitSite>();
+            var outers = new List<List<WellPt>>();
             double ax = 1.0, ay = 0.0, px = 0.0, py = 1.0;
             double along = 0.0, across = 0.0;
+            double zMin = 1e9;
             for (int i = 0; i < shapes.Count; i++)
             {
                 var s = shapes[i];
                 if (s == null || s.Outer == null || s.Outer.Count < 3) continue;
-                bots.Add(s.Outer);
-                if (bots.Count == 1)
+                double cx, cy, cz;
+                PolyCenter(s.Outer, out cx, out cy, out cz);
+                sites.Add(new PitSite { X = cx, Y = cy, Z = cz, Outer = s.Outer });
+                outers.Add(s.Outer);
+                if (outers.Count == 1)
                 {
                     ax = s.Ax;
                     ay = s.Ay;
@@ -906,58 +927,125 @@ namespace Nvk.Core
                     along = s.AlongHalf;
                     across = s.AcrossHalf;
                 }
-                for (int k = 0; k < s.Outer.Count; k++)
-                    if (s.Outer[k].Z < zBot) zBot = s.Outer[k].Z;
+                if (cz < zMin) zMin = cz;
             }
-            if (bots.Count == 0) return null;
-            if (zBot > 1e8) zBot = 0.0;
-            var extra = extraPolys;
-            if (extra != null)
+            if (outers.Count == 0) return null;
+            if (zMin > 1e8) zMin = 0.0;
+
+            int ns = sites.Count;
+            var ov = new bool[ns, ns];
+            bool anyOv = false;
+            for (int i = 0; i < ns; i++)
             {
-                for (int i = 0; i < extra.Count; i++)
-                    if (extra[i] != null && extra[i].Count >= 3)
-                        bots.Add(extra[i]);
-            }
-            var loops = UnionPolygons(bots, zBot);
-            List<WellPt> bot = null;
-            double best = -1.0;
-            int nGood = 0;
-            for (int i = 0; i < loops.Count; i++)
-            {
-                if (loops[i] == null || loops[i].Pts == null || loops[i].Pts.Count < 3) continue;
-                double ar = Math.Abs(SignedArea(loops[i].Pts));
-                if (ar < 1e-4) continue;
-                nGood++;
-                if (ar > best)
+                for (int j = i + 1; j < ns; j++)
                 {
-                    best = ar;
-                    bot = new List<WellPt>(loops[i].Pts);
+                    if (!PolysOverlap(sites[i].Outer, sites[j].Outer)) continue;
+                    ov[i, j] = ov[j, i] = true;
+                    anyOv = true;
                 }
             }
-            if (nGood != 1)
-            {
-                var all = new List<WellPt>();
-                for (int i = 0; i < bots.Count; i++)
-                    for (int k = 0; k < bots[i].Count; k++)
-                        all.Add(bots[i][k]);
-                var hull = ConvexHull(all);
-                if (hull != null && hull.Count >= 3) bot = hull;
-            }
-            if (bot == null || bot.Count < 3) return shapes[0];
-            if (SignedArea(bot) > 0.0) bot.Reverse();
-            for (int i = 0; i < bot.Count; i++)
-                bot[i] = new WellPt(bot[i].X, bot[i].Y, zBot);
 
+            var bottoms = new List<List<WellPt>>();
+            var steps = new List<List<WellPt>>();
+            var stepFaces = new List<WellPt[]>();
+            if (!anyOv)
+            {
+                for (int i = 0; i < ns; i++)
+                    bottoms.Add(new List<WellPt>(sites[i].Outer));
+            }
+            else
+            {
+                var parent = new int[ns];
+                for (int i = 0; i < ns; i++) parent[i] = i;
+                for (int i = 0; i < ns; i++)
+                    for (int j = i + 1; j < ns; j++)
+                        if (ov[i, j])
+                        {
+                            int ri = i; while (parent[ri] != ri) ri = parent[ri];
+                            int rj = j; while (parent[rj] != rj) rj = parent[rj];
+                            if (ri != rj) parent[rj] = ri;
+                        }
+                var groups = new Dictionary<int, List<int>>();
+                for (int i = 0; i < ns; i++)
+                {
+                    int r = i; while (parent[r] != r) r = parent[r];
+                    List<int> g;
+                    if (!groups.TryGetValue(r, out g))
+                    {
+                        g = new List<int>();
+                        groups[r] = g;
+                    }
+                    g.Add(i);
+                }
+                foreach (var kv in groups)
+                {
+                    var idx = kv.Value;
+                    if (idx.Count == 1)
+                    {
+                        bottoms.Add(new List<WellPt>(sites[idx[0]].Outer));
+                        continue;
+                    }
+                    var cluster = new List<List<WellPt>>();
+                    for (int k = 0; k < idx.Count; k++)
+                        cluster.Add(sites[idx[k]].Outer);
+                    var loops = UnionPolygons(cluster, zMin);
+                    List<WellPt> uni = BiggestLoop(loops);
+                    if (uni == null || uni.Count < 3)
+                    {
+                        for (int k = 0; k < idx.Count; k++)
+                            bottoms.Add(new List<WellPt>(sites[idx[k]].Outer));
+                        continue;
+                    }
+                    if (SignedArea(uni) > 0.0) uni.Reverse();
+                    var sub = new List<PitSite>(idx.Count);
+                    for (int k = 0; k < idx.Count; k++)
+                        sub.Add(sites[idx[k]]);
+                    var stamped = StampZWithSteps(uni, sub, steps, stepFaces);
+                    bottoms.Add(stamped);
+                }
+            }
+
+            var gradeSrc = new List<List<WellPt>>();
+            for (int i = 0; i < outers.Count; i++)
+                gradeSrc.Add(outers[i]);
+            if (extraPolys != null)
+            {
+                for (int i = 0; i < extraPolys.Count; i++)
+                    if (extraPolys[i] != null && extraPolys[i].Count >= 3)
+                        gradeSrc.Add(extraPolys[i]);
+            }
+            var gradeLoops = UnionPolygons(gradeSrc, zMin);
             var berm = new List<WellPt>();
             var faces = new List<WellPt[]>();
             var rays = new List<WellPt[]>();
             double zMid = zHint;
-            if (double.IsNaN(zMid) || zMid < 1.0) zMid = zBot + 2.0;
-            GradeSquare(bot, c.SlopeM, zBot, zMid, tinZ, tris, berm, faces, rays);
+            if (double.IsNaN(zMid) || zMid < 1.0) zMid = zMin + 2.0;
+            int nGrade = 0;
+            for (int i = 0; i < gradeLoops.Count; i++)
+            {
+                if (gradeLoops[i] == null || gradeLoops[i].Pts == null || gradeLoops[i].Pts.Count < 3)
+                    continue;
+                if (Math.Abs(SignedArea(gradeLoops[i].Pts)) < 1e-4) continue;
+                var gp = new List<WellPt>(gradeLoops[i].Pts);
+                if (SignedArea(gp) > 0.0) gp.Reverse();
+                AssignNearestZ(gp, sites);
+                GradeSquare(gp, c.SlopeM, zMin, zMid, tinZ, tris, berm, faces, rays);
+                nGrade++;
+            }
+            if (nGrade == 0 && bottoms.Count > 0)
+            {
+                var gp = new List<WellPt>(bottoms[0]);
+                if (SignedArea(gp) > 0.0) gp.Reverse();
+                GradeSquare(gp, c.SlopeM, zMin, zMid, tinZ, tris, berm, faces, rays);
+            }
+            for (int i = 0; i < stepFaces.Count; i++)
+                faces.Add(stepFaces[i]);
+
+            List<WellPt> outer = bottoms.Count > 0 ? bottoms[0] : outers[0];
             double maxOff = 0.0;
             for (int i = 0; i < berm.Count; i++)
             {
-                double dx = berm[i].X - bot[0].X, dy = berm[i].Y - bot[0].Y;
+                double dx = berm[i].X - outer[0].X, dy = berm[i].Y - outer[0].Y;
                 double d = Math.Sqrt(dx * dx + dy * dy);
                 if (d > maxOff) maxOff = d;
             }
@@ -970,7 +1058,9 @@ namespace Nvk.Core
                 Ay = ay,
                 Px = px,
                 Py = py,
-                Outer = bot,
+                Outer = outer,
+                Bottoms = bottoms,
+                Steps = steps,
                 Berm = berm,
                 Faces = faces,
                 SlopeRays = rays,
@@ -978,6 +1068,167 @@ namespace Nvk.Core
                 BermAlong = along + maxOff,
                 BermAcross = across + maxOff
             };
+        }
+
+        struct PitSite
+        {
+            public double X, Y, Z;
+            public List<WellPt> Outer;
+        }
+
+        static void PolyCenter(IList<WellPt> p, out double x, out double y, out double z)
+        {
+            x = y = z = 0.0;
+            if (p == null || p.Count == 0) return;
+            for (int i = 0; i < p.Count; i++)
+            {
+                x += p[i].X;
+                y += p[i].Y;
+                z += p[i].Z;
+            }
+            double n = p.Count;
+            x /= n;
+            y /= n;
+            z /= n;
+        }
+
+        static List<WellPt> BiggestLoop(List<PolyLoop> loops)
+        {
+            List<WellPt> best = null;
+            double bestA = -1.0;
+            if (loops == null) return null;
+            for (int i = 0; i < loops.Count; i++)
+            {
+                if (loops[i] == null || loops[i].Pts == null || loops[i].Pts.Count < 3) continue;
+                double ar = Math.Abs(SignedArea(loops[i].Pts));
+                if (ar > bestA)
+                {
+                    bestA = ar;
+                    best = new List<WellPt>(loops[i].Pts);
+                }
+            }
+            return best;
+        }
+
+        static int NearestSite(List<PitSite> sites, double x, double y)
+        {
+            int best = 0;
+            double bestD = 1e99;
+            for (int i = 0; i < sites.Count; i++)
+            {
+                double dx = x - sites[i].X, dy = y - sites[i].Y;
+                double d = dx * dx + dy * dy;
+                if (d < bestD - 1e-12)
+                {
+                    bestD = d;
+                    best = i;
+                }
+                else if (Math.Abs(d - bestD) < 1e-12 && sites[i].Z < sites[best].Z)
+                    best = i;
+            }
+            return best;
+        }
+
+        static void AssignNearestZ(List<WellPt> loop, List<PitSite> sites)
+        {
+            if (loop == null || sites == null || sites.Count == 0) return;
+            for (int i = 0; i < loop.Count; i++)
+            {
+                int s = NearestSite(sites, loop[i].X, loop[i].Y);
+                loop[i] = new WellPt(loop[i].X, loop[i].Y, sites[s].Z);
+            }
+        }
+
+        static List<WellPt> StampZWithSteps(List<WellPt> loop, List<PitSite> sites,
+            List<List<WellPt>> steps, List<WellPt[]> stepFaces)
+        {
+            if (loop == null || loop.Count < 3 || sites == null || sites.Count == 0)
+                return loop;
+            var o = new List<WellPt>();
+            int n = loop.Count;
+            for (int i = 0; i < n; i++)
+            {
+                var p = loop[i];
+                var q = loop[(i + 1) % n];
+                int si = NearestSite(sites, p.X, p.Y);
+                int sj = NearestSite(sites, q.X, q.Y);
+                o.Add(new WellPt(p.X, p.Y, sites[si].Z));
+                if (si == sj) continue;
+                double z0 = sites[si].Z, z1 = sites[sj].Z;
+                double mx = 0.5 * (sites[si].X + sites[sj].X);
+                double my = 0.5 * (sites[si].Y + sites[sj].Y);
+                double ux = sites[sj].X - sites[si].X, uy = sites[sj].Y - sites[si].Y;
+                double ul = Math.Sqrt(ux * ux + uy * uy);
+                if (ul < 1e-9) continue;
+                ux /= ul;
+                uy /= ul;
+                double dp = (p.X - mx) * ux + (p.Y - my) * uy;
+                double dq = (q.X - mx) * ux + (q.Y - my) * uy;
+                if (dp * dq > -1e-12) continue;
+                double t = dp / (dp - dq);
+                if (t < 0.0) t = 0.0;
+                if (t > 1.0) t = 1.0;
+                double hx = p.X + t * (q.X - p.X);
+                double hy = p.Y + t * (q.Y - p.Y);
+                o.Add(new WellPt(hx, hy, z0));
+                if (Math.Abs(z0 - z1) > 1e-4)
+                    o.Add(new WellPt(hx, hy, z1));
+            }
+            for (int i = 0; i < sites.Count; i++)
+            {
+                for (int j = i + 1; j < sites.Count; j++)
+                    AddStepWall(loop, sites[i], sites[j], steps, stepFaces);
+            }
+            return o;
+        }
+
+        static void AddStepWall(IList<WellPt> poly, PitSite a, PitSite b,
+            List<List<WellPt>> steps, List<WellPt[]> stepFaces)
+        {
+            if (Math.Abs(a.Z - b.Z) < 1e-4) return;
+            double mx = 0.5 * (a.X + b.X), my = 0.5 * (a.Y + b.Y);
+            double ux = b.X - a.X, uy = b.Y - a.Y;
+            double ul = Math.Sqrt(ux * ux + uy * uy);
+            if (ul < 1e-9) return;
+            ux /= ul;
+            uy /= ul;
+            double px = -uy, py = ux;
+            double reach = 80.0;
+            var hits = new List<double>();
+            var hx = new List<double>();
+            var hy = new List<double>();
+            int n = poly.Count;
+            for (int i = 0; i < n; i++)
+            {
+                var p = poly[i];
+                var q = poly[(i + 1) % n];
+                double t, u;
+                if (!SegSeg(mx - px * reach, my - py * reach, mx + px * reach, my + py * reach,
+                    p.X, p.Y, q.X, q.Y, out t, out u))
+                    continue;
+                if (u < -1e-9 || u > 1.0 + 1e-9) continue;
+                double x = p.X + u * (q.X - p.X);
+                double y = p.Y + u * (q.Y - p.Y);
+                hits.Add((x - mx) * px + (y - my) * py);
+                hx.Add(x);
+                hy.Add(y);
+            }
+            if (hits.Count < 2) return;
+            int lo = 0, hi = 0;
+            for (int i = 1; i < hits.Count; i++)
+            {
+                if (hits[i] < hits[lo]) lo = i;
+                if (hits[i] > hits[hi]) hi = i;
+            }
+            if (lo == hi) return;
+            double zHi = a.Z > b.Z ? a.Z : b.Z;
+            double zLo = a.Z < b.Z ? a.Z : b.Z;
+            var p0 = new WellPt(hx[lo], hy[lo], zHi);
+            var p1 = new WellPt(hx[hi], hy[hi], zHi);
+            var p2 = new WellPt(hx[hi], hy[hi], zLo);
+            var p3 = new WellPt(hx[lo], hy[lo], zLo);
+            steps.Add(new List<WellPt> { p0, p1 });
+            stepFaces.Add(new[] { p0, p1, p2, p3 });
         }
 
         static double SignedArea(IList<WellPt> p)

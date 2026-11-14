@@ -464,8 +464,23 @@ namespace Nvk.Cad
         static void DrawPit(BlockTableRecord ms, Transaction tr, List<WellItem> grp, WellPitShape s)
         {
             if (s == null) return;
-            string mh = HandlesOf(grp);
-            AddPline3(ms, tr, s.Outer, true, LayerPit, 1, mh);
+            var floors = s.Bottoms != null && s.Bottoms.Count > 0
+                ? s.Bottoms
+                : (s.Outer != null ? new List<List<WellPt>> { s.Outer } : null);
+            if (floors != null)
+            {
+                for (int i = 0; i < floors.Count; i++)
+                {
+                    string mh = HandlesInPoly(grp, floors[i]);
+                    if (string.IsNullOrEmpty(mh)) mh = HandlesOf(grp);
+                    AddPline3(ms, tr, floors[i], true, LayerPit, 1, mh);
+                }
+            }
+            if (s.Steps != null)
+            {
+                for (int i = 0; i < s.Steps.Count; i++)
+                    AddPline3(ms, tr, s.Steps[i], false, LayerPit, 1, null);
+            }
             AddPline3(ms, tr, s.Berm, true, LayerBerm, 3, null);
             if (s.SlopeRays != null)
             {
@@ -477,6 +492,24 @@ namespace Nvk.Cad
                 for (int i = 0; i < s.Faces.Count; i++)
                     AddFace(ms, tr, s.Faces[i], LayerSlope, 4);
             }
+        }
+
+        static string HandlesInPoly(List<WellItem> grp, IList<WellPt> poly)
+        {
+            if (grp == null || poly == null || poly.Count < 3) return null;
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < grp.Count; i++)
+            {
+                var w = grp[i] != null ? grp[i].W : null;
+                if (w == null) continue;
+                if (!WellPitGeom.PointInPoly(poly, w.X, w.Y)) continue;
+                string h = grp[i].Handle;
+                if (string.IsNullOrEmpty(h)) h = w.Handle;
+                if (string.IsNullOrEmpty(h)) continue;
+                if (sb.Length > 0) sb.Append(',');
+                sb.Append(h);
+            }
+            return sb.Length > 0 ? sb.ToString() : null;
         }
 
         static void DrawName(BlockTableRecord ms, Transaction tr, WellPitInput w, WellPitShape s)

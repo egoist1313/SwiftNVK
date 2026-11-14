@@ -295,10 +295,42 @@ namespace Nvk.Core.Tests
                 if (u.Outer[i].X > maxX) maxX = u.Outer[i].X;
             }
             Assert.True(maxX - minX > 2.5);
+            Assert.True(u.Bottoms != null && u.Bottoms.Count == 1);
         }
 
         [Fact]
-        public void NearbyDisjointPitsUnionByHull()
+        public void OverlappingPitsHaveStepAtMid()
+        {
+            var cfg = new WellPitCfg { TrenchGap = 0.50, SlopeM = 0.0, Bedding = 0.0 };
+            var a = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
+            var b = new WellPitInput { X = 1.2, Y = 0, Diam = 1.0, Sump = 99, Rim = 105, AxisX = 1, AxisY = 0 };
+            Func<double, double, double> tin = (x, y) => 105.0;
+            var sa = WellPitGeom.Build(a, cfg, tin);
+            var sb = WellPitGeom.Build(b, cfg, tin);
+            var u = WellPitGeom.UnionPits(new List<WellPitShape> { sa, sb }, cfg, tin, null, 105);
+            Assert.NotNull(u);
+            bool hasHi = false, hasLo = false, hasVert = false;
+            var bot = u.Bottoms != null && u.Bottoms.Count > 0 ? u.Bottoms[0] : u.Outer;
+            for (int i = 0; i < bot.Count; i++)
+            {
+                if (Math.Abs(bot[i].Z - 100) < 0.02) hasHi = true;
+                if (Math.Abs(bot[i].Z - 99) < 0.02) hasLo = true;
+                var q = bot[(i + 1) % bot.Count];
+                double dxy = Math.Sqrt((q.X - bot[i].X) * (q.X - bot[i].X) + (q.Y - bot[i].Y) * (q.Y - bot[i].Y));
+                if (dxy < 0.02 && Math.Abs(q.Z - bot[i].Z) > 0.5) hasVert = true;
+            }
+            Assert.True(hasHi);
+            Assert.True(hasLo);
+            Assert.True(hasVert || (u.Steps != null && u.Steps.Count >= 1));
+            if (u.Steps != null && u.Steps.Count > 0)
+            {
+                double mx = 0.5 * (u.Steps[0][0].X + u.Steps[0][1].X);
+                Assert.True(Math.Abs(mx - 0.6) < 0.35);
+            }
+        }
+
+        [Fact]
+        public void NearbyDisjointKeepTwoBottoms()
         {
             var cfg = new WellPitCfg { TrenchGap = 0.50, SlopeM = 0.50, Bedding = 0.0 };
             var a = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
@@ -310,19 +342,12 @@ namespace Nvk.Core.Tests
             Assert.True(WellPitGeom.PolysOverlap(sa.Berm, sb.Berm));
             var u = WellPitGeom.UnionPits(new List<WellPitShape> { sa, sb }, cfg, tin, null, 105);
             Assert.NotNull(u);
-            Assert.NotNull(u.Outer);
-            double minX = 1e9, maxX = -1e9;
-            for (int i = 0; i < u.Outer.Count; i++)
-            {
-                if (u.Outer[i].X < minX) minX = u.Outer[i].X;
-                if (u.Outer[i].X > maxX) maxX = u.Outer[i].X;
-            }
-            Assert.True(maxX - minX > 4.0);
+            Assert.True(u.Bottoms != null && u.Bottoms.Count == 2);
             Assert.True(u.Berm != null && u.Berm.Count >= 4);
         }
 
         [Fact]
-        public void CorridorJoinsTwoPitsIntoOneBottom()
+        public void CorridorSharesSlopesKeepsTwoBottoms()
         {
             var cfg = new WellPitCfg { TrenchGap = 0.50, SlopeM = 0.0, Bedding = 0.0 };
             var a = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
@@ -339,13 +364,17 @@ namespace Nvk.Core.Tests
                 new List<List<WellPt>> { corridor },
                 cfg, tin, null, 105);
             Assert.NotNull(u);
-            double minX = 1e9, maxX = -1e9;
-            for (int i = 0; i < u.Outer.Count; i++)
+            Assert.True(u.Bottoms != null && u.Bottoms.Count == 2);
+            Assert.True(u.Berm != null && u.Berm.Count >= 4);
+            double waist = 1e9;
+            for (int i = 0; i < u.Berm.Count; i++)
             {
-                if (u.Outer[i].X < minX) minX = u.Outer[i].X;
-                if (u.Outer[i].X > maxX) maxX = u.Outer[i].X;
+                var p = u.Berm[i];
+                if (p.X > 1.5 && p.X < 2.5 && Math.Abs(p.Y) < waist)
+                    waist = Math.Abs(p.Y);
             }
-            Assert.True(maxX - minX > 4.5);
+            Assert.True(waist < 1.05);
+            Assert.True(waist > 0.6);
         }
 
         [Fact]
