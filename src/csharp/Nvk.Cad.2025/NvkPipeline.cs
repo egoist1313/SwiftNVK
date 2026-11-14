@@ -554,6 +554,7 @@ namespace Nvk.Cad
         public static void ResetInserts()
         {
             NvkSession.CsInsHas = false;
+            NvkSession.MhCsInsHas = false;
             NvkSession.EpInsHas = false;
             NvkSession.VolInsHas = false;
             for (int i = 0; i < 5; i++)
@@ -603,6 +604,7 @@ namespace Nvk.Cad
             ed.WriteMessage("\n║  НВК-ЛИСТЫ      вкладки + видовые экраны     ║");
             ed.WriteMessage("\n║  НВК-ЛИСТ-СНЯТЬ снимок видовых/линий/текста  ║");
             ed.WriteMessage("\n║  НВК-ЛИСТ-ПАРАМ параметры листа всем вкладкам║");
+            ed.WriteMessage("\n║  НВК-КОЛОДЦЫ    котлован / бровка / разрез  ║");
             ed.WriteMessage("\n║  НВК-ВВОД       трубы + TIN                  ║");
             ed.WriteMessage("\n║  лог    " + NvkLog.FilePath());
             ed.WriteMessage("\n╚══════════════════════════════════════════════╝");

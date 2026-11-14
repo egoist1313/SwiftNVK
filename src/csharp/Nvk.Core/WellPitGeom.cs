@@ -1,0 +1,949 @@
+using System;
+using System.Collections.Generic;
+
+namespace Nvk.Core
+{
+    /// <summary>Настройки котлована колодца. Панель → вкладка «Колодцы».</summary>
+    public sealed class WellPitCfg
+    {
+        /// <summary>Отступ от стенки колодца, м. Полусторона дна = R + отступ.</summary>
+        public double TrenchGap = 0.50;
+        /// <summary>Откос m = горизонталь/вертикаль. 0 = вертикальные стенки.</summary>
+        public double SlopeM = 0.20;
+        /// <summary>Толщина подсыпки под подошвой, м. Квадрат дна = отстойник − подсыпка.</summary>
+        public double Bedding = 0.10;
+    }
+
+    /// <summary>Труба, подходящая к колодцу. Линии — в пределах траншеи до центра / радиуса.</summary>
+    public sealed class WellPipeSeg
+    {
+        public double X0, Y0, X1, Y1;
+        public double Invert0, Invert1;
+        public double Diam;
+    }
+
+    /// <summary>Колодец Civil: план, отметки, ось трубы.</summary>
+    public sealed class WellPitInput
+    {
+        public string Name;
+        public string Handle;
+        public double X;
+        public double Y;
+        public double Rim;
+        public double Sump;
+        public double Diam;
+        public double Height;
+        public double AxisX = 1.0;
+        public double AxisY = 0.0;
+        public double PipeDiam;
+        public int PipeCount;
+        public List<WellPipeSeg> Pipes;
+    }
+
+    public struct WellPt
+    {
+        public double X, Y, Z;
+        public WellPt(double x, double y, double z)
+        {
+            X = x;
+            Y = y;
+            Z = z;
+        }
+    }
+
+    /// <summary>Треугольник TIN в метрах. Бровка ловит рёбра этих треугольников.</summary>
+    public struct TinTri
+    {
+        public double X1, Y1, Z1, X2, Y2, Z2, X3, Y3, Z3;
+        public TinTri(double x1, double y1, double z1,
+            double x2, double y2, double z2,
+            double x3, double y3, double z3)
+        {
+            X1 = x1; Y1 = y1; Z1 = z1;
+            X2 = x2; Y2 = y2; Z2 = z2;
+            X3 = x3; Y3 = y3; Z3 = z3;
+        }
+    }
+
+    /// <summary>Готовая геометрия котлована: дно, бровка, разрез.</summary>
+    public sealed class WellPitShape
+    {
+        public List<WellPt> Inner;
+        public List<WellPt> Outer;
+        public List<WellPt> Berm;
+        public List<WellPt[]> Faces;
+        public List<WellPt[]> SlopeRays;
+        public List<WellPt> Section;
+        public List<WellPt> Shaft;
+        public double AlongHalf;
+        public double AcrossHalf;
+        public double InnerHalf;
+        public double BermAlong;
+        public double BermAcross;
+        public double Ax, Ay, Px, Py;
+        public bool HasInner;
+    }
+
+    /// <summary>
+    /// Котлован колодца в метрах.
+    /// Дно — квадрат с отступом на отметке отстойника (это и есть дно котлована).
+    /// Откос — профилирование от каждого ребра дна до TIN: бровка по рельефу,
+    /// грани откоса 3D. Разрез — трапеция перпендикулярно оси трубы.
+    /// </summary>
+    public static class WellPitGeom
+    {
+        public static double Radius(WellPitInput w)
+        {
+            if (w == null || w.Diam < 0.10) return 0.50;
+            return w.Diam * 0.5;
+        }
+
+        public static void AxisUnit(WellPitInput w, out double ax, out double ay)
+        {
+            ax = 1.0;
+            ay = 0.0;
+            if (w == null) return;
+            double len = Math.Sqrt(w.AxisX * w.AxisX + w.AxisY * w.AxisY);
+            if (len < 1e-9) return;
+            ax = w.AxisX / len;
+            ay = w.AxisY / len;
+        }
+
+        /// <summary>
+        /// Ось трассы из направлений труб. Референс — самый длинный вектор,
+        /// остальные разворачиваются, если смотрят в обратную сторону.
+        /// </summary>
+        public static void CombineDirs(IList<double> dx, IList<double> dy, out double ax, out double ay)
+        {
+            ax = 1.0;
+            ay = 0.0;
+            if (dx == null || dy == null || dx.Count == 0 || dx.Count != dy.Count) return;
+            int best = 0;
+            double bestLen = -1.0;
+            for (int i = 0; i < dx.Count; i++)
+            {
+                double len = Math.Sqrt(dx[i] * dx[i] + dy[i] * dy[i]);
+                if (len > bestLen)
+                {
+                    bestLen = len;
+                    best = i;
+                }
+            }
+            if (bestLen < 1e-9) return;
+            double rx = dx[best] / bestLen;
+            double ry = dy[best] / bestLen;
+            double sx = 0.0, sy = 0.0;
+            for (int i = 0; i < dx.Count; i++)
+            {
+                double len = Math.Sqrt(dx[i] * dx[i] + dy[i] * dy[i]);
+                if (len < 1e-9) continue;
+                double ux = dx[i] / len;
+                double uy = dy[i] / len;
+                if (ux * rx + uy * ry < 0.0)
+                {
+                    ux = -ux;
+                    uy = -uy;
+                }
+                sx += ux * len;
+                sy += uy * len;
+            }
+            double L = Math.Sqrt(sx * sx + sy * sy);
+            if (L < 1e-9)
+            {
+                ax = rx;
+                ay = ry;
+                return;
+            }
+            ax = sx / L;
+            ay = sy / L;
+        }
+
+        /// <summary>
+        /// Ось = самая длинная труба от колодца. Без биссектрисы на угле.
+        /// </summary>
+        public static void AxisFromOutgoing(IList<double> ox, IList<double> oy, out double ax, out double ay)
+        {
+            ax = 1.0;
+            ay = 0.0;
+            if (ox == null || oy == null || ox.Count == 0 || ox.Count != oy.Count) return;
+            int best = 0;
+            double bestLen = -1.0;
+            for (int i = 0; i < ox.Count; i++)
+            {
+                double len = Math.Sqrt(ox[i] * ox[i] + oy[i] * oy[i]);
+                if (len > bestLen)
+                {
+                    bestLen = len;
+                    best = i;
+                }
+            }
+            if (bestLen < 1e-9) return;
+            ax = ox[best] / bestLen;
+            ay = oy[best] / bestLen;
+        }
+
+        /// <summary>
+        /// Ось из квадрата дна: вершины CCW как Rect (0=+A+P … 3=−A+P).
+        /// После ROTATE порядок сохраняется — берём ребро вдоль оси.
+        /// </summary>
+        public static void AxisFromRect(IList<double> x, IList<double> y, out double ax, out double ay)
+        {
+            ax = 1.0;
+            ay = 0.0;
+            if (x == null || y == null || x.Count < 4 || y.Count < 4) return;
+            double vx = x[0] - x[3];
+            double vy = y[0] - y[3];
+            double len = Math.Sqrt(vx * vx + vy * vy);
+            if (len < 1e-9)
+            {
+                vx = x[1] - x[2];
+                vy = y[1] - y[2];
+                len = Math.Sqrt(vx * vx + vy * vy);
+            }
+            if (len < 1e-9) return;
+            ax = vx / len;
+            ay = vy / len;
+        }
+
+        /// <summary>Касательная оси из нормали сечения Chain (Nx, Ny).</summary>
+        public static void TangentFromNormal(double nx, double ny, out double ax, out double ay)
+        {
+            ax = ny;
+            ay = -nx;
+            double len = Math.Sqrt(ax * ax + ay * ay);
+            if (len < 1e-9)
+            {
+                ax = 1.0;
+                ay = 0.0;
+                return;
+            }
+            ax /= len;
+            ay /= len;
+        }
+
+        public static void PerpOf(double ax, double ay, out double px, out double py)
+        {
+            px = -ay;
+            py = ax;
+        }
+
+        /// <summary>Полусторона квадрата дна: R + отступ от колодца.</summary>
+        public static double BottomHalf(WellPitInput w, WellPitCfg c)
+        {
+            double r = Radius(w);
+            double gap = c == null ? 0.0 : Math.Max(0.0, c.TrenchGap);
+            return r + gap;
+        }
+
+        /// <summary>Полудлина дна вдоль оси = полусторона квадрата.</summary>
+        public static double AlongHalf(WellPitInput w, WellPitCfg c)
+        {
+            return BottomHalf(w, c);
+        }
+
+        /// <summary>Полуширина дна поперёк оси = полусторона квадрата.</summary>
+        public static double AcrossHalf(WellPitInput w, WellPitCfg c)
+        {
+            return BottomHalf(w, c);
+        }
+
+        public static double BermOffset(double slopeM, double zSurf, double zSump)
+        {
+            if (slopeM < 0.0) slopeM = 0.0;
+            double dz = zSurf - zSump;
+            if (dz < 0.0) dz = 0.0;
+            return slopeM * dz;
+        }
+
+        /// <summary>
+        /// Прямоугольник вокруг центра, стороны параллельны оси (ax,ay) и перпендикуляру.
+        /// Порядок CCW: +ось+перп, +ось−перп, −ось−перп, −ось+перп.
+        /// </summary>
+        public static List<WellPt> Rect(double cx, double cy, double z,
+            double ax, double ay, double px, double py,
+            double along, double across)
+        {
+            return new List<WellPt>
+            {
+                new WellPt(cx + ax * along + px * across, cy + ay * along + py * across, z),
+                new WellPt(cx + ax * along - px * across, cy + ay * along - py * across, z),
+                new WellPt(cx - ax * along - px * across, cy - ay * along - py * across, z),
+                new WellPt(cx - ax * along + px * across, cy - ay * along + py * across, z)
+            };
+        }
+
+        public static WellPitShape Build(WellPitInput w, WellPitCfg c, Func<double, double, double> tinZ)
+        {
+            return Build(w, c, tinZ, null);
+        }
+
+        public static WellPitShape Build(WellPitInput w, WellPitCfg c, Func<double, double, double> tinZ, IList<TinTri> tris)
+        {
+            if (w == null) w = new WellPitInput();
+            if (c == null) c = new WellPitCfg();
+            double ax, ay, px, py;
+            AxisUnit(w, out ax, out ay);
+            PerpOf(ax, ay, out px, out py);
+            double zBot = w.Sump - Math.Max(0.0, c.Bedding);
+            double along = BottomHalf(w, c);
+            double across = along;
+            double zMid = tinZ != null ? tinZ(w.X, w.Y) : w.Rim;
+            if (double.IsNaN(zMid) || zMid < 1.0) zMid = w.Rim;
+
+            var bot = Rect(w.X, w.Y, zBot, ax, ay, px, py, along, across);
+            var berm = new List<WellPt>();
+            var faces = new List<WellPt[]>();
+            var rays = new List<WellPt[]>();
+            GradeSquare(bot, c.SlopeM, zBot, zMid, tinZ, tris, berm, faces, rays);
+            double maxOff = 0.0;
+            for (int i = 0; i < berm.Count; i++)
+            {
+                double dx = berm[i].X - w.X, dy = berm[i].Y - w.Y;
+                double alongP = Math.Abs(dx * ax + dy * ay);
+                double acrossP = Math.Abs(dx * px + dy * py);
+                if (alongP - along > maxOff) maxOff = alongP - along;
+                if (acrossP - across > maxOff) maxOff = acrossP - across;
+            }
+
+            var shape = new WellPitShape
+            {
+                AlongHalf = along,
+                AcrossHalf = across,
+                InnerHalf = along,
+                Ax = ax,
+                Ay = ay,
+                Px = px,
+                Py = py,
+                Outer = bot,
+                Berm = berm,
+                Faces = faces,
+                SlopeRays = rays,
+                HasInner = false,
+                BermAlong = along + maxOff,
+                BermAcross = across + maxOff
+            };
+
+            var leftBot = new WellPt(w.X + px * across, w.Y + py * across, zBot);
+            var rightBot = new WellPt(w.X - px * across, w.Y - py * across, zBot);
+            var leftTop = GradeAlong(leftBot.X, leftBot.Y, zBot, px, py, c.SlopeM, tinZ, zMid, 1.0);
+            var rightTop = GradeAlong(rightBot.X, rightBot.Y, zBot, -px, -py, c.SlopeM, tinZ, zMid, 1.0);
+            shape.Section = new List<WellPt> { leftTop, leftBot, rightBot, rightTop };
+
+            double r = Radius(w);
+            double zSump = w.Sump;
+            double zTop = w.Rim > zSump + 0.05 ? w.Rim : zSump + 0.05;
+            shape.Shaft = new List<WellPt>
+            {
+                new WellPt(w.X + px * r, w.Y + py * r, zSump),
+                new WellPt(w.X - px * r, w.Y - py * r, zSump),
+                new WellPt(w.X - px * r, w.Y - py * r, zTop),
+                new WellPt(w.X + px * r, w.Y + py * r, zTop)
+            };
+            return shape;
+        }
+
+        const int EdgeSamples = 6;
+        const double HitEps = 1e-8;
+        const double StripEps = 0.02;
+
+        /// <summary>
+        /// Два луча из угла: по 120° от каждой стороны (для квадрата — 30° и 60°
+        /// в секторе откоса). n1, n2 — единичные внешние нормали смежных рёбер.
+        /// </summary>
+        public static void CornerRayDirs(double n1x, double n1y, double n2x, double n2y,
+            out double r1x, out double r1y, out double r2x, out double r2y)
+        {
+            double a1 = Math.Atan2(n1y, n1x);
+            double a2 = Math.Atan2(n2y, n2x);
+            double da = a2 - a1;
+            while (da > Math.PI) da -= 2.0 * Math.PI;
+            while (da < -Math.PI) da += 2.0 * Math.PI;
+            double aMid1 = a1 + da / 3.0;
+            double aMid2 = a1 + 2.0 * da / 3.0;
+            r1x = Math.Cos(aMid1);
+            r1y = Math.Sin(aMid1);
+            r2x = Math.Cos(aMid2);
+            r2y = Math.Sin(aMid2);
+        }
+
+        /// <summary>
+        /// Профилирование: от ребра дна наружу, пока откос m не встретит TIN.
+        /// runScale=1 — луч перпендикуляр ребру; √2 — биссектриса угла квадрата.
+        /// </summary>
+        public static WellPt GradeAlong(double x, double y, double zBot,
+            double nx, double ny, double m, Func<double, double, double> tinZ,
+            double zHint, double runScale)
+        {
+            double nlen = Math.Sqrt(nx * nx + ny * ny);
+            if (nlen > 1e-9)
+            {
+                nx /= nlen;
+                ny /= nlen;
+            }
+            if (runScale < 1e-6) runScale = 1.0;
+            double zH = zHint;
+            if (double.IsNaN(zH) || zH < zBot + 0.01) zH = zBot + 2.0;
+            if (m < 1e-9)
+            {
+                double z0 = Sample(tinZ, x, y, zH);
+                if (z0 < zBot) z0 = zBot;
+                return new WellPt(x, y, z0);
+            }
+            double tHi = m * runScale * (zH - zBot + 6.0);
+            if (tHi < 1.0) tHi = 1.0;
+            if (tHi > 80.0) tHi = 80.0;
+            for (int k = 0; k < 5; k++)
+            {
+                double zt = Sample(tinZ, x + tHi * nx, y + tHi * ny, zH);
+                double zs = zBot + tHi / (m * runScale);
+                if (zt <= zs) break;
+                tHi *= 1.5;
+                if (tHi > 80.0) { tHi = 80.0; break; }
+            }
+            double lo = 0.0, hi = tHi;
+            for (int i = 0; i < 28; i++)
+            {
+                double t = 0.5 * (lo + hi);
+                double zt = Sample(tinZ, x + t * nx, y + t * ny, zH);
+                double zs = zBot + t / (m * runScale);
+                if (zt > zs) lo = t;
+                else hi = t;
+            }
+            double tHit = 0.5 * (lo + hi);
+            double xh = x + tHit * nx;
+            double yh = y + tHit * ny;
+            double zh = Sample(tinZ, xh, yh, zBot + tHit / (m * runScale));
+            if (zh < zBot) zh = zBot;
+            return new WellPt(xh, yh, zh);
+        }
+
+        static double Sample(Func<double, double, double> tinZ, double x, double y, double fallback)
+        {
+            if (tinZ == null) return fallback;
+            double z = tinZ(x, y);
+            if (double.IsNaN(z) || z < 1.0) return fallback;
+            return z;
+        }
+
+        /// <summary>
+        /// Бровка по одному ребру дна: углы + пересечения плоскости откоса с рёбрами TIN.
+        /// Без треугольников — равномерные пробы (старое поведение).
+        /// </summary>
+        public static List<WellPt> BermOnEdge(WellPt a, WellPt b, double zBot, double m,
+            Func<double, double, double> tinZ, IList<TinTri> tris)
+        {
+            var hits = HitsOnEdge(a, b, zBot, m, zBot + 2.0, tinZ, tris);
+            var pts = new List<WellPt>(hits.Count);
+            for (int i = 0; i < hits.Count; i++) pts.Add(hits[i].P);
+            return pts;
+        }
+
+        struct BermHit
+        {
+            public double S;
+            public WellPt P;
+            public WellPt Bot;
+        }
+
+        static List<BermHit> HitsOnEdge(WellPt a, WellPt b, double zBot, double m, double zHint,
+            Func<double, double, double> tinZ, IList<TinTri> tris)
+        {
+            double dx = b.X - a.X, dy = b.Y - a.Y;
+            double len = Math.Sqrt(dx * dx + dy * dy);
+            double tx = 1.0, ty = 0.0, nx = 0.0, ny = 1.0;
+            if (len > 1e-9)
+            {
+                tx = dx / len;
+                ty = dy / len;
+                nx = -ty;
+                ny = tx;
+            }
+            var hits = new List<BermHit>();
+            AddHit(hits, 0.0, a, zBot, nx, ny, m, tinZ, zHint);
+            AddHit(hits, len, b, zBot, nx, ny, m, tinZ, zHint);
+            if (tris != null && tris.Count > 0)
+            {
+                for (int i = 0; i < tris.Count; i++)
+                {
+                    var t = tris[i];
+                    IntersectTinEdge(a.X, a.Y, zBot, tx, ty, nx, ny, len, m,
+                        t.X1, t.Y1, t.Z1, t.X2, t.Y2, t.Z2, hits);
+                    IntersectTinEdge(a.X, a.Y, zBot, tx, ty, nx, ny, len, m,
+                        t.X2, t.Y2, t.Z2, t.X3, t.Y3, t.Z3, hits);
+                    IntersectTinEdge(a.X, a.Y, zBot, tx, ty, nx, ny, len, m,
+                        t.X3, t.Y3, t.Z3, t.X1, t.Y1, t.Z1, hits);
+                }
+            }
+            else if (len > 1e-9)
+            {
+                for (int k = 1; k < EdgeSamples; k++)
+                {
+                    double s = len * k / (double)EdgeSamples;
+                    var bot = new WellPt(a.X + tx * s, a.Y + ty * s, zBot);
+                    AddHit(hits, s, bot, zBot, nx, ny, m, tinZ, zHint);
+                }
+            }
+            hits.Sort((p, q) => p.S.CompareTo(q.S));
+            return DedupeHits(hits);
+        }
+
+        static void AddHit(List<BermHit> hits, double s, WellPt bot, double zBot,
+            double nx, double ny, double m, Func<double, double, double> tinZ, double zHint)
+        {
+            var g = GradeAlong(bot.X, bot.Y, zBot, nx, ny, m, tinZ, zHint, 1.0);
+            hits.Add(new BermHit { S = s, P = g, Bot = bot });
+        }
+
+        static void IntersectTinEdge(
+            double ax, double ay, double zBot,
+            double tx, double ty, double nx, double ny, double len, double m,
+            double px, double py, double pz, double qx, double qy, double qz,
+            List<BermHit> hits)
+        {
+            if (m < 1e-9)
+            {
+                double s, u;
+                if (!SegHit(ax, ay, tx, ty, len, px, py, qx, qy, out s, out u)) return;
+                double zWall = pz + u * (qz - pz);
+                if (zWall < zBot) zWall = zBot;
+                var bot = new WellPt(ax + tx * s, ay + ty * s, zBot);
+                hits.Add(new BermHit { S = s, P = new WellPt(bot.X, bot.Y, zWall), Bot = bot });
+                return;
+            }
+            double dx = qx - px, dy = qy - py, dz = qz - pz;
+            double t0 = (px - ax) * nx + (py - ay) * ny;
+            double dt = dx * nx + dy * ny;
+            double denom = dz - dt / m;
+            double num = zBot + t0 / m - pz;
+            if (Math.Abs(denom) < 1e-12)
+            {
+                if (Math.Abs(num) > 1e-6) return;
+                TryOnPlane(ax, ay, zBot, tx, ty, nx, ny, len, m, px, py, pz, hits);
+                TryOnPlane(ax, ay, zBot, tx, ty, nx, ny, len, m, qx, qy, qz, hits);
+                return;
+            }
+            double uHit = num / denom;
+            if (uHit < -HitEps || uHit > 1.0 + HitEps) return;
+            if (uHit < 0.0) uHit = 0.0;
+            if (uHit > 1.0) uHit = 1.0;
+            double x = px + uHit * dx;
+            double y = py + uHit * dy;
+            double z = pz + uHit * dz;
+            double t = t0 + uHit * dt;
+            double sHit = (x - ax) * tx + (y - ay) * ty;
+            if (t < -StripEps || sHit < -StripEps || sHit > len + StripEps) return;
+            if (sHit < 0.0) sHit = 0.0;
+            if (sHit > len) sHit = len;
+            if (z < zBot) z = zBot;
+            var botPt = new WellPt(ax + tx * sHit, ay + ty * sHit, zBot);
+            hits.Add(new BermHit { S = sHit, P = new WellPt(x, y, z), Bot = botPt });
+        }
+
+        static void TryOnPlane(double ax, double ay, double zBot,
+            double tx, double ty, double nx, double ny, double len, double m,
+            double x, double y, double z, List<BermHit> hits)
+        {
+            double t = (x - ax) * nx + (y - ay) * ny;
+            double s = (x - ax) * tx + (y - ay) * ty;
+            if (t < -StripEps || s < -StripEps || s > len + StripEps) return;
+            if (s < 0.0) s = 0.0;
+            if (s > len) s = len;
+            if (z < zBot) z = zBot;
+            var bot = new WellPt(ax + tx * s, ay + ty * s, zBot);
+            hits.Add(new BermHit { S = s, P = new WellPt(x, y, z), Bot = bot });
+        }
+
+        static bool SegHit(double ax, double ay, double tx, double ty, double len,
+            double px, double py, double qx, double qy, out double s, out double u)
+        {
+            s = 0.0;
+            u = 0.0;
+            double dx = qx - px, dy = qy - py;
+            double den = tx * dy - ty * dx;
+            if (Math.Abs(den) < 1e-12) return false;
+            double rx = px - ax, ry = py - ay;
+            s = (rx * dy - ry * dx) / den;
+            u = (rx * ty - ry * tx) / den;
+            if (s < -StripEps || s > len + StripEps) return false;
+            if (u < -HitEps || u > 1.0 + HitEps) return false;
+            if (s < 0.0) s = 0.0;
+            if (s > len) s = len;
+            if (u < 0.0) u = 0.0;
+            if (u > 1.0) u = 1.0;
+            return true;
+        }
+
+        static List<BermHit> DedupeHits(List<BermHit> hits)
+        {
+            var outHits = new List<BermHit>(hits.Count);
+            for (int i = 0; i < hits.Count; i++)
+            {
+                var h = hits[i];
+                if (outHits.Count == 0)
+                {
+                    outHits.Add(h);
+                    continue;
+                }
+                var p = outHits[outHits.Count - 1];
+                double ds = h.S - p.S;
+                double ddx = h.P.X - p.P.X, ddy = h.P.Y - p.P.Y, ddz = h.P.Z - p.P.Z;
+                if (ds < 0.01 && ddx * ddx + ddy * ddy + ddz * ddz < 1e-4) continue;
+                outHits.Add(h);
+            }
+            return outHits;
+        }
+
+        static void GradeSquare(List<WellPt> bot, double m, double zBot, double zHint,
+            Func<double, double, double> tinZ, IList<TinTri> tris, List<WellPt> berm, List<WellPt[]> faces,
+            List<WellPt[]> rays)
+        {
+            int n = bot.Count;
+            if (n < 4) return;
+            WellPt lastG = default(WellPt);
+            bool hasLast = false;
+            double firstNx = 0.0, firstNy = 1.0;
+            double lastNx = 0.0, lastNy = 1.0;
+            for (int e = 0; e < n; e++)
+            {
+                var a = bot[e];
+                var b = bot[(e + 1) % n];
+                double edx = b.X - a.X, edy = b.Y - a.Y;
+                double elen = Math.Sqrt(edx * edx + edy * edy);
+                double nx = 0.0, ny = 1.0;
+                if (elen > 1e-9)
+                {
+                    nx = -edy / elen;
+                    ny = edx / elen;
+                }
+                if (e == 0)
+                {
+                    firstNx = nx;
+                    firstNy = ny;
+                }
+                lastNx = nx;
+                lastNy = ny;
+                var hits = HitsOnEdge(a, b, zBot, m, zHint, tinZ, tris);
+                if (hits.Count == 0) continue;
+                for (int k = 0; k < hits.Count; k++)
+                {
+                    var h = hits[k];
+                    if (k == 0 && hasLast)
+                    {
+                        var p = bot[(e - 1 + n) % n];
+                        double pdx = a.X - p.X, pdy = a.Y - p.Y;
+                        double plen = Math.Sqrt(pdx * pdx + pdy * pdy);
+                        double n1x = 0.0, n1y = 1.0;
+                        if (plen > 1e-9)
+                        {
+                            n1x = -pdy / plen;
+                            n1y = pdx / plen;
+                        }
+                        EmitCornerRays(a, n1x, n1y, nx, ny, zBot, m, zHint, tinZ, berm, faces, rays, ref lastG);
+                        faces.Add(new[] { a, a, h.P, lastG });
+                    }
+                    berm.Add(h.P);
+                    if (rays != null)
+                        rays.Add(new[] { h.Bot, h.P });
+                    if (k > 0)
+                    {
+                        var prev = hits[k - 1];
+                        faces.Add(new[] { prev.Bot, h.Bot, h.P, prev.P });
+                    }
+                    lastG = h.P;
+                    hasLast = true;
+                }
+            }
+            if (hasLast && berm.Count > 0)
+            {
+                EmitCornerRays(bot[0], lastNx, lastNy, firstNx, firstNy, zBot, m, zHint, tinZ, berm, faces, rays, ref lastG);
+                faces.Add(new[] { bot[0], bot[0], berm[0], lastG });
+            }
+        }
+
+        static void EmitCornerRays(WellPt corner,
+            double n1x, double n1y, double n2x, double n2y,
+            double zBot, double m, double zHint,
+            Func<double, double, double> tinZ,
+            List<WellPt> berm, List<WellPt[]> faces, List<WellPt[]> rays, ref WellPt lastG)
+        {
+            if (m < 1e-9) return;
+            double r1x, r1y, r2x, r2y;
+            CornerRayDirs(n1x, n1y, n2x, n2y, out r1x, out r1y, out r2x, out r2y);
+            var g1 = GradeAlong(corner.X, corner.Y, zBot, r1x, r1y, m, tinZ, zHint, 1.0);
+            faces.Add(new[] { corner, corner, g1, lastG });
+            berm.Add(g1);
+            if (rays != null) rays.Add(new[] { corner, g1 });
+            lastG = g1;
+            var g2 = GradeAlong(corner.X, corner.Y, zBot, r2x, r2y, m, tinZ, zHint, 1.0);
+            faces.Add(new[] { corner, corner, g2, lastG });
+            berm.Add(g2);
+            if (rays != null) rays.Add(new[] { corner, g2 });
+            lastG = g2;
+        }
+
+        public static bool PointInPoly(IList<WellPt> poly, double x, double y)
+        {
+            if (poly == null || poly.Count < 3) return false;
+            bool inside = false;
+            int n = poly.Count;
+            for (int i = 0, j = n - 1; i < n; j = i++)
+            {
+                double xi = poly[i].X, yi = poly[i].Y;
+                double xj = poly[j].X, yj = poly[j].Y;
+                if ((yi > y) == (yj > y)) continue;
+                double den = yj - yi;
+                if (Math.Abs(den) < 1e-15) continue;
+                if (x < (xj - xi) * (y - yi) / den + xi)
+                    inside = !inside;
+            }
+            return inside;
+        }
+
+        static bool SegSeg(double ax, double ay, double bx, double by,
+            double cx, double cy, double dx, double dy, out double t, out double u)
+        {
+            t = 0.0;
+            u = 0.0;
+            double rx = bx - ax, ry = by - ay;
+            double sx = dx - cx, sy = dy - cy;
+            double den = rx * sy - ry * sx;
+            if (Math.Abs(den) < 1e-12) return false;
+            double qx = cx - ax, qy = cy - ay;
+            t = (qx * sy - qy * sx) / den;
+            u = (qx * ry - qy * rx) / den;
+            return t >= -1e-9 && t <= 1.0 + 1e-9 && u >= -1e-9 && u <= 1.0 + 1e-9;
+        }
+
+        /// <summary>
+        /// Края траншеи от бровки. throughAxis — сквозная до оси.
+        /// toWell — контур прямоугольника траншеи с вырезанным колодцем
+        /// (если уже — дуга по стенке; если шире — до оси и полудуга колодца).
+        /// </summary>
+        public static bool PipeLines(WellPitInput w, WellPipeSeg p, IList<WellPt> berm,
+            double hwL, double hwR,
+            out List<WellPt> throughAxis, out List<WellPt> toWell)
+        {
+            throughAxis = toWell = null;
+            WellPt bermL, L0, R0, bermR, C;
+            double ux, uy, lx, ly, cx, cy, R, z0;
+            if (!PipeFrame(w, p, berm, hwL, hwR,
+                out ux, out uy, out lx, out ly, out cx, out cy, out R, out z0,
+                out bermL, out L0, out R0, out bermR, out C))
+                return false;
+            if (hwL < 0.05) hwL = 0.05;
+            if (hwR < 0.05) hwR = 0.05;
+            throughAxis = new List<WellPt> { bermL, L0, C, R0, bermR };
+            WellPt joinL = CircleJoin(cx, cy, z0, ux, uy, lx, ly, hwL, R, true);
+            WellPt joinR = CircleJoin(cx, cy, z0, ux, uy, lx, ly, hwR, R, false);
+            toWell = new List<WellPt> { bermL };
+            if (hwL >= R - 1e-9) toWell.Add(L0);
+            toWell.Add(joinL);
+            AddArc(toWell, cx, cy, z0, R, joinL, joinR, ux, uy);
+            toWell.Add(joinR);
+            if (hwR >= R - 1e-9) toWell.Add(R0);
+            toWell.Add(bermR);
+            return true;
+        }
+
+        /// <summary>
+        /// Прямоугольник траншеи: бровка → ось колодца (L0–R0) → бровка.
+        /// Замыкающее ребро — по бровке; при объединении его выкидываем.
+        /// </summary>
+        public static bool TrenchRect(WellPitInput w, WellPipeSeg p, IList<WellPt> berm,
+            double hwL, double hwR, out List<WellPt> rect)
+        {
+            rect = null;
+            WellPt bermL, L0, R0, bermR, C;
+            double ux, uy, lx, ly, cx, cy, R, z0;
+            if (!PipeFrame(w, p, berm, hwL, hwR,
+                out ux, out uy, out lx, out ly, out cx, out cy, out R, out z0,
+                out bermL, out L0, out R0, out bermR, out C))
+                return false;
+            rect = new List<WellPt> { bermL, L0, R0, bermR };
+            return true;
+        }
+
+        /// <summary>
+        /// Синие контуры: объединение пересекающихся прямоугольников траншей
+        /// минус колодец. Наложение рёбер убирается.
+        /// </summary>
+        public static List<PolyLoop> UnionTrenches(
+            WellPitInput w, IList<WellPt> berm,
+            IList<WellPipeSeg> pipes, IList<double> hwL, IList<double> hwR)
+        {
+            var rects = new List<List<WellPt>>();
+            if (w == null || pipes == null) return new List<PolyLoop>();
+            double z = w.Sump;
+            for (int i = 0; i < pipes.Count; i++)
+            {
+                var p = pipes[i];
+                if (p == null) continue;
+                double l = hwL != null && i < hwL.Count ? hwL[i] : 0.30;
+                double r = hwR != null && i < hwR.Count ? hwR[i] : 0.30;
+                List<WellPt> rect;
+                if (!TrenchRect(w, p, berm, l, r, out rect)) continue;
+                rects.Add(rect);
+                z = p.Invert0;
+            }
+            return PolyUnion.UnionMinusDisk(rects, w.X, w.Y, Radius(w), z, true);
+        }
+
+        static bool PipeFrame(WellPitInput w, WellPipeSeg p, IList<WellPt> berm,
+            double hwL, double hwR,
+            out double ux, out double uy, out double lx, out double ly,
+            out double cx, out double cy, out double R, out double z0,
+            out WellPt bermL, out WellPt L0, out WellPt R0, out WellPt bermR, out WellPt C)
+        {
+            ux = uy = lx = ly = cx = cy = R = z0 = 0.0;
+            bermL = L0 = R0 = bermR = C = new WellPt();
+            if (w == null || p == null || berm == null || berm.Count < 3) return false;
+            if (hwL < 0.05) hwL = 0.05;
+            if (hwR < 0.05) hwR = 0.05;
+            double dx = p.X1 - w.X, dy = p.Y1 - w.Y;
+            double len = Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-6)
+            {
+                dx = p.X1 - p.X0;
+                dy = p.Y1 - p.Y0;
+                len = Math.Sqrt(dx * dx + dy * dy);
+            }
+            if (len < 1e-6) return false;
+            ux = dx / len;
+            uy = dy / len;
+            lx = -uy;
+            ly = ux;
+            cx = w.X;
+            cy = w.Y;
+            R = Radius(w);
+            z0 = p.Invert0;
+            double bxL, byL, bxR, byR;
+            if (!OffsetBermHit(berm, cx, cy, ux, uy, lx, ly, hwL, out bxL, out byL))
+                return false;
+            if (!OffsetBermHit(berm, cx, cy, ux, uy, -lx, -ly, hwR, out bxR, out byR))
+                return false;
+            L0 = new WellPt(cx + lx * hwL, cy + ly * hwL, z0);
+            R0 = new WellPt(cx - lx * hwR, cy - ly * hwR, z0);
+            C = new WellPt(cx, cy, z0);
+            bermL = new WellPt(bxL, byL, z0);
+            bermR = new WellPt(bxR, byR, z0);
+            return true;
+        }
+
+        static WellPt CircleJoin(double cx, double cy, double z,
+            double ux, double uy, double lx, double ly, double hw, double R, bool left)
+        {
+            double s = left ? 1.0 : -1.0;
+            if (hw < R - 1e-9)
+            {
+                double t = Math.Sqrt(R * R - hw * hw);
+                return new WellPt(cx + ux * t + s * lx * hw, cy + uy * t + s * ly * hw, z);
+            }
+            return new WellPt(cx + s * lx * R, cy + s * ly * R, z);
+        }
+
+        static bool OffsetBermHit(IList<WellPt> berm, double cx, double cy,
+            double ux, double uy, double lx, double ly, double hw,
+            out double x, out double y)
+        {
+            double x0 = cx + lx * hw, y0 = cy + ly * hw;
+            double reach = 80.0;
+            return ExitBerm(berm, x0, y0, x0 + ux * reach, y0 + uy * reach, out x, out y, out _);
+        }
+
+        static void AddArc(List<WellPt> pts, double cx, double cy, double z, double R,
+            WellPt a, WellPt b, double towardX, double towardY)
+        {
+            double a0 = Math.Atan2(a.Y - cy, a.X - cx);
+            double a1 = Math.Atan2(b.Y - cy, b.X - cx);
+            double da = a1 - a0;
+            while (da > Math.PI) da -= 2.0 * Math.PI;
+            while (da < -Math.PI) da += 2.0 * Math.PI;
+            double amid = a0 + 0.5 * da;
+            double mx = Math.Cos(amid), my = Math.Sin(amid);
+            if (mx * towardX + my * towardY < 0.0)
+            {
+                if (da >= 0.0) da -= 2.0 * Math.PI;
+                else da += 2.0 * Math.PI;
+            }
+            int n = (int)Math.Ceiling(Math.Abs(da) / (Math.PI / 18.0));
+            if (n < 2) n = 2;
+            for (int i = 1; i < n; i++)
+            {
+                double ang = a0 + da * i / n;
+                pts.Add(new WellPt(cx + R * Math.Cos(ang), cy + R * Math.Sin(ang), z));
+            }
+        }
+
+        static bool ExitBerm(IList<WellPt> berm, double x0, double y0, double x1, double y1,
+            out double x, out double y, out double tHit)
+        {
+            x = x0;
+            y = y0;
+            tHit = 1.0;
+            bool any = false;
+            int n = berm.Count;
+            for (int i = 0; i < n; i++)
+            {
+                var a = berm[i];
+                var b = berm[(i + 1) % n];
+                double t, u;
+                if (!SegSeg(x0, y0, x1, y1, a.X, a.Y, b.X, b.Y, out t, out u)) continue;
+                if (t < 1e-6 || t > 1.0) continue;
+                if (!any || t < tHit)
+                {
+                    tHit = t;
+                    x = x0 + t * (x1 - x0);
+                    y = y0 + t * (y1 - y0);
+                    any = true;
+                }
+            }
+            return any;
+        }
+
+        /// <summary>
+        /// 2D разрез рядом с колодцем: t поперёк оси, h = (z − sump) * hScale,
+        /// вставка сдвинута вдоль оси на alongHalf + pad.
+        /// </summary>
+        public static List<WellPt> SectionFlat(WellPitInput w, WellPitShape s, double hScale, double pad)
+        {
+            if (w == null || s == null || s.Section == null || s.Section.Count < 4)
+                return new List<WellPt>();
+            if (hScale <= 0.0) hScale = 1.0;
+            double ax = s.Ax, ay = s.Ay, px = s.Px, py = s.Py;
+            double shift = s.AlongHalf + Math.Max(0.5, pad);
+            double ox = w.X + ax * shift;
+            double oy = w.Y + ay * shift;
+            double z0 = w.Sump;
+            var pts = new List<WellPt>(s.Section.Count);
+            for (int i = 0; i < s.Section.Count; i++)
+            {
+                var p = s.Section[i];
+                double t = (p.X - w.X) * px + (p.Y - w.Y) * py;
+                double h = (p.Z - z0) * hScale;
+                pts.Add(new WellPt(ox + px * t + ax * h, oy + py * t + ay * h, 0.0));
+            }
+            return pts;
+        }
+
+        public static List<WellPt> ShaftFlat(WellPitInput w, WellPitShape s, double hScale, double pad)
+        {
+            if (w == null || s == null || s.Shaft == null || s.Shaft.Count < 4)
+                return new List<WellPt>();
+            if (hScale <= 0.0) hScale = 1.0;
+            double ax = s.Ax, ay = s.Ay, px = s.Px, py = s.Py;
+            double shift = s.AlongHalf + Math.Max(0.5, pad);
+            double ox = w.X + ax * shift;
+            double oy = w.Y + ay * shift;
+            double z0 = w.Sump;
+            var pts = new List<WellPt>(s.Shaft.Count);
+            for (int i = 0; i < s.Shaft.Count; i++)
+            {
+                var p = s.Shaft[i];
+                double t = (p.X - w.X) * px + (p.Y - w.Y) * py;
+                double h = (p.Z - z0) * hScale;
+                pts.Add(new WellPt(ox + px * t + ax * h, oy + py * t + ay * h, 0.0));
+            }
+            return pts;
+        }
+    }
+}

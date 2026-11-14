@@ -141,6 +141,120 @@ namespace Nvk.Cad
                  + (NvkUiState.CsCols > 0 ? " (NOD)" : "");
         }
 
+        public static string DrawWellPits(Database db, Transaction tr, IList<WellCsDraw> items,
+            Point3d origin, double scale)
+        {
+            if (items == null || items.Count == 0)
+                return "[НВК] колодцы CS: нет сечений";
+            EnsureLayer(db, tr, LayerIns, 1);
+            EnsureLayer(db, tr, LayerTbl, 7);
+            EraseWellCs(db, tr);
+            NvkAnno.CaptureDim(db, tr);
+
+            double hw = 3.0;
+            foreach (var it in items)
+            {
+                if (it == null || it.Geom == null) continue;
+                double x = Math.Max(TrenchGeom.XTopLeft(it.Geom, it.Slope), TrenchGeom.XTopRight(it.Geom, it.Slope));
+                if (it.Geom.Hit != null && NvkUiState.HalfWidth > x) x = NvkUiState.HalfWidth;
+                if (x > hw) hw = x;
+            }
+            var tbl = NvkSession.Tbl().ForCs();
+            double th = tbl.TextH;
+            double labW = TableLayout.LabelColW(tbl, CsAnnot.LayoutLabels());
+            double colGap = CsAnnot.ColGap(hw, scale, th, labW);
+            double rowGap = Math.Max(40.0 * th, scale * 15.0 + 20.0 * th);
+            if (NvkSession.CsYgap > rowGap) rowGap = NvkSession.CsYgap;
+            foreach (var it in items)
+            {
+                if (it == null || it.Geom == null) continue;
+                double osh = TrenchGeom.Osh(it.Geom.Elev);
+                double need = (it.Geom.Elev.Surface - osh + 0.3) * scale
+                    + CsAnnot.TableHeight(it.Geom, ProfileKind.Razrabotka, hw, it.Slope, it.Slope, tbl, null)
+                    + 3.5 * th;
+                if (need > rowGap) rowGap = need;
+            }
+            if (colGap < 8.0) colGap = 8.0;
+            if (rowGap < 8.0) rowGap = 8.0;
+            int maxPerRow = CsAnnot.PerRow(NvkUiState.CsCols, 0.0, colGap);
+            if (maxPerRow < 1) maxPerRow = 2;
+
+            var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForWrite);
+            var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+            int nIns = 0;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var it = items[i];
+                if (it == null || it.Geom == null) continue;
+                int col, row;
+                CsAnnot.Grid(i, maxPerRow, out col, out row);
+                var ins = new Point3d(origin.X + col * colGap, origin.Y - row * rowGap, 0.0);
+                string bname = "NVK-MH-CS-" + (it.Handle ?? i.ToString());
+                double m = it.Slope;
+                double shaft = it.ShaftR;
+                ObjectId btrId = RecreateBlock(tr, bt, bname, btr =>
+                {
+                    DrawLevel(btr, tr, it.Geom, ProfileKind.Razrabotka, scale, m, m, i, 0, 0, hw, false);
+                    if (shaft > 0.05)
+                    {
+                        it.Geom.ManholeHalfW = shaft;
+                        DrawManholeShaft(btr, tr, it.Geom, scale, TrenchGeom.Osh(it.Geom.Elev), 0, 0);
+                    }
+                    if (!string.IsNullOrEmpty(it.Name))
+                    {
+                        double osh = TrenchGeom.Osh(it.Geom.Elev);
+                        double topY = (it.Geom.Elev.Surface + it.Geom.Pavement - osh) * scale + 4.0 * th;
+                        NvkText.Make(btr, tr, LayerTbl, 0.0, topY, it.Name, th,
+                            AttachmentPoint.MiddleCenter, 0.0, 24.0 * th, false);
+                    }
+                });
+                var br = new BlockReference(ins, btrId);
+                br.Layer = LayerIns;
+                ms.AppendEntity(br);
+                tr.AddNewlyCreatedDBObject(br, true);
+                NvkTag.Stamp(tr, br);
+                DrawDims(ms, tr, it.Geom, ProfileKind.Razrabotka, scale, m, m, ins.X, ins.Y);
+                nIns++;
+            }
+            return "[НВК] колодцы CS: сечений " + nIns
+                 + "  шагX=" + colGap.ToString("0.0")
+                 + "  шагY=" + rowGap.ToString("0.0");
+        }
+
+        static void EraseWellCs(Database db, Transaction tr)
+        {
+            var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+            var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+            var erase = new List<ObjectId>();
+            foreach (ObjectId id in ms)
+            {
+                var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                if (ent == null) continue;
+                var br = ent as BlockReference;
+                string n = null;
+                if (br != null)
+                {
+                    try { n = br.Name; } catch (Exc) { }
+                }
+                if (n != null && n.StartsWith("NVK-MH-CS-", StringComparison.OrdinalIgnoreCase))
+                    erase.Add(id);
+            }
+            foreach (var id in erase)
+                tr.GetObject(id, OpenMode.ForWrite).Erase();
+            bt.UpgradeOpen();
+            var blkErase = new List<ObjectId>();
+            foreach (ObjectId id in bt)
+            {
+                var btr = (BlockTableRecord)tr.GetObject(id, OpenMode.ForRead);
+                if (btr.IsAnonymous || btr.IsLayout) continue;
+                if (btr.Name != null && btr.Name.StartsWith("NVK-MH-CS-", StringComparison.OrdinalIgnoreCase)
+                    && btr.GetBlockReferenceIds(true, true).Count == 0)
+                    blkErase.Add(id);
+            }
+            foreach (var id in blkErase)
+                ((BlockTableRecord)tr.GetObject(id, OpenMode.ForWrite)).Erase();
+        }
+
         static string BlockName(string seg, ProfileKind kind, int i)
         {
             return "NVK-CS-" + (seg ?? "X") + "-L" + ((int)kind) + "-S" + i.ToString("00");

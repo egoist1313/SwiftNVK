@@ -1,0 +1,610 @@
+using System;
+using System.Collections.Generic;
+using Nvk.Core;
+using Xunit;
+
+namespace Nvk.Core.Tests
+{
+    public class WellPitGeomTests
+    {
+        static WellPitInput Well()
+        {
+            return new WellPitInput
+            {
+                Name = "К1",
+                X = 100,
+                Y = 200,
+                Rim = 105,
+                Sump = 100,
+                Diam = 1.50,
+                Height = 5.0,
+                AxisX = 1,
+                AxisY = 0
+            };
+        }
+
+        static WellPitCfg Cfg()
+        {
+            return new WellPitCfg
+            {
+                TrenchGap = 0.50,
+                SlopeM = 1.00,
+                Bedding = 0.0
+            };
+        }
+
+        [Fact]
+        public void RadiusIsHalfDiameter()
+        {
+            Assert.Equal(0.75, WellPitGeom.Radius(Well()), 6);
+        }
+
+        [Fact]
+        public void PitBottomIsSumpMinusBedding()
+        {
+            var w = Well();
+            var c = Cfg();
+            c.Bedding = 0.15;
+            c.SlopeM = 0.0;
+            var s = WellPitGeom.Build(w, c, (x, y) => 105.0);
+            Assert.Equal(w.Sump - 0.15, s.Outer[0].Z, 6);
+            Assert.Equal(w.Sump, s.Shaft[0].Z, 6);
+        }
+
+        [Fact]
+        public void SlopeRaysRunFromSoleToBerm()
+        {
+            var s = WellPitGeom.Build(Well(), Cfg(), (x, y) => 105.0);
+            Assert.True(s.SlopeRays != null && s.SlopeRays.Count >= 4);
+            var ray = s.SlopeRays[0];
+            Assert.Equal(2, ray.Length);
+            Assert.Equal(100.0, ray[0].Z, 6);
+            Assert.Equal(105.0, ray[1].Z, 3);
+        }
+
+        [Fact]
+        public void PipeThroughJoinsAtWellAxisFromBerm()
+        {
+            var w = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100 };
+            var berm = SquareBerm(5);
+            var pipe = new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 20, Y1 = 0, Invert0 = 99.5, Invert1 = 99.4, Diam = 0.3 };
+            List<WellPt> through, toWell;
+            Assert.True(WellPitGeom.PipeLines(w, pipe, berm, 0.30, 0.30, out through, out toWell));
+            Assert.Equal(0.0, through[2].X, 6);
+            Assert.Equal(0.0, through[2].Y, 6);
+            Assert.True(through[0].X > 4.5);
+            bool onCircle = false;
+            for (int i = 0; i < toWell.Count; i++)
+            {
+                double d = Math.Sqrt(toWell[i].X * toWell[i].X + toWell[i].Y * toWell[i].Y);
+                if (Math.Abs(d - 0.5) < 0.02) onCircle = true;
+            }
+            Assert.True(onCircle);
+            bool hitsCenter = false;
+            for (int i = 0; i < toWell.Count; i++)
+                if (Math.Abs(toWell[i].X) < 0.02 && Math.Abs(toWell[i].Y) < 0.02) hitsCenter = true;
+            Assert.False(hitsCenter);
+        }
+
+        [Fact]
+        public void WideTrenchCutsWellOutOfRectangle()
+        {
+            var w = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100 };
+            var berm = SquareBerm(5);
+            var pipe = new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 20, Y1 = 0, Invert0 = 99.5, Invert1 = 99.4, Diam = 0.3 };
+            List<WellPt> through, toWell;
+            Assert.True(WellPitGeom.PipeLines(w, pipe, berm, 0.80, 0.80, out through, out toWell));
+            bool hitsCenter = false, hasTop = false, hasBot = false, arcInTrench = false;
+            for (int i = 0; i < toWell.Count; i++)
+            {
+                if (Math.Abs(toWell[i].X) < 0.02 && Math.Abs(toWell[i].Y) < 0.02) hitsCenter = true;
+                if (Math.Abs(toWell[i].X) < 0.05 && Math.Abs(toWell[i].Y - 0.5) < 0.05) hasTop = true;
+                if (Math.Abs(toWell[i].X) < 0.05 && Math.Abs(toWell[i].Y + 0.5) < 0.05) hasBot = true;
+                double d = Math.Sqrt(toWell[i].X * toWell[i].X + toWell[i].Y * toWell[i].Y);
+                if (Math.Abs(d - 0.5) < 0.04 && toWell[i].X > 0.2) arcInTrench = true;
+            }
+            Assert.False(hitsCenter);
+            Assert.True(hasTop);
+            Assert.True(hasBot);
+            Assert.True(arcInTrench);
+        }
+
+        [Fact]
+        public void OverlappingWideTrenchesUnionDropsSharedEdge()
+        {
+            var w = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100 };
+            var berm = SquareBerm(5);
+            var pipes = new List<WellPipeSeg>
+            {
+                new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 20, Y1 = 0, Invert0 = 99.5, Diam = 0.3 },
+                new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 0, Y1 = 20, Invert0 = 99.5, Diam = 0.3 }
+            };
+            var hw = new List<double> { 0.80, 0.80 };
+            var loops = WellPitGeom.UnionTrenches(w, berm, pipes, hw, hw);
+            Assert.True(loops.Count >= 1);
+            bool sharedAxis = false;
+            bool hasWellArc = false;
+            bool hitsCenter = false;
+            int onInternal = 0;
+            for (int k = 0; k < loops.Count; k++)
+            {
+                var pts = loops[k].Pts;
+                int nSeg = loops[k].Closed ? pts.Count : pts.Count - 1;
+                for (int i = 0; i < pts.Count; i++)
+                {
+                    var a = pts[i];
+                    if (Math.Abs(a.X) < 0.02 && Math.Abs(a.Y) < 0.02) hitsCenter = true;
+                    double da = Math.Sqrt(a.X * a.X + a.Y * a.Y);
+                    if (Math.Abs(da - 0.5) < 0.06) hasWellArc = true;
+                    if (OnXY(a, 0, 0.4, 0.08)) onInternal++;
+                    if (i >= nSeg) continue;
+                    var b = pts[(i + 1) % pts.Count];
+                    if (CollinearThroughOrigin(a, b)) sharedAxis = true;
+                }
+            }
+            Assert.False(hitsCenter);
+            Assert.True(hasWellArc);
+            Assert.False(sharedAxis);
+            Assert.True(onInternal == 0);
+        }
+
+        [Fact]
+        public void OppositeWideTrenchesMakeWellHoleAndLongSides()
+        {
+            var w = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100 };
+            var berm = SquareBerm(5);
+            var pipes = new List<WellPipeSeg>
+            {
+                new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 20, Y1 = 0, Invert0 = 99.5, Diam = 0.3 },
+                new WellPipeSeg { X0 = 0, Y0 = 0, X1 = -20, Y1 = 0, Invert0 = 99.5, Diam = 0.3 }
+            };
+            var hw = new List<double> { 0.80, 0.80 };
+            var loops = WellPitGeom.UnionTrenches(w, berm, pipes, hw, hw);
+            bool hole = false;
+            bool longTop = false;
+            bool longBot = false;
+            bool hitsCenter = false;
+            for (int k = 0; k < loops.Count; k++)
+            {
+                var pts = loops[k].Pts;
+                bool allOnWell = pts.Count >= 8;
+                double minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+                for (int i = 0; i < pts.Count; i++)
+                {
+                    var p = pts[i];
+                    if (Math.Abs(p.X) < 0.02 && Math.Abs(p.Y) < 0.02) hitsCenter = true;
+                    double d = Math.Sqrt(p.X * p.X + p.Y * p.Y);
+                    if (Math.Abs(d - 0.5) > 0.06) allOnWell = false;
+                    if (p.X < minX) minX = p.X;
+                    if (p.X > maxX) maxX = p.X;
+                    if (p.Y < minY) minY = p.Y;
+                    if (p.Y > maxY) maxY = p.Y;
+                }
+                if (loops[k].Closed && allOnWell) hole = true;
+                if (maxX - minX > 8.0 && Math.Abs(minY - 0.8) < 0.15 && Math.Abs(maxY - 0.8) < 0.15)
+                    longTop = true;
+                if (maxX - minX > 8.0 && Math.Abs(minY + 0.8) < 0.15 && Math.Abs(maxY + 0.8) < 0.15)
+                    longBot = true;
+            }
+            Assert.False(hitsCenter);
+            Assert.True(hole);
+            Assert.True(longTop);
+            Assert.True(longBot);
+        }
+
+        [Fact]
+        public void NarrowTrenchesDoNotInventCenterJoin()
+        {
+            var w = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100 };
+            var berm = SquareBerm(5);
+            var pipes = new List<WellPipeSeg>
+            {
+                new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 20, Y1 = 0, Invert0 = 99.5, Diam = 0.3 },
+                new WellPipeSeg { X0 = 0, Y0 = 0, X1 = 0, Y1 = 20, Invert0 = 99.5, Diam = 0.3 }
+            };
+            var hw = new List<double> { 0.30, 0.30 };
+            var loops = WellPitGeom.UnionTrenches(w, berm, pipes, hw, hw);
+            Assert.True(loops.Count >= 2);
+            bool hitsCenter = false;
+            for (int k = 0; k < loops.Count; k++)
+            {
+                var pts = loops[k].Pts;
+                for (int i = 0; i < pts.Count; i++)
+                    if (Math.Abs(pts[i].X) < 0.02 && Math.Abs(pts[i].Y) < 0.02) hitsCenter = true;
+            }
+            Assert.False(hitsCenter);
+        }
+
+        static bool OnXY(WellPt p, double x, double y, double e)
+        {
+            return Math.Abs(p.X - x) < e && Math.Abs(p.Y - y) < e;
+        }
+
+        static bool CollinearThroughOrigin(WellPt a, WellPt b)
+        {
+            if (Math.Abs(a.X) < 0.05 && Math.Abs(b.X) < 0.05
+                && a.Y * b.Y < -0.05)
+                return true;
+            if (Math.Abs(a.Y) < 0.05 && Math.Abs(b.Y) < 0.05
+                && a.X * b.X < -0.05)
+                return true;
+            return false;
+        }
+
+        static List<WellPt> SquareBerm(double h)
+        {
+            return new List<WellPt>
+            {
+                new WellPt(-h, -h, 105),
+                new WellPt(h, -h, 105),
+                new WellPt(h, h, 105),
+                new WellPt(-h, h, 105)
+            };
+        }
+
+        [Fact]
+        public void BottomHalfIsRadiusPlusOffset()
+        {
+            var w = new WellPitInput { Diam = 1.00 };
+            var c = new WellPitCfg { TrenchGap = 0.30 };
+            Assert.Equal(0.80, WellPitGeom.BottomHalf(w, c), 6);
+        }
+
+        [Fact]
+        public void AlongHalfIsRadiusPlusTrenchGap()
+        {
+            Assert.Equal(1.25, WellPitGeom.AlongHalf(Well(), Cfg()), 6);
+        }
+
+        [Fact]
+        public void AcrossHalfEqualsAlongHalf()
+        {
+            Assert.Equal(1.25, WellPitGeom.AcrossHalf(Well(), Cfg()), 6);
+            Assert.Equal(
+                WellPitGeom.AlongHalf(Well(), Cfg()),
+                WellPitGeom.AcrossHalf(Well(), Cfg()),
+                6);
+        }
+
+        [Fact]
+        public void AxisUnitNormalizes()
+        {
+            var w = Well();
+            w.AxisX = 3;
+            w.AxisY = 4;
+            double ax, ay;
+            WellPitGeom.AxisUnit(w, out ax, out ay);
+            Assert.Equal(0.6, ax, 6);
+            Assert.Equal(0.8, ay, 6);
+        }
+
+        [Fact]
+        public void CombineDirsFlipsOppositeThroughWell()
+        {
+            double ax, ay;
+            WellPitGeom.CombineDirs(
+                new[] { 10.0, -8.0 },
+                new[] { 0.0, 0.0 },
+                out ax, out ay);
+            Assert.Equal(1.0, ax, 6);
+            Assert.Equal(0.0, ay, 6);
+        }
+
+        [Fact]
+        public void CombineDirsFollowsLongestPipe()
+        {
+            double ax, ay;
+            WellPitGeom.CombineDirs(
+                new[] { 1.0, 20.0 },
+                new[] { 0.0, 20.0 },
+                out ax, out ay);
+            Assert.True(ax > 0.4);
+            Assert.True(ay > 0.4);
+        }
+
+        [Fact]
+        public void AxisFromOutgoingIgnoresTeeBranch()
+        {
+            double ax, ay;
+            WellPitGeom.AxisFromOutgoing(
+                new[] { 20.0, -18.0, 0.0 },
+                new[] { 0.0, 0.0, 8.0 },
+                out ax, out ay);
+            Assert.True(Math.Abs(ax) > 0.98);
+            Assert.True(Math.Abs(ay) < 0.15);
+        }
+
+        [Fact]
+        public void AxisFromOutgoingBendFollowsLongestPipe()
+        {
+            double ax, ay;
+            WellPitGeom.AxisFromOutgoing(
+                new[] { 12.0, 0.0 },
+                new[] { 0.0, 5.0 },
+                out ax, out ay);
+            Assert.Equal(1.0, ax, 6);
+            Assert.Equal(0.0, ay, 6);
+        }
+
+        [Fact]
+        public void AxisFromRectRecoversBuildAxis()
+        {
+            var w = Well();
+            w.AxisX = 0;
+            w.AxisY = 1;
+            var s = WellPitGeom.Build(w, Cfg(), (x, y) => 105.0);
+            var xs = new double[4];
+            var ys = new double[4];
+            for (int i = 0; i < 4; i++)
+            {
+                xs[i] = s.Outer[i].X;
+                ys[i] = s.Outer[i].Y;
+            }
+            double ax, ay;
+            WellPitGeom.AxisFromRect(xs, ys, out ax, out ay);
+            Assert.True(Math.Abs(ax) < 0.05);
+            Assert.True(Math.Abs(ay) > 0.98);
+        }
+
+        [Fact]
+        public void AxisFromOutgoingSinglePipe()
+        {
+            double ax, ay;
+            WellPitGeom.AxisFromOutgoing(new[] { 0.0 }, new[] { 12.0 }, out ax, out ay);
+            Assert.Equal(0.0, ax, 6);
+            Assert.Equal(1.0, ay, 6);
+        }
+
+        [Fact]
+        public void TangentFromNormalIsPipeDirection()
+        {
+            double ax, ay;
+            WellPitGeom.TangentFromNormal(-0.8, 0.6, out ax, out ay);
+            Assert.Equal(0.6, ax, 6);
+            Assert.Equal(0.8, ay, 6);
+        }
+
+        [Fact]
+        public void SquareFollowsNorthAxis()
+        {
+            var w = Well();
+            w.AxisX = 0;
+            w.AxisY = 1;
+            var c = Cfg();
+            c.TrenchGap = 0.30;
+            c.SlopeM = 0;
+            var s = WellPitGeom.Build(w, c, (x, y) => 105.0);
+            Assert.Equal(0.0, s.Ax, 6);
+            Assert.Equal(1.0, s.Ay, 6);
+            Assert.Equal(s.Outer[0].Y, s.Outer[1].Y, 6);
+            Assert.True(s.Outer[0].Y > w.Y);
+        }
+
+        [Fact]
+        public void PerpIsLeftOfAxis()
+        {
+            double px, py;
+            WellPitGeom.PerpOf(1, 0, out px, out py);
+            Assert.Equal(0.0, px, 6);
+            Assert.Equal(1.0, py, 6);
+        }
+
+        [Fact]
+        public void BermOffsetIsSlopeTimesDepth()
+        {
+            Assert.Equal(5.0, WellPitGeom.BermOffset(1.0, 105, 100), 6);
+            Assert.Equal(0.0, WellPitGeom.BermOffset(0.0, 105, 100), 6);
+            Assert.Equal(0.0, WellPitGeom.BermOffset(1.0, 99, 100), 6);
+        }
+
+        [Fact]
+        public void RectRotatesWithAxis()
+        {
+            var pts = WellPitGeom.Rect(0, 0, 10, 0, 1, -1, 0, 2, 1);
+            Assert.Equal(4, pts.Count);
+            Assert.Equal(-1.0, pts[0].X, 6);
+            Assert.Equal(2.0, pts[0].Y, 6);
+            Assert.Equal(1.0, pts[1].X, 6);
+            Assert.Equal(2.0, pts[1].Y, 6);
+        }
+
+        [Fact]
+        public void BuildSquareHasNoInnerFrame()
+        {
+            var s = WellPitGeom.Build(Well(), Cfg(), (x, y) => 105.0);
+            Assert.False(s.HasInner);
+            Assert.Equal(4, s.Outer.Count);
+            Assert.True(s.Berm.Count >= 8);
+            Assert.True(s.Faces != null && s.Faces.Count >= 8);
+            Assert.Equal(4, s.Section.Count);
+            Assert.Equal(1.25, s.AcrossHalf, 6);
+            Assert.Equal(s.AlongHalf, s.AcrossHalf, 6);
+        }
+
+        [Fact]
+        public void CornerRaysAre120FromSides()
+        {
+            double r1x, r1y, r2x, r2y;
+            WellPitGeom.CornerRayDirs(0, 1, 1, 0, out r1x, out r1y, out r2x, out r2y);
+            Assert.Equal(0.5, r1x, 6);
+            Assert.Equal(Math.Sqrt(3.0) / 2.0, r1y, 6);
+            Assert.Equal(Math.Sqrt(3.0) / 2.0, r2x, 6);
+            Assert.Equal(0.5, r2y, 6);
+        }
+
+        [Fact]
+        public void CornerRaysRoundBermOnFlatTin()
+        {
+            var w = Well();
+            w.X = 0;
+            w.Y = 0;
+            w.Diam = 1.0;
+            w.Sump = 100;
+            w.Rim = 105;
+            var c = new WellPitCfg { TrenchGap = 0.50, SlopeM = 1.0, Bedding = 0.0 };
+            var s = WellPitGeom.Build(w, c, (x, y) => 105.0);
+            double half = s.AlongHalf;
+            var corner = new WellPt(half, half, 100);
+            bool hit30 = false, hit60 = false;
+            for (int i = 0; i < s.Berm.Count; i++)
+            {
+                double dx = s.Berm[i].X - corner.X;
+                double dy = s.Berm[i].Y - corner.Y;
+                double ang = Math.Atan2(dy, dx) * 180.0 / Math.PI;
+                double run = Math.Sqrt(dx * dx + dy * dy);
+                if (Math.Abs(run - 5.0) > 0.08) continue;
+                if (Math.Abs(ang - 30.0) < 3.0) hit30 = true;
+                if (Math.Abs(ang - 60.0) < 3.0) hit60 = true;
+            }
+            Assert.True(hit30);
+            Assert.True(hit60);
+        }
+
+        [Fact]
+        public void GradeAlongFlatTinHitsSlope()
+        {
+            var p = WellPitGeom.GradeAlong(0, 0, 100, 1, 0, 1.0, (x, y) => 105.0, 105.0, 1.0);
+            Assert.Equal(5.0, p.X, 3);
+            Assert.Equal(0.0, p.Y, 6);
+            Assert.Equal(105.0, p.Z, 3);
+        }
+
+        [Fact]
+        public void VerticalWallsKeepBermOnOuter()
+        {
+            var c = Cfg();
+            c.SlopeM = 0.0;
+            var s = WellPitGeom.Build(Well(), c, (x, y) => 105.0);
+            Assert.Equal(s.AlongHalf, s.BermAlong, 6);
+            Assert.Equal(s.AcrossHalf, s.BermAcross, 6);
+            Assert.Equal(s.Outer[0].X, s.Berm[0].X, 6);
+            Assert.Equal(s.Outer[0].Y, s.Berm[0].Y, 6);
+            Assert.Equal(105.0, s.Berm[0].Z, 6);
+        }
+
+        [Fact]
+        public void SlopePushesBermOut()
+        {
+            var s = WellPitGeom.Build(Well(), Cfg(), (x, y) => 105.0);
+            Assert.Equal(s.AlongHalf + 5.0, s.BermAlong, 2);
+            Assert.Equal(s.AcrossHalf + 5.0, s.BermAcross, 2);
+        }
+
+        [Fact]
+        public void SectionIsPerpTrapezoid()
+        {
+            var w = Well();
+            var s = WellPitGeom.Build(w, Cfg(), (x, y) => 105.0);
+            Assert.Equal(w.Y + s.BermAcross, s.Section[0].Y, 3);
+            Assert.Equal(w.X, s.Section[0].X, 3);
+            Assert.Equal(105.0, s.Section[0].Z, 3);
+            Assert.Equal(w.Y + s.AcrossHalf, s.Section[1].Y, 6);
+            Assert.Equal(100.0, s.Section[1].Z, 6);
+            Assert.Equal(w.Y - s.AcrossHalf, s.Section[2].Y, 6);
+            Assert.Equal(w.Y - s.BermAcross, s.Section[3].Y, 3);
+        }
+
+        [Fact]
+        public void ShaftWidthIsDiameter()
+        {
+            var w = Well();
+            var s = WellPitGeom.Build(w, Cfg(), (x, y) => 105.0);
+            double dy = s.Shaft[0].Y - s.Shaft[1].Y;
+            Assert.Equal(w.Diam, dy, 6);
+            Assert.Equal(w.Sump, s.Shaft[0].Z, 6);
+            Assert.Equal(w.Rim, s.Shaft[2].Z, 6);
+        }
+
+        [Fact]
+        public void BermOnEdgeHitsTinRidgeBreak()
+        {
+            var a = new WellPt(0, 0, 100);
+            var b = new WellPt(10, 0, 100);
+            var tris = RidgeTris();
+            Func<double, double, double> tin = (x, y) =>
+            {
+                if (x <= 3.1) return 105.0 + x * 3.0 / 3.1;
+                return 108.0 + (x - 3.1) * (-3.0) / 6.9;
+            };
+            var berm = WellPitGeom.BermOnEdge(a, b, 100, 1.0, tin, tris);
+            Assert.True(berm.Count >= 3);
+            bool hit = false;
+            for (int i = 0; i < berm.Count; i++)
+            {
+                if (Math.Abs(berm[i].X - 3.1) < 0.05 && Math.Abs(berm[i].Y - 8.0) < 0.15)
+                    hit = true;
+            }
+            Assert.True(hit);
+        }
+
+        [Fact]
+        public void UniformSamplesMissRidgeBreak()
+        {
+            var a = new WellPt(0, 0, 100);
+            var b = new WellPt(10, 0, 100);
+            Func<double, double, double> tin = (x, y) =>
+            {
+                if (x <= 3.1) return 105.0 + x * 3.0 / 3.1;
+                return 108.0 + (x - 3.1) * (-3.0) / 6.9;
+            };
+            var berm = WellPitGeom.BermOnEdge(a, b, 100, 1.0, tin, null);
+            bool hit = false;
+            for (int i = 0; i < berm.Count; i++)
+            {
+                if (Math.Abs(berm[i].X - 3.1) < 0.05) hit = true;
+            }
+            Assert.False(hit);
+        }
+
+        [Fact]
+        public void BuildBermIncludesTinBreak()
+        {
+            var w = Well();
+            w.X = 0;
+            w.Y = 0;
+            w.Sump = 100;
+            w.Rim = 105;
+            w.Diam = 1.0;
+            w.AxisX = 1;
+            w.AxisY = 0;
+            var c = new WellPitCfg { TrenchGap = 0.50, SlopeM = 1.0, Bedding = 0.0 };
+            var tris = new List<TinTri>
+            {
+                new TinTri(-2, 1, 105, 0.3, 1, 108, 0.3, 20, 108),
+                new TinTri(-2, 1, 105, 0.3, 20, 108, -2, 20, 105),
+                new TinTri(0.3, 1, 108, 2, 1, 105, 2, 20, 105),
+                new TinTri(0.3, 1, 108, 2, 20, 105, 0.3, 20, 108)
+            };
+            var s = WellPitGeom.Build(w, c, (x, y) => 105.0, tris);
+            bool hit = false;
+            for (int i = 0; i < s.Berm.Count; i++)
+            {
+                if (Math.Abs(s.Berm[i].X - 0.3) < 0.08 && Math.Abs(s.Berm[i].Y - 9.0) < 0.2)
+                    hit = true;
+            }
+            Assert.True(hit);
+        }
+
+        static List<TinTri> RidgeTris()
+        {
+            return new List<TinTri>
+            {
+                new TinTri(0, 0, 105, 3.1, 0, 108, 3.1, 20, 108),
+                new TinTri(0, 0, 105, 3.1, 20, 108, 0, 20, 105),
+                new TinTri(3.1, 0, 108, 10, 0, 105, 10, 20, 105),
+                new TinTri(3.1, 0, 108, 10, 20, 105, 3.1, 20, 108)
+            };
+        }
+
+        [Fact]
+        public void SectionFlatSitsAlongAxis()
+        {
+            var w = Well();
+            var s = WellPitGeom.Build(w, Cfg(), (x, y) => 105.0);
+            var flat = WellPitGeom.SectionFlat(w, s, 1.0, 2.0);
+            Assert.Equal(4, flat.Count);
+            Assert.True(flat[0].X > w.X);
+            Assert.Equal(0.0, flat[0].Z, 6);
+        }
+    }
+}

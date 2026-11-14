@@ -49,7 +49,7 @@ namespace Nvk.Cad
 
     static class NvkSession
     {
-        public const string Version = "0.253";
+        public const string Version = "0.267";
         public static int RunId;
         public static DomainResult Last;
         public static List<DomainResult> Runs = new List<DomainResult>();
@@ -63,6 +63,8 @@ namespace Nvk.Cad
         public static string RootDir;
         public static Point3d CsIns;
         public static bool CsInsHas;
+        public static Point3d MhCsIns;
+        public static bool MhCsInsHas;
         public static Point3d EpIns;
         public static bool EpInsHas;
         public static Point3d VolIns;

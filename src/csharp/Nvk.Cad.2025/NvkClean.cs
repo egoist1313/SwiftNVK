@@ -11,7 +11,9 @@ namespace Nvk.Cad
             "NVK-CS", "NVK-CS-TBL", "NVK-POPER", "NVK-VOL", "NVK-PLAN",
             "NVK-PLAN-MH", "NVK-PLAN-SAMP", "NVK-PLAN-SIT",
             "NVK-EP-RAZR", "NVK-EP-PESOK", "NVK-EP-TRUBA", "NVK-EP-ZASH", "NVK-EP-ZAS",
-            "NVK-INS", "NVK-HATCH", "NVK-HATCHBND", "NVK-DATA", "NVK-MARK"
+            "NVK-INS", "NVK-HATCH", "NVK-HATCHBND", "NVK-DATA", "NVK-MARK",
+            "NVK-MH-PIT", "NVK-MH-BERM", "NVK-MH-SLOPE", "NVK-MH-TRNCH",
+            "NVK-MH-PIPE-C", "NVK-MH-PIPE-R", "NVK-MH-CS", "NVK-MH-TXT"
         };
 
         public static string Run(Database db, Transaction tr)

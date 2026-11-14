@@ -42,6 +42,9 @@ namespace Nvk.Cad
         readonly CheckBox _useBe, _l1mh;
         readonly Button _btnRoad, _btnEarth, _btnBot, _btnHat, _btnPav, _btnCs;
         readonly ComboBox _cL0, _cL6;
+        readonly TextBox _mhGap, _mhSlope, _mhBed;
+        readonly ComboBox _mhSurf;
+        readonly Label _mhInfo;
         readonly SheetUi _s2, _s3, _s4, _s5;
         readonly CheckBox _useWall;
         readonly DataGridView _wallGrid;
@@ -78,6 +81,7 @@ namespace Nvk.Cad
             var pL3   = Page(tabs, "L3 Труба");
             var pL4   = Page(tabs, "L4 Защита");
             var pL5   = Page(tabs, "L5 Засыпка");
+            var pMh   = Page(tabs, "Колодцы");
 
             _info = new Label
             {
@@ -316,6 +320,29 @@ namespace Nvk.Cad
             pL5.Controls.Add(Head("Строки таблицы"));
             MakeRowConfigBtn(pL5, ProfileKind.Zasypka, () => _defsL5, v => _defsL5 = v);
 
+            pMh.Controls.Add(Head("Котлован колодца"));
+            _mhInfo = new Label
+            {
+                AutoSize = true,
+                MaximumSize = new Size(240, 0),
+                ForeColor = C_DIM,
+                BackColor = Color.Transparent,
+                Text = "Дно — квадрат: радиус + отступ, отстойник − подсыпка. Откос бровка→подошва. Синяя — контур траншеи с вырезанным колодцем (дуга). Красная — сквозная до оси."
+            };
+            pMh.Controls.Add(_mhInfo);
+            _mhGap   = Num(pMh, "Отступ от колодца, м", "0.50");
+            _mhBed   = Num(pMh, "Подсыпка, м", "0.10");
+            _mhSlope = Num(pMh, "Откос m (0=вертикаль)", "0.20");
+            pMh.Controls.Add(Head("Поверхность бровки"));
+            _mhSurf = SurfCombo(pMh, "TIN бровки (пусто = L0)");
+            pMh.Controls.Add(Btn("Обновить список TIN", RefreshSurfaces, 240));
+            pMh.Controls.Add(Head("Действия"));
+            var mhBtns = new FlowLayoutPanel { Width = 244, Height = 80, WrapContents = true, BackColor = Color.Transparent };
+            mhBtns.Controls.Add(Btn("Построить", BuildWells, 118, true));
+            mhBtns.Controls.Add(Btn("Обновить", UpdateWells, 118));
+            mhBtns.Controls.Add(Btn("Очистить", () => { SaveToState(); Send("НВК-КОЛОДЦЫ-ОЧИСТИТЬ "); }, 118));
+            pMh.Controls.Add(mhBtns);
+
             LoadFromState();
         }
 
@@ -381,6 +408,11 @@ namespace Nvk.Cad
             RefreshSurfaces();
             PickSurf(_cL0, NvkUiState.DesignHandle);
             PickSurf(_cL6, NvkUiState.BlackEarthHandle);
+            PickSurf(_mhSurf, string.IsNullOrEmpty(NvkUiState.WellSurfHandle)
+                ? NvkUiState.DesignHandle : NvkUiState.WellSurfHandle);
+            if (_mhGap != null) _mhGap.Text = NvkUiState.WellTrenchGap.ToString("0.###");
+            if (_mhBed != null) _mhBed.Text = NvkUiState.WellBedding.ToString("0.###");
+            if (_mhSlope != null) _mhSlope.Text = NvkUiState.WellSlopeM.ToString("0.###");
             _l1mh.Checked    = NvkUiState.L1ShowMh;
             _tblOff.Text     = NvkUiState.TableOffsetM.ToString("0.##");
             _labRoad.Text    = string.IsNullOrEmpty(NvkUiState.LabelRoad)   ? "Проектно-планировочное покрытие, м"   : NvkUiState.LabelRoad;
@@ -554,6 +586,14 @@ namespace Nvk.Cad
             {
                 NvkUiState.BlackEarthHandle = SurfHandle(_cL6);
                 NvkUiState.BlackEarthName   = SurfName(_cL6);
+            }
+            if (_mhGap != null) NvkUiState.WellTrenchGap = Math.Max(0.0, Parse(_mhGap, 0.50));
+            if (_mhBed != null) NvkUiState.WellBedding = Math.Max(0.0, Parse(_mhBed, 0.10));
+            if (_mhSlope != null) NvkUiState.WellSlopeM = Math.Max(0.0, Parse(_mhSlope, 0.20));
+            if (_mhSurf != null && _mhSurf.Items.Count > 0)
+            {
+                NvkUiState.WellSurfHandle = SurfHandle(_mhSurf);
+                NvkUiState.WellSurfName = SurfName(_mhSurf);
             }
             if (string.IsNullOrEmpty(NvkUiState.BlackEarthHandle))
                 NvkUiState.UseBlackEarth = false;
@@ -753,6 +793,18 @@ namespace Nvk.Cad
                 ShowStatus("Сбой: " + ex.Message);
                 NvkLog.Write("[НВК] панель Объёмы: " + ex.Message);
             }
+        }
+
+        void BuildWells()
+        {
+            SaveToState();
+            Send("НВК-КОЛОДЦЫ ");
+        }
+
+        void UpdateWells()
+        {
+            SaveToState();
+            Send("НВК-КОЛОДЦЫ-ОБНОВИТЬ ");
         }
 
         static void Send(string lisp)
@@ -1338,6 +1390,8 @@ namespace Nvk.Cad
             catch { }
             FillSurf(_cL0, items, NvkUiState.DesignHandle);
             FillSurf(_cL6, items, NvkUiState.BlackEarthHandle);
+            FillSurf(_mhSurf, items, string.IsNullOrEmpty(NvkUiState.WellSurfHandle)
+                ? NvkUiState.DesignHandle : NvkUiState.WellSurfHandle);
         }
 
         static void FillSurf(ComboBox cb, System.Collections.Generic.List<SurfItem> items, string handle)

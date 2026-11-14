@@ -141,6 +141,11 @@ namespace Nvk.Cad
         public static string FactProfileHandleL3 = "";
         public static string FactProfileHandleL4 = "";
         public static string FactProfileHandleL5 = "";
+        public static double WellTrenchGap = 0.50;
+        public static double WellBedding = 0.10;
+        public static double WellSlopeM = 0.20;
+        public static string WellSurfHandle = "";
+        public static string WellSurfName = "";
         public static double? OshOverride = null;
         public static bool HasPush;
         /// <summary>true — текущие statics пришли из NOD этого чертежа, не из профиля сеанса.</summary>
@@ -442,6 +447,11 @@ namespace Nvk.Cad
             Pair(rb, "FACT_PROF_L3", FactProfileHandleL3 ?? "");
             Pair(rb, "FACT_PROF_L4", FactProfileHandleL4 ?? "");
             Pair(rb, "FACT_PROF_L5", FactProfileHandleL5 ?? "");
+            Pair(rb, "MH_GAP", F(WellTrenchGap, 3));
+            Pair(rb, "MH_BED", F(WellBedding, 3));
+            Pair(rb, "MH_SLOPE", F(WellSlopeM, 4));
+            Pair(rb, "MH_SURF_H", WellSurfHandle ?? "");
+            Pair(rb, "MH_SURF_N", WellSurfName ?? "");
             WriteStyles(rb);
             return rb;
         }
@@ -687,6 +697,11 @@ namespace Nvk.Cad
             RowsL1 = RowsL2 = RowsL3 = RowsL4 = RowsL5 = "";
             FactProfileHandleL1 = FactProfileHandleL2 = FactProfileHandleL3
                 = FactProfileHandleL4 = FactProfileHandleL5 = "";
+            WellTrenchGap = 0.50;
+            WellBedding = 0.10;
+            WellSlopeM = 0.20;
+            WellSurfHandle = "";
+            WellSurfName = "";
             OshOverride = null;
             NvkSession.L1 = L1Style.Default();
             NvkSession.L2 = SheetStyle.Pesok();
@@ -866,6 +881,11 @@ namespace Nvk.Cad
                 case "FACT_PROF_L3": FactProfileHandleL3 = v; break;
                 case "FACT_PROF_L4": FactProfileHandleL4 = v; break;
                 case "FACT_PROF_L5": FactProfileHandleL5 = v; break;
+                case "MH_GAP": WellTrenchGap = D(v, WellTrenchGap); break;
+                case "MH_BED": WellBedding = D(v, WellBedding); break;
+                case "MH_SLOPE": WellSlopeM = D(v, WellSlopeM); break;
+                case "MH_SURF_H": WellSurfHandle = v ?? ""; break;
+                case "MH_SURF_N": WellSurfName = v ?? ""; break;
             }
         }
 
