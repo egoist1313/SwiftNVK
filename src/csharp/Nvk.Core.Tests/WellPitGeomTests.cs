@@ -645,18 +645,17 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
-        public void CornerRaysAre120FromSides()
+        public void CornerBisectorIs45ForSquare()
         {
-            double r1x, r1y, r2x, r2y;
-            WellPitGeom.CornerRayDirs(0, 1, 1, 0, out r1x, out r1y, out r2x, out r2y);
-            Assert.Equal(0.5, r1x, 6);
-            Assert.Equal(Math.Sqrt(3.0) / 2.0, r1y, 6);
-            Assert.Equal(Math.Sqrt(3.0) / 2.0, r2x, 6);
-            Assert.Equal(0.5, r2y, 6);
+            double bx, by, run;
+            WellPitGeom.CornerBisector(0, 1, 1, 0, out bx, out by, out run);
+            Assert.Equal(Math.Sqrt(0.5), bx, 6);
+            Assert.Equal(Math.Sqrt(0.5), by, 6);
+            Assert.Equal(Math.Sqrt(2.0), run, 6);
         }
 
         [Fact]
-        public void CornerRaysRoundBermOnFlatTin()
+        public void BermCornerIsOffsetSquareNotArc()
         {
             var w = Well();
             w.X = 0;
@@ -667,20 +666,23 @@ namespace Nvk.Core.Tests
             var c = new WellPitCfg { TrenchGap = 0.50, SlopeM = 1.0, Bedding = 0.0 };
             var s = WellPitGeom.Build(w, c, (x, y) => 105.0);
             double half = s.AlongHalf;
-            var corner = new WellPt(half, half, 100);
-            bool hit30 = false, hit60 = false;
+            bool hit45 = false, hit30 = false, hit60 = false;
             for (int i = 0; i < s.Berm.Count; i++)
             {
-                double dx = s.Berm[i].X - corner.X;
-                double dy = s.Berm[i].Y - corner.Y;
+                double dx = s.Berm[i].X - half;
+                double dy = s.Berm[i].Y - half;
                 double ang = Math.Atan2(dy, dx) * 180.0 / Math.PI;
+                if (Math.Abs(s.Berm[i].X - (half + 5.0)) < 0.08
+                    && Math.Abs(s.Berm[i].Y - (half + 5.0)) < 0.08)
+                    hit45 = true;
                 double run = Math.Sqrt(dx * dx + dy * dy);
                 if (Math.Abs(run - 5.0) > 0.08) continue;
                 if (Math.Abs(ang - 30.0) < 3.0) hit30 = true;
                 if (Math.Abs(ang - 60.0) < 3.0) hit60 = true;
             }
-            Assert.True(hit30);
-            Assert.True(hit60);
+            Assert.True(hit45);
+            Assert.False(hit30);
+            Assert.False(hit60);
         }
 
         [Fact]

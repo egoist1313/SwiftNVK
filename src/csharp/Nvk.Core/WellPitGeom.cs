@@ -350,23 +350,26 @@ namespace Nvk.Core
         const double StripEps = 0.02;
 
         /// <summary>
-        /// Два луча из угла: по 120° от каждой стороны (для квадрата — 30° и 60°
-        /// в секторе откоса). n1, n2 — единичные внешние нормали смежных рёбер.
+        /// Биссектриса угла откоса. runScale подбирается так, чтобы сторона
+        /// бровки осталась параллельна дну (для квадрата — √2, угол 90°).
         /// </summary>
-        public static void CornerRayDirs(double n1x, double n1y, double n2x, double n2y,
-            out double r1x, out double r1y, out double r2x, out double r2y)
+        public static void CornerBisector(double n1x, double n1y, double n2x, double n2y,
+            out double bx, out double by, out double runScale)
         {
-            double a1 = Math.Atan2(n1y, n1x);
-            double a2 = Math.Atan2(n2y, n2x);
-            double da = a2 - a1;
-            while (da > Math.PI) da -= 2.0 * Math.PI;
-            while (da < -Math.PI) da += 2.0 * Math.PI;
-            double aMid1 = a1 + da / 3.0;
-            double aMid2 = a1 + 2.0 * da / 3.0;
-            r1x = Math.Cos(aMid1);
-            r1y = Math.Sin(aMid1);
-            r2x = Math.Cos(aMid2);
-            r2y = Math.Sin(aMid2);
+            bx = n1x + n2x;
+            by = n1y + n2y;
+            double L = Math.Sqrt(bx * bx + by * by);
+            if (L < 1e-9)
+            {
+                bx = n1x;
+                by = n1y;
+                runScale = 1.0;
+                return;
+            }
+            bx /= L;
+            by /= L;
+            double d = bx * n1x + by * n1y;
+            runScale = Math.Abs(d) < 1e-9 ? 1.0 : 1.0 / d;
         }
 
         /// <summary>
@@ -644,7 +647,7 @@ namespace Nvk.Core
                             n1y = pdx / plen;
                         }
                         if (ConvexCw(p, a, b))
-                            EmitCornerRays(a, n1x, n1y, nx, ny, zEdge, m, zHint, tinZ, berm, faces, rays, ref lastG);
+                            EmitCorner(a, n1x, n1y, nx, ny, zEdge, m, zHint, tinZ, berm, faces, rays, ref lastG);
                         faces.Add(new[] { a, a, h.P, lastG });
                     }
                     berm.Add(h.P);
@@ -666,7 +669,7 @@ namespace Nvk.Core
                 var b0 = bot[1];
                 double z0 = a0.Z > 1.0 ? a0.Z : zBot;
                 if (ConvexCw(p, a0, b0))
-                    EmitCornerRays(a0, lastNx, lastNy, firstNx, firstNy, z0, m, zHint, tinZ, berm, faces, rays, ref lastG);
+                    EmitCorner(a0, lastNx, lastNy, firstNx, firstNy, z0, m, zHint, tinZ, berm, faces, rays, ref lastG);
                 faces.Add(new[] { a0, a0, berm[0], lastG });
             }
         }
@@ -678,25 +681,20 @@ namespace Nvk.Core
             return v1x * v2y - v1y * v2x < -1e-12;
         }
 
-        static void EmitCornerRays(WellPt corner,
+        static void EmitCorner(WellPt corner,
             double n1x, double n1y, double n2x, double n2y,
             double zBot, double m, double zHint,
             Func<double, double, double> tinZ,
             List<WellPt> berm, List<WellPt[]> faces, List<WellPt[]> rays, ref WellPt lastG)
         {
             if (m < 1e-9) return;
-            double r1x, r1y, r2x, r2y;
-            CornerRayDirs(n1x, n1y, n2x, n2y, out r1x, out r1y, out r2x, out r2y);
-            var g1 = GradeAlong(corner.X, corner.Y, zBot, r1x, r1y, m, tinZ, zHint, 1.0);
-            faces.Add(new[] { corner, corner, g1, lastG });
-            berm.Add(g1);
-            if (rays != null) rays.Add(new[] { corner, g1 });
-            lastG = g1;
-            var g2 = GradeAlong(corner.X, corner.Y, zBot, r2x, r2y, m, tinZ, zHint, 1.0);
-            faces.Add(new[] { corner, corner, g2, lastG });
-            berm.Add(g2);
-            if (rays != null) rays.Add(new[] { corner, g2 });
-            lastG = g2;
+            double bx, by, runScale;
+            CornerBisector(n1x, n1y, n2x, n2y, out bx, out by, out runScale);
+            var g = GradeAlong(corner.X, corner.Y, zBot, bx, by, m, tinZ, zHint, runScale);
+            faces.Add(new[] { corner, corner, g, lastG });
+            berm.Add(g);
+            if (rays != null) rays.Add(new[] { corner, g });
+            lastG = g;
         }
 
         public static bool PointInPoly(IList<WellPt> poly, double x, double y)
