@@ -41,6 +41,7 @@
 (defun nvk-dll-put ( / kandidaty p k)
   (setq kandidaty
     (list
+      (strcat *nvk-dir* "\\bin\\v274\\Nvk.Cad.dll")
       (strcat *nvk-dir* "\\bin\\v273\\Nvk.Cad.dll")
       (strcat *nvk-dir* "\\bin\\v272\\Nvk.Cad.dll")
       (strcat *nvk-dir* "\\bin\\v271\\Nvk.Cad.dll")

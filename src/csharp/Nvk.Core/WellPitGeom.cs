@@ -78,6 +78,7 @@ namespace Nvk.Core
         public List<WellPt> Outer;
         public List<List<WellPt>> Bottoms;
         public List<List<WellPt>> Steps;
+        public List<List<WellPt>> Berms;
         public List<WellPt> Berm;
         public List<WellPt[]> Faces;
         public List<WellPt[]> SlopeRays;
@@ -405,6 +406,18 @@ namespace Nvk.Core
             double nx, double ny, double m, Func<double, double, double> tinZ,
             double zHint, double runScale)
         {
+            return GradeAlongPads(x, y, zBot, nx, ny, m, tinZ, zHint, runScale, null);
+        }
+
+        /// <summary>
+        /// Профилирование ребра: откос идёт до TIN или до плоскости соседней
+        /// подошвы — что ближе. Так внутренние откосы сходятся в общую точку,
+        /// а не протыкают друг друга.
+        /// </summary>
+        static WellPt GradeAlongPads(double x, double y, double zBot,
+            double nx, double ny, double m, Func<double, double, double> tinZ,
+            double zHint, double runScale, IList<GradePad> pads)
+        {
             double nlen = Math.Sqrt(nx * nx + ny * ny);
             if (nlen > 1e-9)
             {
@@ -425,9 +438,9 @@ namespace Nvk.Core
             if (tHi > 80.0) tHi = 80.0;
             for (int k = 0; k < 5; k++)
             {
-                double zt = Sample(tinZ, x + tHi * nx, y + tHi * ny, zH);
+                double cap = CapZ(x + tHi * nx, y + tHi * ny, zH, tinZ, pads, x, y);
                 double zs = zBot + tHi / (m * runScale);
-                if (zt <= zs) break;
+                if (cap <= zs) break;
                 tHi *= 1.5;
                 if (tHi > 80.0) { tHi = 80.0; break; }
             }
@@ -435,17 +448,71 @@ namespace Nvk.Core
             for (int i = 0; i < 28; i++)
             {
                 double t = 0.5 * (lo + hi);
-                double zt = Sample(tinZ, x + t * nx, y + t * ny, zH);
+                double cap = CapZ(x + t * nx, y + t * ny, zH, tinZ, pads, x, y);
                 double zs = zBot + t / (m * runScale);
-                if (zt > zs) lo = t;
+                if (cap > zs) lo = t;
                 else hi = t;
             }
             double tHit = 0.5 * (lo + hi);
             double xh = x + tHit * nx;
             double yh = y + tHit * ny;
-            double zh = Sample(tinZ, xh, yh, zBot + tHit / (m * runScale));
+            double zsHit = zBot + tHit / (m * runScale);
+            double zh = CapZ(xh, yh, zsHit, tinZ, pads, x, y);
             if (zh < zBot) zh = zBot;
             return new WellPt(xh, yh, zh);
+        }
+
+        struct GradePad
+        {
+            public IList<WellPt> Poly;
+            public double ZBot;
+            public double M;
+        }
+
+        static double CapZ(double x, double y, double fallback,
+            Func<double, double, double> tinZ, IList<GradePad> pads, double x0, double y0)
+        {
+            double z = Sample(tinZ, x, y, fallback);
+            if (pads == null || pads.Count == 0) return z;
+            for (int i = 0; i < pads.Count; i++)
+            {
+                var pad = pads[i];
+                if (pad.Poly == null || pad.Poly.Count < 3) continue;
+                if (DistOutside(pad.Poly, x0, y0) <= 0.02) continue;
+                double pz = PadZ(pad, x, y);
+                if (pz < z) z = pz;
+            }
+            return z;
+        }
+
+        static double PadZ(GradePad pad, double x, double y)
+        {
+            double d = DistOutside(pad.Poly, x, y);
+            if (d <= 1e-9) return pad.ZBot;
+            if (pad.M < 1e-9) return 1e9;
+            return pad.ZBot + d / pad.M;
+        }
+
+        /// <summary>
+        /// Внешнее расстояние до выпуклого CW-контура (плоскости откоса).
+        /// Внутри ≤ 0.
+        /// </summary>
+        static double DistOutside(IList<WellPt> poly, double x, double y)
+        {
+            int n = poly.Count;
+            double dMax = -1e9;
+            for (int i = 0; i < n; i++)
+            {
+                var a = poly[i];
+                var b = poly[(i + 1) % n];
+                double edx = b.X - a.X, edy = b.Y - a.Y;
+                double elen = Math.Sqrt(edx * edx + edy * edy);
+                if (elen < 1e-12) continue;
+                double nx = -edy / elen, ny = edx / elen;
+                double d = (x - a.X) * nx + (y - a.Y) * ny;
+                if (d > dMax) dMax = d;
+            }
+            return dMax;
         }
 
         static double Sample(Func<double, double, double> tinZ, double x, double y, double fallback)
@@ -632,11 +699,21 @@ namespace Nvk.Core
             Func<double, double, double> tinZ, IList<TinTri> tris, List<WellPt> berm, List<WellPt[]> faces,
             List<WellPt[]> rays, IList<WellPt> pitCorners, bool fan)
         {
+            GradeSquare(bot, m, zBot, zHint, tinZ, tris, berm, faces, rays, pitCorners, fan, null, null);
+        }
+
+        static void GradeSquare(List<WellPt> bot, double m, double zBot, double zHint,
+            Func<double, double, double> tinZ, IList<TinTri> tris, List<WellPt> berm, List<WellPt[]> faces,
+            List<WellPt[]> rays, IList<WellPt> pitCorners, bool fan,
+            IList<GradePad> pads, IList<WellPt> clusterHull)
+        {
             int n = bot.Count;
             if (n < 3) return;
-            var hull = OuterHull(bot, 0.05);
+            var hull = clusterHull != null && clusterHull.Count >= 3 ? clusterHull : OuterHull(bot, 0.05);
             WellPt lastG = default(WellPt);
+            WellPt firstP = default(WellPt);
             bool hasLast = false;
+            bool hasFirst = false;
             double firstNx = 0.0, firstNy = 1.0;
             double lastNx = 0.0, lastNy = 1.0;
             for (int e = 0; e < n; e++)
@@ -657,6 +734,7 @@ namespace Nvk.Core
                 lastNy = ny;
                 double zEdge = a.Z > 1.0 ? a.Z : zBot;
                 var hits = HitsOnEdge(a, b, zEdge, m, zHint, tinZ, tris);
+                ClipHitsToPads(hits, nx, ny, m, tinZ, zHint, pads);
                 if (hits.Count == 0) continue;
                 for (int k = 0; k < hits.Count; k++)
                 {
@@ -673,10 +751,11 @@ namespace Nvk.Core
                             n1y = pdx / plen;
                         }
                         if (ConvexCw(p, a, b) && ShouldEmitCorner(pitCorners, hull, a))
-                            EmitCornerMode(fan, a, n1x, n1y, nx, ny, zEdge, m, zHint, tinZ, berm, faces, rays, ref lastG);
+                            EmitCornerMode(fan, a, n1x, n1y, nx, ny, zEdge, m, zHint, tinZ, berm, faces, rays, ref lastG, pads);
                         faces.Add(new[] { a, a, h.P, lastG });
                     }
-                    berm.Add(h.P);
+                    if (IsDaylight(h.P, tinZ, pads, a.X, a.Y))
+                        berm.Add(h.P);
                     if (rays != null)
                         rays.Add(new[] { h.Bot, h.P });
                     if (k > 0)
@@ -684,19 +763,24 @@ namespace Nvk.Core
                         var prev = hits[k - 1];
                         faces.Add(new[] { prev.Bot, h.Bot, h.P, prev.P });
                     }
+                    if (!hasFirst)
+                    {
+                        firstP = h.P;
+                        hasFirst = true;
+                    }
                     lastG = h.P;
                     hasLast = true;
                 }
             }
-            if (hasLast && berm.Count > 0)
+            if (hasLast && hasFirst)
             {
                 var p = bot[n - 1];
                 var a0 = bot[0];
                 var b0 = bot[1];
                 double z0 = a0.Z > 1.0 ? a0.Z : zBot;
                 if (ConvexCw(p, a0, b0) && ShouldEmitCorner(pitCorners, hull, a0))
-                    EmitCornerMode(fan, a0, lastNx, lastNy, firstNx, firstNy, z0, m, zHint, tinZ, berm, faces, rays, ref lastG);
-                faces.Add(new[] { a0, a0, berm[0], lastG });
+                    EmitCornerMode(fan, a0, lastNx, lastNy, firstNx, firstNy, z0, m, zHint, tinZ, berm, faces, rays, ref lastG, pads);
+                faces.Add(new[] { a0, a0, firstP, lastG });
             }
         }
 
@@ -791,30 +875,57 @@ namespace Nvk.Core
             return v1x * v2y - v1y * v2x < -1e-12;
         }
 
+        static void ClipHitsToPads(List<BermHit> hits, double nx, double ny, double m,
+            Func<double, double, double> tinZ, double zHint, IList<GradePad> pads)
+        {
+            if (hits == null || pads == null || pads.Count == 0) return;
+            for (int i = 0; i < hits.Count; i++)
+            {
+                var h = hits[i];
+                double cap = CapZ(h.P.X, h.P.Y, h.P.Z, tinZ, pads, h.Bot.X, h.Bot.Y);
+                if (cap >= h.P.Z - 1e-6) continue;
+                h.P = GradeAlongPads(h.Bot.X, h.Bot.Y, h.Bot.Z > 1.0 ? h.Bot.Z : h.P.Z,
+                    nx, ny, m, tinZ, zHint, 1.0, pads);
+                hits[i] = h;
+            }
+        }
+
+        static bool IsDaylight(WellPt p, Func<double, double, double> tinZ, IList<GradePad> pads,
+            double x0, double y0)
+        {
+            if (pads == null || pads.Count == 0) return true;
+            double tin = Sample(tinZ, p.X, p.Y, p.Z);
+            if (tin - p.Z > 0.08) return false;
+            double pad = CapZ(p.X, p.Y, 1e9, null, pads, x0, y0);
+            return pad > p.Z + 0.08;
+        }
+
         static void EmitCornerMode(bool fan, WellPt corner,
             double n1x, double n1y, double n2x, double n2y,
             double zBot, double m, double zHint,
             Func<double, double, double> tinZ,
-            List<WellPt> berm, List<WellPt[]> faces, List<WellPt[]> rays, ref WellPt lastG)
+            List<WellPt> berm, List<WellPt[]> faces, List<WellPt[]> rays, ref WellPt lastG,
+            IList<GradePad> pads)
         {
             if (fan)
-                EmitCornerRays(corner, n1x, n1y, n2x, n2y, zBot, m, zHint, tinZ, berm, faces, rays, ref lastG);
+                EmitCornerRays(corner, n1x, n1y, n2x, n2y, zBot, m, zHint, tinZ, berm, faces, rays, ref lastG, pads);
             else
-                EmitCorner(corner, n1x, n1y, n2x, n2y, zBot, m, zHint, tinZ, berm, faces, rays, ref lastG);
+                EmitCorner(corner, n1x, n1y, n2x, n2y, zBot, m, zHint, tinZ, berm, faces, rays, ref lastG, pads);
         }
 
         static void EmitCorner(WellPt corner,
             double n1x, double n1y, double n2x, double n2y,
             double zBot, double m, double zHint,
             Func<double, double, double> tinZ,
-            List<WellPt> berm, List<WellPt[]> faces, List<WellPt[]> rays, ref WellPt lastG)
+            List<WellPt> berm, List<WellPt[]> faces, List<WellPt[]> rays, ref WellPt lastG,
+            IList<GradePad> pads)
         {
             if (m < 1e-9) return;
             double bx, by, runScale;
             CornerBisector(n1x, n1y, n2x, n2y, out bx, out by, out runScale);
-            var g = GradeAlong(corner.X, corner.Y, zBot, bx, by, m, tinZ, zHint, runScale);
+            var g = GradeAlongPads(corner.X, corner.Y, zBot, bx, by, m, tinZ, zHint, runScale, pads);
             faces.Add(new[] { corner, corner, g, lastG });
-            berm.Add(g);
+            if (IsDaylight(g, tinZ, pads, corner.X, corner.Y)) berm.Add(g);
             if (rays != null) rays.Add(new[] { corner, g });
             lastG = g;
         }
@@ -823,19 +934,20 @@ namespace Nvk.Core
             double n1x, double n1y, double n2x, double n2y,
             double zBot, double m, double zHint,
             Func<double, double, double> tinZ,
-            List<WellPt> berm, List<WellPt[]> faces, List<WellPt[]> rays, ref WellPt lastG)
+            List<WellPt> berm, List<WellPt[]> faces, List<WellPt[]> rays, ref WellPt lastG,
+            IList<GradePad> pads)
         {
             if (m < 1e-9) return;
             double r1x, r1y, r2x, r2y;
             CornerRayDirs(n1x, n1y, n2x, n2y, out r1x, out r1y, out r2x, out r2y);
-            var g1 = GradeAlong(corner.X, corner.Y, zBot, r1x, r1y, m, tinZ, zHint, 1.0);
+            var g1 = GradeAlongPads(corner.X, corner.Y, zBot, r1x, r1y, m, tinZ, zHint, 1.0, pads);
             faces.Add(new[] { corner, corner, g1, lastG });
-            berm.Add(g1);
+            if (IsDaylight(g1, tinZ, pads, corner.X, corner.Y)) berm.Add(g1);
             if (rays != null) rays.Add(new[] { corner, g1 });
             lastG = g1;
-            var g2 = GradeAlong(corner.X, corner.Y, zBot, r2x, r2y, m, tinZ, zHint, 1.0);
+            var g2 = GradeAlongPads(corner.X, corner.Y, zBot, r2x, r2y, m, tinZ, zHint, 1.0, pads);
             faces.Add(new[] { corner, corner, g2, lastG });
-            berm.Add(g2);
+            if (IsDaylight(g2, tinZ, pads, corner.X, corner.Y)) berm.Add(g2);
             if (rays != null) rays.Add(new[] { corner, g2 });
             lastG = g2;
         }
@@ -1032,7 +1144,8 @@ namespace Nvk.Core
 
         /// <summary>
         /// Общий котлован: пересекающиеся подошвы сливаются с перепадом по середине;
-        /// непересекающиеся остаются отдельными, откос — по коридору траншеи.
+        /// непересекающиеся остаются отдельными; пересекающиеся откосы режутся
+        /// плоскость-о-плоскость (общая бровка, тальвег между подошвами).
         /// </summary>
         public static WellPitShape UnionPits(IList<WellPitShape> shapes, WellPitCfg c,
             Func<double, double, double> tinZ, IList<TinTri> tris, double zHint)
@@ -1146,15 +1259,6 @@ namespace Nvk.Core
                 }
             }
 
-            var gradeSrc = new List<List<WellPt>>();
-            for (int i = 0; i < outers.Count; i++)
-                gradeSrc.Add(outers[i]);
-            if (extraPolys != null)
-            {
-                for (int i = 0; i < extraPolys.Count; i++)
-                    if (extraPolys[i] != null && extraPolys[i].Count >= 3)
-                        gradeSrc.Add(extraPolys[i]);
-            }
             var pitCorners = new List<WellPt>();
             for (int i = 0; i < outers.Count; i++)
             {
@@ -1163,29 +1267,72 @@ namespace Nvk.Core
                 for (int j = 0; j < o.Count; j++)
                     pitCorners.Add(o[j]);
             }
-            var gradeLoops = UnionPolygons(gradeSrc, zMin);
             var berm = new List<WellPt>();
+            var berms = new List<List<WellPt>>();
             var faces = new List<WellPt[]>();
             var rays = new List<WellPt[]>();
             double zMid = zHint;
             if (double.IsNaN(zMid) || zMid < 1.0) zMid = zMin + 2.0;
-            int nGrade = 0;
-            for (int i = 0; i < gradeLoops.Count; i++)
+
+            if (!anyOv && ns >= 2)
             {
-                if (gradeLoops[i] == null || gradeLoops[i].Pts == null || gradeLoops[i].Pts.Count < 3)
-                    continue;
-                if (Math.Abs(SignedArea(gradeLoops[i].Pts)) < 1e-4) continue;
-                var gp = new List<WellPt>(gradeLoops[i].Pts);
-                if (SignedArea(gp) > 0.0) gp.Reverse();
-                AssignNearestZ(gp, sites);
-                GradeSquare(gp, c.SlopeM, zMin, zMid, tinZ, tris, berm, faces, rays, pitCorners, c.CornerFan);
-                nGrade++;
+                var pads = new List<GradePad>(ns);
+                for (int i = 0; i < ns; i++)
+                    pads.Add(new GradePad { Poly = sites[i].Outer, ZBot = sites[i].Z, M = c.SlopeM });
+                var clusterHull = OuterHull(pitCorners, 0.05);
+                var unused = new List<WellPt>();
+                for (int i = 0; i < ns; i++)
+                {
+                    var gp = new List<WellPt>(sites[i].Outer);
+                    if (SignedArea(gp) > 0.0) gp.Reverse();
+                    GradeSquare(gp, c.SlopeM, sites[i].Z, zMid, tinZ, tris,
+                        unused, faces, rays, pitCorners, c.CornerFan, pads, clusterHull);
+                }
+                var bermSrc = new List<List<WellPt>>();
+                if (shapes != null)
+                {
+                    for (int i = 0; i < shapes.Count; i++)
+                        if (shapes[i] != null && shapes[i].Berm != null && shapes[i].Berm.Count >= 3)
+                            bermSrc.Add(shapes[i].Berm);
+                }
+                if (bermSrc.Count == 0)
+                {
+                    for (int i = 0; i < ns; i++)
+                        bermSrc.Add(sites[i].Outer);
+                }
+                var bermLoops = UnionPolygons(bermSrc, zMid);
+                CollectBermLoops(bermLoops, tinZ, zMid, berms, ref berm);
             }
-            if (nGrade == 0 && bottoms.Count > 0)
+            else
             {
-                var gp = new List<WellPt>(bottoms[0]);
-                if (SignedArea(gp) > 0.0) gp.Reverse();
-                GradeSquare(gp, c.SlopeM, zMin, zMid, tinZ, tris, berm, faces, rays, pitCorners, c.CornerFan);
+                var gradeSrc = new List<List<WellPt>>();
+                for (int i = 0; i < outers.Count; i++)
+                    gradeSrc.Add(outers[i]);
+                if (extraPolys != null)
+                {
+                    for (int i = 0; i < extraPolys.Count; i++)
+                        if (extraPolys[i] != null && extraPolys[i].Count >= 3)
+                            gradeSrc.Add(extraPolys[i]);
+                }
+                var gradeLoops = UnionPolygons(gradeSrc, zMin);
+                int nGrade = 0;
+                for (int i = 0; i < gradeLoops.Count; i++)
+                {
+                    if (gradeLoops[i] == null || gradeLoops[i].Pts == null || gradeLoops[i].Pts.Count < 3)
+                        continue;
+                    if (Math.Abs(SignedArea(gradeLoops[i].Pts)) < 1e-4) continue;
+                    var gp = new List<WellPt>(gradeLoops[i].Pts);
+                    if (SignedArea(gp) > 0.0) gp.Reverse();
+                    AssignNearestZ(gp, sites);
+                    GradeSquare(gp, c.SlopeM, zMin, zMid, tinZ, tris, berm, faces, rays, pitCorners, c.CornerFan);
+                    nGrade++;
+                }
+                if (nGrade == 0 && bottoms.Count > 0)
+                {
+                    var gp = new List<WellPt>(bottoms[0]);
+                    if (SignedArea(gp) > 0.0) gp.Reverse();
+                    GradeSquare(gp, c.SlopeM, zMin, zMid, tinZ, tris, berm, faces, rays, pitCorners, c.CornerFan);
+                }
             }
             for (int i = 0; i < stepFaces.Count; i++)
                 faces.Add(stepFaces[i]);
@@ -1210,6 +1357,7 @@ namespace Nvk.Core
                 Outer = outer,
                 Bottoms = bottoms,
                 Steps = steps,
+                Berms = berms.Count > 0 ? berms : null,
                 Berm = berm,
                 Faces = faces,
                 SlopeRays = rays,
@@ -1217,6 +1365,35 @@ namespace Nvk.Core
                 BermAlong = along + maxOff,
                 BermAcross = across + maxOff
             };
+        }
+
+        static void CollectBermLoops(List<PolyLoop> loops, Func<double, double, double> tinZ,
+            double zHint, List<List<WellPt>> berms, ref List<WellPt> berm)
+        {
+            if (loops == null) return;
+            List<WellPt> biggest = null;
+            double bestA = 0.0;
+            for (int i = 0; i < loops.Count; i++)
+            {
+                if (loops[i] == null || loops[i].Pts == null || loops[i].Pts.Count < 3) continue;
+                var gp = new List<WellPt>(loops[i].Pts);
+                if (Math.Abs(SignedArea(gp)) < 1e-4) continue;
+                if (SignedArea(gp) > 0.0) gp.Reverse();
+                for (int k = 0; k < gp.Count; k++)
+                {
+                    var p = gp[k];
+                    p.Z = Sample(tinZ, p.X, p.Y, zHint);
+                    gp[k] = p;
+                }
+                berms.Add(gp);
+                double a = Math.Abs(SignedArea(gp));
+                if (biggest == null || a > bestA)
+                {
+                    biggest = gp;
+                    bestA = a;
+                }
+            }
+            if (biggest != null) berm = biggest;
         }
 
         struct PitSite

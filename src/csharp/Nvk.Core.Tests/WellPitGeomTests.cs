@@ -366,15 +366,43 @@ namespace Nvk.Core.Tests
             Assert.NotNull(u);
             Assert.True(u.Bottoms != null && u.Bottoms.Count == 2);
             Assert.True(u.Berm != null && u.Berm.Count >= 4);
-            double waist = 1e9;
-            for (int i = 0; i < u.Berm.Count; i++)
+        }
+
+        [Fact]
+        public void DisjointSlopesMeetAtValley()
+        {
+            var cfg = new WellPitCfg { TrenchGap = 0.50, SlopeM = 1.0, Bedding = 0.0, CornerFan = true };
+            var a = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
+            var b = new WellPitInput { X = 2.5, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
+            Func<double, double, double> tin = (x, y) => 105.0;
+            var sa = WellPitGeom.Build(a, cfg, tin);
+            var sb = WellPitGeom.Build(b, cfg, tin);
+            Assert.False(WellPitGeom.PolysOverlap(sa.Outer, sb.Outer));
+            Assert.True(WellPitGeom.PolysOverlap(sa.Berm, sb.Berm));
+            var u = WellPitGeom.UnionPits(new List<WellPitShape> { sa, sb }, cfg, tin, null, 105);
+            Assert.NotNull(u);
+            Assert.True(u.Bottoms != null && u.Bottoms.Count == 2);
+            Assert.True(u.SlopeRays != null);
+            bool valley = false;
+            for (int i = 0; i < u.SlopeRays.Count; i++)
             {
-                var p = u.Berm[i];
-                if (p.X > 1.5 && p.X < 2.5 && Math.Abs(p.Y) < waist)
-                    waist = Math.Abs(p.Y);
+                if (u.SlopeRays[i] == null || u.SlopeRays[i].Length < 2) continue;
+                var p = u.SlopeRays[i][0];
+                var g = u.SlopeRays[i][1];
+                if (Math.Abs(p.X - 1.0) > 0.08 || Math.Abs(p.Y) > 0.8) continue;
+                Assert.True(g.X <= 1.45, "inner slope crossed the neighbor pad");
+                if (g.X > 1.05 && g.X < 1.45 && g.Z < 104.0) valley = true;
             }
-            Assert.True(waist < 1.05);
-            Assert.True(waist > 0.6);
+            Assert.True(valley);
+            double minX = 1e9, maxX = -1e9;
+            var berm = u.Berm;
+            for (int i = 0; i < berm.Count; i++)
+            {
+                if (berm[i].X < minX) minX = berm[i].X;
+                if (berm[i].X > maxX) maxX = berm[i].X;
+            }
+            Assert.True(minX < -0.5);
+            Assert.True(maxX > 3.0);
         }
 
         [Fact]

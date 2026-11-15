@@ -482,7 +482,13 @@ namespace Nvk.Cad
                 for (int i = 0; i < s.Steps.Count; i++)
                     AddPline3(ms, tr, s.Steps[i], false, LayerPit, 1, null);
             }
-            AddPline3(ms, tr, s.Berm, true, LayerBerm, 3, null);
+            if (s.Berms != null && s.Berms.Count > 0)
+            {
+                for (int i = 0; i < s.Berms.Count; i++)
+                    AddPline3(ms, tr, s.Berms[i], true, LayerBerm, 3, null);
+            }
+            else
+                AddPline3(ms, tr, s.Berm, true, LayerBerm, 3, null);
             if (s.SlopeRays != null)
             {
                 for (int i = 0; i < s.SlopeRays.Count; i++)
