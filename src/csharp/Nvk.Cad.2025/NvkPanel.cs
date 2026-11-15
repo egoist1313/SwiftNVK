@@ -44,6 +44,10 @@ namespace Nvk.Cad
         readonly ComboBox _cL0, _cL6;
         readonly TextBox _mhGap, _mhSlope, _mhBed;
         readonly ComboBox _mhSurf, _mhCorners, _mhScale;
+        readonly ComboBox _mhCsMode, _mhBody, _mhNeckSide, _mhBase, _mhShaft, _mhNeck;
+        readonly CheckBox _mhAuto;
+        readonly DataGridView _mhParts;
+        readonly FlowLayoutPanel _mhConc, _mhPlas;
         static readonly int[] MhScales = { 100, 200, 500, 1000, 2000 };
         readonly Label _mhInfo;
         readonly SheetUi _s2, _s3, _s4, _s5;
@@ -336,6 +340,22 @@ namespace Nvk.Cad
             _mhSlope = Num(pMh, "Откос m (0=вертикаль)", "0.20");
             _mhCorners = Combo(pMh, "Углы бровки", new[] { "Веером", "Прямоугольные" });
             _mhScale = Combo(pMh, "Масштаб откосов", new[] { "1:100", "1:200", "1:500", "1:1000", "1:2000" });
+            pMh.Controls.Add(Head("Разрез / сечение"));
+            _mhCsMode = Combo(pMh, "Вывод", new[] { "Сечения", "Разрезы" });
+            pMh.Controls.Add(Head("Наполнение колодца"));
+            _mhBody = Combo(pMh, "Тип колодца", new[] { "Бетонный", "Пластиковый" });
+            _mhBody.SelectedIndexChanged += (s, e) => UpdateMhFillUi();
+            _mhConc = MhSub();
+            _mhAuto = Chk(_mhConc, "Авто по высоте колодца", true);
+            _mhParts = MakeMhPartsGrid(_mhConc);
+            _mhConc.Controls.Add(Btn("Подобрать КС / ПН / ПП", AutoMhParts, 240));
+            pMh.Controls.Add(_mhConc);
+            _mhPlas = MhSub();
+            _mhBase = Combo(_mhPlas, "База", WellCatalog.PlasticDn);
+            _mhShaft = Combo(_mhPlas, "Шахта", WellCatalog.PlasticDn);
+            _mhNeck = Combo(_mhPlas, "Горловина", WellCatalog.PlasticDn);
+            _mhNeckSide = Combo(_mhPlas, "Смещение горловины", new[] { "По центру", "Влево", "Вправо" });
+            pMh.Controls.Add(_mhPlas);
             pMh.Controls.Add(Head("Поверхность бровки"));
             _mhSurf = SurfCombo(pMh, "TIN бровки (пусто = L0)");
             pMh.Controls.Add(Btn("Обновить список TIN", RefreshSurfaces, 240));
@@ -419,6 +439,23 @@ namespace Nvk.Cad
             if (_mhCorners != null)
                 _mhCorners.SelectedIndex = NvkUiState.WellCornerFan ? 0 : 1;
             SetMhScale(_mhScale, NvkUiState.WellSlopeScale);
+            if (_mhCsMode != null)
+                _mhCsMode.SelectedIndex = NvkUiState.WellCsAsCut ? 1 : 0;
+            if (_mhBody != null)
+                _mhBody.SelectedIndex = NvkUiState.WellBodyPlastic ? 1 : 0;
+            if (_mhAuto != null) _mhAuto.Checked = NvkUiState.WellFillAuto;
+            FillMhParts(NvkUiState.WellParts);
+            PickItem(_mhBase, NvkUiState.WellBaseCode, 3);
+            PickItem(_mhShaft, NvkUiState.WellShaftCode, 3);
+            PickItem(_mhNeck, NvkUiState.WellNeckCode, 1);
+            if (_mhNeckSide != null)
+            {
+                int ns = NvkUiState.WellNeckSide;
+                if (ns < 0) ns = 0;
+                if (ns > 2) ns = 2;
+                _mhNeckSide.SelectedIndex = ns;
+            }
+            UpdateMhFillUi();
             _l1mh.Checked    = NvkUiState.L1ShowMh;
             _tblOff.Text     = NvkUiState.TableOffsetM.ToString("0.##");
             _labRoad.Text    = string.IsNullOrEmpty(NvkUiState.LabelRoad)   ? "Проектно-планировочное покрытие, м"   : NvkUiState.LabelRoad;
@@ -598,6 +635,17 @@ namespace Nvk.Cad
             if (_mhSlope != null) NvkUiState.WellSlopeM = Math.Max(0.0, Parse(_mhSlope, 0.20));
             if (_mhCorners != null) NvkUiState.WellCornerFan = _mhCorners.SelectedIndex != 1;
             NvkUiState.WellSlopeScale = MhScaleOf(_mhScale);
+            if (_mhCsMode != null) NvkUiState.WellCsAsCut = _mhCsMode.SelectedIndex == 1;
+            if (_mhBody != null) NvkUiState.WellBodyPlastic = _mhBody.SelectedIndex == 1;
+            if (_mhAuto != null) NvkUiState.WellFillAuto = _mhAuto.Checked;
+            NvkUiState.WellParts = ReadMhParts();
+            if (_mhBase != null && _mhBase.SelectedItem != null)
+                NvkUiState.WellBaseCode = _mhBase.SelectedItem.ToString();
+            if (_mhShaft != null && _mhShaft.SelectedItem != null)
+                NvkUiState.WellShaftCode = _mhShaft.SelectedItem.ToString();
+            if (_mhNeck != null && _mhNeck.SelectedItem != null)
+                NvkUiState.WellNeckCode = _mhNeck.SelectedItem.ToString();
+            if (_mhNeckSide != null) NvkUiState.WellNeckSide = Math.Max(0, _mhNeckSide.SelectedIndex);
             if (_mhSurf != null && _mhSurf.Items.Count > 0)
             {
                 NvkUiState.WellSurfHandle = SurfHandle(_mhSurf);
@@ -946,6 +994,115 @@ namespace Nvk.Cad
                 }
             }
             cb.SelectedIndex = idx;
+        }
+
+        static FlowLayoutPanel MhSub()
+        {
+            return new FlowLayoutPanel
+            {
+                Width = 244,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
+            };
+        }
+
+        void UpdateMhFillUi()
+        {
+            bool plas = _mhBody != null && _mhBody.SelectedIndex == 1;
+            if (_mhConc != null) _mhConc.Visible = !plas;
+            if (_mhPlas != null) _mhPlas.Visible = plas;
+        }
+
+        static void PickItem(ComboBox cb, string v, int fallback)
+        {
+            if (cb == null || cb.Items.Count == 0) return;
+            if (!string.IsNullOrEmpty(v))
+            {
+                for (int i = 0; i < cb.Items.Count; i++)
+                {
+                    if (string.Equals(cb.Items[i].ToString(), v, StringComparison.OrdinalIgnoreCase))
+                    {
+                        cb.SelectedIndex = i;
+                        return;
+                    }
+                }
+            }
+            cb.SelectedIndex = fallback >= 0 && fallback < cb.Items.Count ? fallback : 0;
+        }
+
+        DataGridView MakeMhPartsGrid(Control parent)
+        {
+            var g = new DataGridView
+            {
+                Width = 244,
+                Height = 148,
+                AllowUserToAddRows = true,
+                AllowUserToDeleteRows = true,
+                RowHeadersVisible = false,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                BackgroundColor = C_INPUT,
+                GridColor = C_BORDER,
+                BorderStyle = BorderStyle.None,
+                EnableHeadersVisualStyles = false,
+                DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    BackColor = C_INPUT,
+                    ForeColor = C_TEXT,
+                    SelectionBackColor = C_SEL,
+                    SelectionForeColor = Color.White
+                },
+                ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+                {
+                    BackColor = C_STRIP,
+                    ForeColor = C_DIM,
+                    SelectionBackColor = C_STRIP
+                }
+            };
+            g.Columns.Add("code", "Элемент");
+            g.Columns.Add("qty", "шт");
+            g.Columns[1].FillWeight = 40;
+            parent.Controls.Add(g);
+            return g;
+        }
+
+        void FillMhParts(string s)
+        {
+            if (_mhParts == null) return;
+            _mhParts.Rows.Clear();
+            var list = WellCatalog.ParseParts(s);
+            if (list.Count == 0) list = WellCatalog.AutoParts(1.0, 3.0);
+            for (int i = 0; i < list.Count; i++)
+                _mhParts.Rows.Add(list[i].Code, list[i].Qty.ToString());
+        }
+
+        string ReadMhParts()
+        {
+            if (_mhParts == null) return NvkUiState.WellParts ?? "";
+            var list = new System.Collections.Generic.List<WellPart>();
+            foreach (DataGridViewRow row in _mhParts.Rows)
+            {
+                if (row.IsNewRow) continue;
+                string code = row.Cells[0].Value != null ? row.Cells[0].Value.ToString().Trim() : "";
+                if (code.Length == 0) continue;
+                int q = 1;
+                if (row.Cells.Count > 1 && row.Cells[1].Value != null)
+                    int.TryParse(row.Cells[1].Value.ToString(), out q);
+                var p = WellCatalog.Find(code);
+                if (p == null) continue;
+                p.Qty = q < 1 ? 1 : q;
+                list.Add(p);
+            }
+            return WellCatalog.FormatParts(list);
+        }
+
+        void AutoMhParts()
+        {
+            FillMhParts("");
+            if (_mhAuto != null) _mhAuto.Checked = true;
         }
 
         static ComboBox Combo(Control parent, string cap, string[] items)

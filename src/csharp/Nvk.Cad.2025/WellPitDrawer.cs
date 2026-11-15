@@ -18,6 +18,7 @@ namespace Nvk.Cad
     sealed class WellCsDraw
     {
         public SectionGeom Geom;
+        public WellPitInput Well;
         public string Name;
         public string Handle;
         public double ShaftR;
@@ -154,6 +155,7 @@ namespace Nvk.Cad
                         csItems.Add(new WellCsDraw
                         {
                             Geom = geom,
+                            Well = well,
                             Name = well.Name,
                             Handle = h,
                             ShaftR = WellPitGeom.Radius(well),
@@ -292,7 +294,7 @@ namespace Nvk.Cad
             };
             var scfg = new SectionConfig
             {
-                Bedding = 0.0,
+                Bedding = Math.Max(0.0, cfg.Bedding),
                 ThkZash = 0.0,
                 SlopeM = cfg.SlopeM,
                 SlopeL = cfg.SlopeM,

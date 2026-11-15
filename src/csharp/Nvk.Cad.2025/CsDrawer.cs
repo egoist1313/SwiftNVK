@@ -151,6 +151,9 @@ namespace Nvk.Cad
             EraseWellCs(db, tr);
             NvkAnno.CaptureDim(db, tr);
 
+            bool cut = NvkUiState.WellCsAsCut;
+            var fill = NvkUiState.WellFillOf();
+            int nSt = WellCutStage.Count;
             double hw = 3.0;
             foreach (var it in items)
             {
@@ -169,15 +172,13 @@ namespace Nvk.Cad
             {
                 if (it == null || it.Geom == null) continue;
                 double osh = TrenchGeom.Osh(it.Geom.Elev);
-                double need = (it.Geom.Elev.Surface - osh + 0.3) * scale
-                    + CsAnnot.TableHeight(it.Geom, ProfileKind.Razrabotka, hw, it.Slope, it.Slope, tbl, null)
-                    + 3.5 * th;
+                double tblH = cut ? 0.0
+                    : CsAnnot.TableHeight(it.Geom, ProfileKind.Razrabotka, hw, it.Slope, it.Slope, tbl, null);
+                double need = (it.Geom.Elev.Surface - osh + 0.3) * scale + tblH + 5.0 * th;
                 if (need > rowGap) rowGap = need;
             }
             if (colGap < 8.0) colGap = 8.0;
             if (rowGap < 8.0) rowGap = 8.0;
-            int maxPerRow = CsAnnot.PerRow(NvkUiState.CsCols, 0.0, colGap);
-            if (maxPerRow < 1) maxPerRow = 2;
 
             var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForWrite);
             var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
@@ -186,39 +187,187 @@ namespace Nvk.Cad
             {
                 var it = items[i];
                 if (it == null || it.Geom == null) continue;
-                int col, row;
-                CsAnnot.Grid(i, maxPerRow, out col, out row);
-                var ins = new Point3d(origin.X + col * colGap, origin.Y - row * rowGap, 0.0);
-                string bname = "NVK-MH-CS-" + (it.Handle ?? i.ToString());
                 double m = it.Slope;
-                double shaft = it.ShaftR;
-                ObjectId btrId = RecreateBlock(tr, bt, bname, btr =>
+                for (int s = 1; s <= nSt; s++)
                 {
-                    DrawLevel(btr, tr, it.Geom, ProfileKind.Razrabotka, scale, m, m, i, 0, 0, hw, false);
-                    if (shaft > 0.05)
+                    var ins = new Point3d(origin.X + (s - 1) * colGap, origin.Y - i * rowGap, 0.0);
+                    string bname = "NVK-MH-CS-" + (it.Handle ?? i.ToString()) + "-S" + s.ToString();
+                    int stage = s;
+                    ObjectId btrId = RecreateBlock(tr, bt, bname, btr =>
                     {
-                        it.Geom.ManholeHalfW = shaft;
-                        DrawManholeShaft(btr, tr, it.Geom, scale, TrenchGeom.Osh(it.Geom.Elev), 0, 0);
-                    }
-                    if (!string.IsNullOrEmpty(it.Name))
-                    {
-                        double osh = TrenchGeom.Osh(it.Geom.Elev);
-                        double topY = (it.Geom.Elev.Surface + it.Geom.Pavement - osh) * scale + 4.0 * th;
-                        NvkText.Make(btr, tr, LayerTbl, 0.0, topY, it.Name, th,
-                            AttachmentPoint.MiddleCenter, 0.0, 24.0 * th, false);
-                    }
-                });
-                var br = new BlockReference(ins, btrId);
-                br.Layer = LayerIns;
-                ms.AppendEntity(br);
-                tr.AddNewlyCreatedDBObject(br, true);
-                NvkTag.Stamp(tr, br);
-                DrawDims(ms, tr, it.Geom, ProfileKind.Razrabotka, scale, m, m, ins.X, ins.Y);
-                nIns++;
+                        DrawWellStage(btr, tr, it, fill, stage, cut, scale, m, hw, th);
+                    });
+                    var br = new BlockReference(ins, btrId);
+                    br.Layer = LayerIns;
+                    ms.AppendEntity(br);
+                    tr.AddNewlyCreatedDBObject(br, true);
+                    NvkTag.Stamp(tr, br);
+                    DrawDims(ms, tr, it.Geom, WellCutStage.KindOf(stage), scale, m, m, ins.X, ins.Y);
+                    nIns++;
+                }
             }
-            return "[НВК] колодцы CS: сечений " + nIns
-                 + "  шагX=" + colGap.ToString("0.0")
+            return "[НВК] колодцы " + (cut ? "разрезов " : "сечений ") + nIns
+                 + "  (" + items.Count + " кол. × " + nSt
+                 + ")  шагX=" + colGap.ToString("0.0")
                  + "  шагY=" + rowGap.ToString("0.0");
+        }
+
+        static void DrawWellStage(BlockTableRecord btr, Transaction tr, WellCsDraw it,
+            WellFill fill, int stage, bool cut, double scale, double m, double hw, double th)
+        {
+            var kind = WellCutStage.KindOf(stage);
+            string title = WellCutStage.Title(stage, cut);
+            DrawLevel(btr, tr, it.Geom, kind, scale, m, m, stage - 1, 0, 0, hw, false,
+                title, !cut, false);
+            double osh = TrenchGeom.Osh(it.Geom.Elev);
+            double zSeat = it.Geom.Elev.SandTop;
+            var well = it.Well;
+            double innerD = well != null && well.Diam > 0.2 ? well.Diam : it.ShaftR * 2.0;
+            double height = well != null ? Math.Max(0.5, well.Height) : 2.0;
+            var parts = WellCatalog.Place(fill, innerD, height);
+            double wellR = 0.5;
+            for (int i = 0; i < parts.Count; i++)
+                if (parts[i].OuterR > wellR) wellR = parts[i].OuterR;
+            if (WellCutStage.ShowsBackfill(stage))
+                DrawWellBackfill(btr, tr, it.Geom, wellR, zSeat, scale, osh, 0, 0, m);
+            if (WellCutStage.ShowsWell(stage))
+                DrawWellBody(btr, tr, parts, zSeat, scale, osh, 0, 0);
+            if (WellCutStage.ShowsPipes(stage))
+                DrawWellPipes(btr, tr, well, it.Geom, scale, osh, 0, 0);
+            if (!string.IsNullOrEmpty(it.Name))
+            {
+                double topY = (it.Geom.Elev.Surface + it.Geom.Pavement - osh) * scale + 5.5 * th;
+                NvkText.Make(btr, tr, LayerTbl, 0.0, topY, it.Name, th,
+                    AttachmentPoint.MiddleCenter, 0.0, 24.0 * th, false);
+            }
+        }
+
+        static void DrawWellBody(BlockTableRecord btr, Transaction tr,
+            IList<WellPartInst> parts, double zSeat, double sc, double osh, double ox, double oy)
+        {
+            if (parts == null) return;
+            double th = NvkSession.Tbl().ForCs().TextH;
+            for (int i = 0; i < parts.Count; i++)
+            {
+                var p = parts[i];
+                double z0 = zSeat + p.Z0;
+                double z1 = zSeat + p.Z1;
+                DrawPartSection(btr, tr, p, z0, z1, sc, osh, ox, oy);
+                double midY = oy + (0.5 * (z0 + z1) - osh) * sc;
+                double labX = ox + (p.AxisX + p.OuterR) * sc + 0.4 * th;
+                if (!string.IsNullOrEmpty(p.Code))
+                    NvkText.Make(btr, tr, LayerTbl, labX, midY, p.Code, 0.75 * th,
+                        AttachmentPoint.MiddleLeft, 0.0, 12.0 * th, true);
+            }
+        }
+
+        static void DrawPartSection(BlockTableRecord btr, Transaction tr, WellPartInst p,
+            double z0, double z1, double sc, double osh, double ox, double oy)
+        {
+            double ax = p.AxisX;
+            double o = p.OuterR;
+            double hole = p.HoleR > 0.02 ? p.HoleR : p.InnerR;
+            if (p.Kind == WellPartKind.Bottom)
+            {
+                AddPline(btr, tr, ToDraw(new[]
+                {
+                    P(ax - o, z0), P(ax + o, z0), P(ax + o, z1), P(ax - o, z1)
+                }, sc, osh, ox, oy), Aci(7), true, 30);
+                return;
+            }
+            if (p.Kind == WellPartKind.Base)
+            {
+                double floor = Math.Min(0.08, 0.4 * (z1 - z0));
+                AddPline(btr, tr, ToDraw(new[]
+                {
+                    P(ax - o, z0), P(ax + o, z0), P(ax + o, z0 + floor), P(ax - o, z0 + floor)
+                }, sc, osh, ox, oy), Aci(7), true, 30);
+                AddPline(btr, tr, ToDraw(new[]
+                {
+                    P(ax - o, z0 + floor), P(ax - hole, z0 + floor), P(ax - hole, z1), P(ax - o, z1)
+                }, sc, osh, ox, oy), Aci(7), true, 30);
+                AddPline(btr, tr, ToDraw(new[]
+                {
+                    P(ax + hole, z0 + floor), P(ax + o, z0 + floor), P(ax + o, z1), P(ax + hole, z1)
+                }, sc, osh, ox, oy), Aci(7), true, 30);
+                return;
+            }
+            AddPline(btr, tr, ToDraw(new[]
+            {
+                P(ax - o, z0), P(ax - hole, z0), P(ax - hole, z1), P(ax - o, z1)
+            }, sc, osh, ox, oy), Aci(7), true, 30);
+            AddPline(btr, tr, ToDraw(new[]
+            {
+                P(ax + hole, z0), P(ax + o, z0), P(ax + o, z1), P(ax + hole, z1)
+            }, sc, osh, ox, oy), Aci(7), true, 30);
+        }
+
+        static void DrawWellPipes(BlockTableRecord btr, Transaction tr, WellPitInput well,
+            SectionGeom g, double sc, double osh, double ox, double oy)
+        {
+            var drawn = new List<double>();
+            if (well != null && well.Pipes != null)
+            {
+                for (int i = 0; i < well.Pipes.Count; i++)
+                {
+                    var p = well.Pipes[i];
+                    if (p == null || p.Diam < 0.04) continue;
+                    AddPipeCircle(btr, tr, ox, oy + (p.Invert0 - osh) * sc, p.Diam * 0.5 * sc);
+                    drawn.Add(p.Invert0);
+                }
+            }
+            if (drawn.Count == 0 && g != null && g.Elev.Diam > 0.04)
+                AddPipeCircle(btr, tr, ox, oy + (g.Elev.Invert - osh) * sc, g.Elev.Diam * 0.5 * sc);
+        }
+
+        static void AddPipeCircle(BlockTableRecord btr, Transaction tr, double cx, double cy, double r)
+        {
+            if (r < 0.01) return;
+            var cir = new Circle(new Point3d(cx, cy, 0.0), Vector3d.ZAxis, r);
+            cir.SetDatabaseDefaults();
+            cir.Layer = LayerIns;
+            cir.Color = Aci(5);
+            cir.LineWeight = LineWeight.LineWeight030;
+            btr.AppendEntity(cir);
+            tr.AddNewlyCreatedDBObject(cir, true);
+        }
+
+        static void DrawWellBackfill(BlockTableRecord btr, Transaction tr, SectionGeom g,
+            double wellR, double zSeat, double sc, double osh, double ox, double oy, double m)
+        {
+            if (g == null) return;
+            double xTopL = TrenchGeom.XTopLeft(g, m);
+            double xTopR = TrenchGeom.XTopRight(g, m);
+            double xSandL = TrenchGeom.XAtLeft(g, m, zSeat);
+            double xSandR = TrenchGeom.XAtRight(g, m, zSeat);
+            if (wellR < 0.1) wellR = 0.5;
+            var fill = HatchOf(ProfileKind.Zasypka, g);
+            if (xSandL > wellR + 0.02)
+            {
+                double zL = TrenchGeom.SurfZAt(g, -xTopL);
+                var left = ToDraw(new[]
+                {
+                    P(-xTopL, zL),
+                    P(-wellR, TrenchGeom.SurfZAt(g, -wellR)),
+                    P(-wellR, zSeat),
+                    P(-xSandL, zSeat)
+                }, sc, osh, ox, oy);
+                AddPline(btr, tr, left, Aci(5), true, 0);
+                ApplyHatch(btr, tr, left, fill);
+            }
+            if (xSandR > wellR + 0.02)
+            {
+                double zR = TrenchGeom.SurfZAt(g, xTopR);
+                var right = ToDraw(new[]
+                {
+                    P(xTopR, zR),
+                    P(wellR, TrenchGeom.SurfZAt(g, wellR)),
+                    P(wellR, zSeat),
+                    P(xSandR, zSeat)
+                }, sc, osh, ox, oy);
+                AddPline(btr, tr, right, Aci(5), true, 0);
+                ApplyHatch(btr, tr, right, fill);
+            }
         }
 
         static void EraseWellCs(Database db, Transaction tr)
@@ -277,6 +426,11 @@ namespace Nvk.Cad
         }
 
         static void DrawLevel(BlockTableRecord btr, Transaction tr, SectionGeom g, ProfileKind kind, double sc, double mL, double mR, int idx, double ox, double oy, double hw, bool withDims)
+        {
+            DrawLevel(btr, tr, g, kind, sc, mL, mR, idx, ox, oy, hw, withDims, null, true, true);
+        }
+
+        static void DrawLevel(BlockTableRecord btr, Transaction tr, SectionGeom g, ProfileKind kind, double sc, double mL, double mR, int idx, double ox, double oy, double hw, bool withDims, string title, bool withTable, bool withPipe)
         {
             var e = g.Elev;
             double osh = TrenchGeom.Osh(e);
@@ -352,7 +506,7 @@ namespace Nvk.Cad
                 }
             }
 
-            if (level >= 3)
+            if (withPipe && level >= 3)
             {
                 var cir = new Circle(pipeC, Vector3d.ZAxis, pipeR);
                 cir.SetDatabaseDefaults();
@@ -374,7 +528,7 @@ namespace Nvk.Cad
             if (withDims)
                 DrawDims(btr, tr, g, kind, sc, mL, mR, ox, oy);
             DrawLineTags(btr, tr, g, sc, osh, ox, oy, mL, mR, level, hw);
-            DrawAnnot(btr, tr, g, kind, sc, mL, mR, idx, ox, oy, hw);
+            DrawAnnot(btr, tr, g, kind, sc, mL, mR, idx, ox, oy, hw, title, withTable);
         }
 
         static void DrawLineTags(BlockTableRecord btr, Transaction tr, SectionGeom g,
@@ -547,18 +701,27 @@ namespace Nvk.Cad
         static void DrawAnnot(BlockTableRecord btr, Transaction tr, SectionGeom g, ProfileKind kind,
             double sc, double mL, double mR, int idx, double ox, double oy, double hw)
         {
+            DrawAnnot(btr, tr, g, kind, sc, mL, mR, idx, ox, oy, hw, null, true);
+        }
+
+        static void DrawAnnot(BlockTableRecord btr, Transaction tr, SectionGeom g, ProfileKind kind,
+            double sc, double mL, double mR, int idx, double ox, double oy, double hw,
+            string title, bool withTable)
+        {
             var e = g.Elev;
             double osh = TrenchGeom.Osh(e);
             DrawFrame(btr, tr, g, sc, osh, ox, oy, hw);
             var tbl = NvkSession.Tbl().ForCs();
             double th = tbl.TextH;
             double topY = oy + (e.Surface + g.Pavement - osh) * sc + 2.5 * th;
-            NvkText.Make(btr, tr, LayerTbl, ox, topY + th, CsAnnot.Header(idx, kind, e.Station),
-                th, AttachmentPoint.MiddleCenter, 0.0, 20.0 * th, false);
+            string head = string.IsNullOrEmpty(title) ? CsAnnot.Header(idx, kind, e.Station) : title;
+            NvkText.Make(btr, tr, LayerTbl, ox, topY + th, head,
+                th, AttachmentPoint.MiddleCenter, 0.0, 28.0 * th, false);
             int lv = (int)kind;
             if (!g.InManhole && (lv == 3 || lv == 4))
                 DrawPipeLabel(btr, tr, g, sc, osh, ox, oy);
-            DrawTable(btr, tr, g, kind, sc, mL, mR, ox, oy, hw);
+            if (withTable)
+                DrawTable(btr, tr, g, kind, sc, mL, mR, ox, oy, hw);
         }
 
         static void DrawManholeShaft(BlockTableRecord btr, Transaction tr, SectionGeom g,

@@ -147,6 +147,15 @@ namespace Nvk.Cad
         public static bool WellCornerFan = true;
         /// <summary>Масштаб бергштрихов откоса 1:N. По умолчанию 1:500.</summary>
         public static int WellSlopeScale = 500;
+        /// <summary>true — разрезы (без таблицы), false — сечения как сейчас.</summary>
+        public static bool WellCsAsCut;
+        public static bool WellBodyPlastic;
+        public static int WellNeckSide;
+        public static bool WellFillAuto = true;
+        public static string WellParts = "";
+        public static string WellBaseCode = "DN1000";
+        public static string WellShaftCode = "DN1000";
+        public static string WellNeckCode = "DN600";
         public static string WellSurfHandle = "";
         public static string WellSurfName = "";
         public static double? OshOverride = null;
@@ -154,6 +163,23 @@ namespace Nvk.Cad
         /// <summary>true — текущие statics пришли из NOD этого чертежа, не из профиля сеанса.</summary>
         public static bool HasNod;
         public static string LoadedDocKey;
+
+        public static WellFill WellFillOf()
+        {
+            var side = Nvk.Core.WellNeckSide.Center;
+            if (WellNeckSide == 1) side = Nvk.Core.WellNeckSide.Left;
+            else if (WellNeckSide == 2) side = Nvk.Core.WellNeckSide.Right;
+            return new WellFill
+            {
+                Body = WellBodyPlastic ? WellBodyKind.Plastic : WellBodyKind.Concrete,
+                Neck = side,
+                Auto = WellFillAuto,
+                Parts = WellCatalog.ParseParts(WellParts),
+                BaseCode = string.IsNullOrEmpty(WellBaseCode) ? "DN1000" : WellBaseCode,
+                ShaftCode = string.IsNullOrEmpty(WellShaftCode) ? "DN1000" : WellShaftCode,
+                NeckCode = string.IsNullOrEmpty(WellNeckCode) ? "DN600" : WellNeckCode
+            };
+        }
 
         public static void ApplyTo(SectionConfig cfg, TableCfg tbl)
         {
@@ -455,6 +481,14 @@ namespace Nvk.Cad
             Pair(rb, "MH_SLOPE", F(WellSlopeM, 4));
             Pair(rb, "MH_FAN", WellCornerFan ? "1" : "0");
             Pair(rb, "MH_SCALE", WellSlopeScale.ToString());
+            Pair(rb, "MH_CS_CUT", WellCsAsCut ? "1" : "0");
+            Pair(rb, "MH_BODY", WellBodyPlastic ? "1" : "0");
+            Pair(rb, "MH_NECK", WellNeckSide.ToString());
+            Pair(rb, "MH_AUTO", WellFillAuto ? "1" : "0");
+            Pair(rb, "MH_PARTS", WellParts ?? "");
+            Pair(rb, "MH_BASE", WellBaseCode ?? "");
+            Pair(rb, "MH_SHAFT", WellShaftCode ?? "");
+            Pair(rb, "MH_NECKC", WellNeckCode ?? "");
             Pair(rb, "MH_SURF_H", WellSurfHandle ?? "");
             Pair(rb, "MH_SURF_N", WellSurfName ?? "");
             WriteStyles(rb);
@@ -707,6 +741,14 @@ namespace Nvk.Cad
             WellSlopeM = 0.20;
             WellCornerFan = true;
             WellSlopeScale = 500;
+            WellCsAsCut = false;
+            WellBodyPlastic = false;
+            WellNeckSide = 0;
+            WellFillAuto = true;
+            WellParts = "";
+            WellBaseCode = "DN1000";
+            WellShaftCode = "DN1000";
+            WellNeckCode = "DN600";
             WellSurfHandle = "";
             WellSurfName = "";
             OshOverride = null;
@@ -896,6 +938,18 @@ namespace Nvk.Cad
                     WellSlopeScale = (int)Math.Round(D(v, WellSlopeScale));
                     if (WellSlopeScale < 1) WellSlopeScale = 500;
                     break;
+                case "MH_CS_CUT": WellCsAsCut = v != "0"; break;
+                case "MH_BODY": WellBodyPlastic = v == "1"; break;
+                case "MH_NECK":
+                    WellNeckSide = (int)Math.Round(D(v, WellNeckSide));
+                    if (WellNeckSide < 0) WellNeckSide = 0;
+                    if (WellNeckSide > 2) WellNeckSide = 2;
+                    break;
+                case "MH_AUTO": WellFillAuto = v != "0"; break;
+                case "MH_PARTS": WellParts = v ?? ""; break;
+                case "MH_BASE": WellBaseCode = string.IsNullOrEmpty(v) ? "DN1000" : v; break;
+                case "MH_SHAFT": WellShaftCode = string.IsNullOrEmpty(v) ? "DN1000" : v; break;
+                case "MH_NECKC": WellNeckCode = string.IsNullOrEmpty(v) ? "DN600" : v; break;
                 case "MH_SURF_H": WellSurfHandle = v ?? ""; break;
                 case "MH_SURF_N": WellSurfName = v ?? ""; break;
             }
