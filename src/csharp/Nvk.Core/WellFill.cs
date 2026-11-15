@@ -27,7 +27,9 @@ namespace Nvk.Core
         Hatch = 4,
         Base = 5,
         Shaft = 6,
-        Neck = 7
+        Neck = 7,
+        Cone = 8,
+        Form = 9
     }
 
     /// <summary>Элемент колодца (ГОСТ 8020 или пластик). Qty — число одинаковых.</summary>
@@ -52,6 +54,10 @@ namespace Nvk.Core
         public double Z0;
         public double Z1;
         public double AxisX;
+        /// <summary>Верх трапеции (конус). 0 = цилиндр, как InnerR/OuterR.</summary>
+        public double TopInnerR;
+        public double TopOuterR;
+        public double TopAxisX;
     }
 
     /// <summary>Наполнение колодца с вкладки «Колодцы».</summary>
@@ -60,9 +66,9 @@ namespace Nvk.Core
         public WellBodyKind Body = WellBodyKind.Concrete;
         public WellNeckSide Neck = WellNeckSide.Center;
         public bool Auto = true;
-        public string BaseCode = "DN1000";
-        public string ShaftCode = "DN1000";
-        public string NeckCode = "DN600";
+        public string BaseCode = "Прямопроходная";
+        public string ShaftCode = "Авто";
+        public string NeckCode = "Конус";
         public List<WellPart> Parts = new List<WellPart>();
     }
 
@@ -122,6 +128,7 @@ namespace Nvk.Core
             P("КС-10.6", WellPartKind.Ring, 1.00, 1.16, 0.59),
             P("КС-10.9", WellPartKind.Ring, 1.00, 1.16, 0.89),
             P("КС-10.12",WellPartKind.Ring, 1.00, 1.16, 1.19),
+            P("КС-15.3", WellPartKind.Ring, 1.50, 1.68, 0.29),
             P("КС-15.6", WellPartKind.Ring, 1.50, 1.68, 0.59),
             P("КС-15.9", WellPartKind.Ring, 1.50, 1.68, 0.89),
             P("КС-15.12",WellPartKind.Ring, 1.50, 1.68, 1.19),
@@ -137,6 +144,43 @@ namespace Nvk.Core
         };
 
         public static readonly string[] PlasticDn = { "DN400", "DN600", "DN800", "DN1000", "DN1200" };
+        public static readonly string[] PlasticSeriesUi = { "Авто", "Тридэвелл DN1000", "Тридэвелл DN1500" };
+        public static readonly string[] PlasticBaseUi =
+        {
+            "Прямопроходная", "Угловая", "Тройниковая", "Крестовинная", "Двойная стенка"
+        };
+        public static readonly string[] PlasticConeUi =
+        {
+            "Конус", "Конус со ступенями", "Дождеприемный"
+        };
+        public static readonly string[] ConcreteSeriesUi = { "Ø700", "Ø1000", "Ø1500", "Ø2000" };
+
+        public static string[] ConcreteCodes()
+        {
+            var a = new string[Concrete.Length];
+            for (int i = 0; i < Concrete.Length; i++) a[i] = Concrete[i].Code;
+            return a;
+        }
+
+        public static double SeriesDiamM(int seriesUiIndex)
+        {
+            switch (seriesUiIndex)
+            {
+                case 0: return 0.70;
+                case 2: return 1.50;
+                case 3: return 2.00;
+                default: return 1.00;
+            }
+        }
+
+        public static int SeriesUiIndex(double innerD)
+        {
+            int s = SeriesMm(innerD);
+            if (s <= 7) return 0;
+            if (s <= 10) return 1;
+            if (s <= 15) return 2;
+            return 3;
+        }
 
         static WellPart P(string code, WellPartKind k, double id, double od, double h)
         {
@@ -325,7 +369,10 @@ namespace Nvk.Core
                         HoleR = hole,
                         Z0 = z,
                         Z1 = z + h,
-                        AxisX = 0.0
+                        AxisX = 0.0,
+                        TopInnerR = ir,
+                        TopOuterR = orad,
+                        TopAxisX = 0.0
                     });
                     z += h;
                 }
@@ -333,41 +380,184 @@ namespace Nvk.Core
             return dst;
         }
 
+        /// <summary>Типоразмер Тридэвелл: 1000 или 1500. «Авто» — по Ø колодца Civil.</summary>
+        public static int PlasticSeriesMm(string shaftCode, double innerD)
+        {
+            if (!string.IsNullOrEmpty(shaftCode))
+            {
+                string s = shaftCode.Trim();
+                if (Has(s, "авто")) { /* по innerD */ }
+                else if (Has(s, "1500")) return 1500;
+                else if (Has(s, "1000")) return 1000;
+                else
+                {
+                    double d = DnMeters(s);
+                    if (d >= 1.25) return 1500;
+                    if (d >= 0.30) return 1000;
+                }
+            }
+            return innerD < 1.25 ? 1000 : 1500;
+        }
+
+        public static string PlasticSeriesUiOf(string shaftCode)
+        {
+            if (string.IsNullOrEmpty(shaftCode) || Has(shaftCode, "авто")) return PlasticSeriesUi[0];
+            if (Has(shaftCode, "1500")) return PlasticSeriesUi[2];
+            if (Has(shaftCode, "1000") || DnMeters(shaftCode) >= 0.30) return PlasticSeriesUi[1];
+            return PlasticSeriesUi[0];
+        }
+
+        public static string PlasticBaseUiOf(string baseCode)
+        {
+            if (string.IsNullOrEmpty(baseCode)) return PlasticBaseUi[0];
+            if (Has(baseCode, "угл")) return PlasticBaseUi[1];
+            if (Has(baseCode, "тройн")) return PlasticBaseUi[2];
+            if (Has(baseCode, "крест")) return PlasticBaseUi[3];
+            if (Has(baseCode, "двойн") || Has(baseCode, "дс")) return PlasticBaseUi[4];
+            return PlasticBaseUi[0];
+        }
+
+        public static string PlasticConeUiOf(string neckCode)
+        {
+            if (string.IsNullOrEmpty(neckCode)) return PlasticConeUi[0];
+            if (Has(neckCode, "дожд")) return PlasticConeUi[2];
+            if (Has(neckCode, "ступ")) return PlasticConeUi[1];
+            return PlasticConeUi[0];
+        }
+
         static List<WellPartInst> PlacePlastic(WellFill fill, double innerD, double height)
         {
-            var bas = PlasticOf(string.IsNullOrEmpty(fill.BaseCode) ? DnTag(innerD) : fill.BaseCode, WellPartKind.Base);
-            var neck = PlasticOf(string.IsNullOrEmpty(fill.NeckCode) ? "DN600" : fill.NeckCode, WellPartKind.Neck);
-            var shaft = PlasticOf(string.IsNullOrEmpty(fill.ShaftCode) ? DnTag(innerD) : fill.ShaftCode, WellPartKind.Shaft);
-            double shaftH = height - bas.Height - neck.Height;
-            if (shaftH < 0.20) shaftH = 0.20;
-            shaft.Height = shaftH;
-            double off = 0.0;
-            double room = shaft.InnerD * 0.5 - neck.InnerD * 0.5;
+            int ser = PlasticSeriesMm(fill != null ? fill.ShaftCode : null, innerD);
+            string baseUi = PlasticBaseUiOf(fill != null ? fill.BaseCode : null);
+            string coneUi = PlasticConeUiOf(fill != null ? fill.NeckCode : null);
+            bool rain = ser == 1000 && Has(coneUi, "дожд");
+            bool steps = Has(coneUi, "ступ");
+            bool dbl = ser == 1500 && Has(baseUi, "двойн");
+
+            double shaftIn = ser * 0.001;
+            double shaftOut = ser == 1000 ? 1.090 : 1.590;
+            double neckIn = 0.680;
+            double neckWall = 0.015;
+            double flangeIn = ser == 1000 ? 0.927 : 1.417;
+            double coneH = rain ? 0.720 : (ser == 1000 ? 0.750 : 1.000);
+            double neckCylH = rain ? 0.0 : (ser == 1000 ? 0.432 : 0.398);
+            double taperH = coneH - neckCylH;
+            if (taperH < 0.15) taperH = coneH;
+            double baseH = ser == 1000 ? 0.750 : 1.200;
+            double formH = 0.200;
+            var hatch = Find("Люк-Т");
+            double hatchH = hatch != null ? hatch.Height : 0.09;
+
+            double cap = baseH + coneH + formH + hatchH;
+            double need = height - cap;
+            if (need < 0.20) need = 0.20;
+            var rings = TridevellRingHeights(ser);
+            var qty = new int[rings.Length];
+            double left = need;
+            for (int i = 0; i < rings.Length; i++)
+            {
+                while (left + 1e-6 >= rings[i])
+                {
+                    qty[i]++;
+                    left -= rings[i];
+                }
+            }
+            if (left > 0.04 && rings.Length > 0)
+                qty[qty.Length - 1]++;
+
+            double room = shaftIn * 0.5 - neckIn * 0.5;
             if (room < 0.0) room = 0.0;
-            if (fill.Neck == WellNeckSide.Left) off = -room;
-            else if (fill.Neck == WellNeckSide.Right) off = room;
+            double off = 0.0;
+            if (fill != null && fill.Neck == WellNeckSide.Left) off = -room;
+            else if (fill != null && fill.Neck == WellNeckSide.Right) off = room;
+
             var dst = new List<WellPartInst>();
             double z = 0.0;
-            dst.Add(Inst(bas, z, 0.0)); z += bas.Height;
-            dst.Add(Inst(shaft, z, 0.0)); z += shaft.Height;
-            dst.Add(Inst(neck, z, off));
+            string baseCode = dbl ? "База DN1500 ДС" : ("База DN" + ser + " " + BaseShort(baseUi));
+            dst.Add(Inst(baseCode, WellPartKind.Base, shaftIn * 0.5, shaftOut * 0.5, z, z + baseH, 0.0));
+            z += baseH;
+            for (int i = 0; i < rings.Length; i++)
+            {
+                for (int k = 0; k < qty[i]; k++)
+                {
+                    string rc = "Шахта DN" + ser + "×" + ((int)Math.Round(rings[i] * 1000)).ToString(CultureInfo.InvariantCulture);
+                    dst.Add(Inst(rc, WellPartKind.Shaft, shaftIn * 0.5, shaftOut * 0.5, z, z + rings[i], 0.0));
+                    z += rings[i];
+                }
+            }
+
+            double botIr = flangeIn * 0.5;
+            double botOr = shaftOut * 0.5;
+            double topIr = rain ? 0.385 : neckIn * 0.5;
+            double topOr = rain ? 0.400 : neckIn * 0.5 + neckWall;
+            string coneCode = rain
+                ? "Конус-Д DN1000×720"
+                : (steps ? "Конус DN" + ser + " ст." : "Конус DN" + ser);
+            var cone = Inst(coneCode, WellPartKind.Cone, botIr, botOr, z, z + taperH, 0.0);
+            cone.TopInnerR = topIr;
+            cone.TopOuterR = topOr;
+            cone.TopAxisX = off;
+            dst.Add(cone);
+            z += taperH;
+            if (neckCylH > 0.02)
+            {
+                dst.Add(Inst("Горловина DN" + ser, WellPartKind.Neck, topIr, topOr, z, z + neckCylH, off));
+                z += neckCylH;
+            }
+            double formIn = 0.750;
+            double formOut = ser == 1000 ? 1.250 : 1.750;
+            dst.Add(Inst("Форма DN" + ser, WellPartKind.Form, formIn * 0.5, formOut * 0.5, z, z + formH, off));
+            z += formH;
+            if (hatch != null)
+                dst.Add(Inst(hatch.Code, WellPartKind.Hatch, hatch.InnerD * 0.5, hatch.OuterD * 0.5, z, z + hatchH, off));
             return dst;
+        }
+
+        static double[] TridevellRingHeights(int ser)
+        {
+            if (ser == 1500) return new[] { 1.00, 0.50 };
+            return new[] { 1.00, 0.50, 0.25 };
+        }
+
+        static string BaseShort(string ui)
+        {
+            if (Has(ui, "угл")) return "угл.";
+            if (Has(ui, "тройн")) return "тр.";
+            if (Has(ui, "крест")) return "крест.";
+            if (Has(ui, "двойн")) return "ДС";
+            return "пр.";
+        }
+
+        static bool Has(string s, string token)
+        {
+            if (string.IsNullOrEmpty(s) || string.IsNullOrEmpty(token)) return false;
+            return s.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         static WellPartInst Inst(WellPart p, double z, double axisX)
         {
             double ir = p.InnerD * 0.5;
             double orad = p.OuterD * 0.5;
+            return Inst(p.Code, p.Kind, ir, orad, z, z + p.Height, axisX);
+        }
+
+        static WellPartInst Inst(string code, WellPartKind kind, double ir, double orad,
+            double z0, double z1, double axisX)
+        {
+            if (orad < ir + 0.01) orad = ir + 0.045;
             return new WellPartInst
             {
-                Code = p.Code,
-                Kind = p.Kind,
+                Code = code,
+                Kind = kind,
                 InnerR = ir,
                 OuterR = orad,
                 HoleR = ir,
-                Z0 = z,
-                Z1 = z + p.Height,
-                AxisX = axisX
+                Z0 = z0,
+                Z1 = z1,
+                AxisX = axisX,
+                TopInnerR = ir,
+                TopOuterR = orad,
+                TopAxisX = axisX
             };
         }
 

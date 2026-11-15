@@ -80,17 +80,39 @@ namespace Nvk.Core.Tests
             {
                 Body = WellBodyKind.Plastic,
                 Neck = WellNeckSide.Left,
-                BaseCode = "DN1000",
-                ShaftCode = "DN1000",
-                NeckCode = "DN600"
+                BaseCode = "Прямопроходная",
+                ShaftCode = "Тридэвелл DN1000",
+                NeckCode = "Конус"
             };
             var p = WellCatalog.Place(fill, 1.0, 3.0);
-            Assert.Equal(3, p.Count);
             Assert.Equal(WellPartKind.Base, p[0].Kind);
-            Assert.Equal(WellPartKind.Shaft, p[1].Kind);
-            Assert.Equal(WellPartKind.Neck, p[2].Kind);
-            Assert.True(p[2].AxisX < -0.05);
-            Assert.Equal(0.0, p[1].AxisX, 6);
+            Assert.Contains("DN1000", p[0].Code);
+            bool shaft = false, cone = false, neck = false, form = false;
+            for (int i = 0; i < p.Count; i++)
+            {
+                if (p[i].Kind == WellPartKind.Shaft)
+                {
+                    shaft = true;
+                    Assert.Equal(0.0, p[i].AxisX, 6);
+                }
+                if (p[i].Kind == WellPartKind.Cone)
+                {
+                    cone = true;
+                    Assert.True(p[i].TopInnerR < p[i].InnerR - 0.05);
+                    Assert.True(p[i].TopAxisX < -0.05);
+                    Assert.Equal(0.0, p[i].AxisX, 6);
+                }
+                if (p[i].Kind == WellPartKind.Neck)
+                {
+                    neck = true;
+                    Assert.True(p[i].AxisX < -0.05);
+                }
+                if (p[i].Kind == WellPartKind.Form) form = true;
+            }
+            Assert.True(shaft);
+            Assert.True(cone);
+            Assert.True(neck);
+            Assert.True(form);
             Assert.True(p[p.Count - 1].Z1 >= 2.9);
         }
 
@@ -101,12 +123,110 @@ namespace Nvk.Core.Tests
             {
                 Body = WellBodyKind.Plastic,
                 Neck = WellNeckSide.Center,
+                BaseCode = "Прямопроходная",
+                ShaftCode = "Тридэвелл DN1000",
+                NeckCode = "Конус"
+            };
+            var p = WellCatalog.Place(fill, 1.0, 2.5);
+            for (int i = 0; i < p.Count; i++)
+            {
+                Assert.Equal(0.0, p[i].AxisX, 6);
+                Assert.Equal(0.0, p[i].TopAxisX, 6);
+            }
+        }
+
+        [Fact]
+        public void PlasticAutoPicksDn1000FromMeterWell()
+        {
+            var fill = new WellFill
+            {
+                Body = WellBodyKind.Plastic,
+                ShaftCode = "Авто",
+                BaseCode = "Прямопроходная",
+                NeckCode = "Конус"
+            };
+            var p = WellCatalog.Place(fill, 1.0, 3.0);
+            Assert.Contains("DN1000", p[0].Code);
+            Assert.Equal(1000, WellCatalog.PlasticSeriesMm("Авто", 1.0));
+            Assert.Equal(1500, WellCatalog.PlasticSeriesMm("Авто", 1.5));
+        }
+
+        [Fact]
+        public void PlasticAutoPicksDn1500FromWideWell()
+        {
+            var fill = new WellFill
+            {
+                Body = WellBodyKind.Plastic,
+                ShaftCode = "Авто",
+                BaseCode = "Прямопроходная",
+                NeckCode = "Конус"
+            };
+            var p = WellCatalog.Place(fill, 1.50, 4.0);
+            Assert.Contains("DN1500", p[0].Code);
+            bool cone = false;
+            for (int i = 0; i < p.Count; i++)
+            {
+                if (p[i].Kind != WellPartKind.Cone) continue;
+                cone = true;
+                Assert.True(p[i].Z1 - p[i].Z0 > 0.50);
+                Assert.True(p[i].OuterR > 0.70);
+            }
+            Assert.True(cone);
+        }
+
+        [Fact]
+        public void PlasticRainConeHasRectangularTop()
+        {
+            var fill = new WellFill
+            {
+                Body = WellBodyKind.Plastic,
+                ShaftCode = "Тридэвелл DN1000",
+                NeckCode = "Дождеприемный"
+            };
+            var p = WellCatalog.Place(fill, 1.0, 2.5);
+            bool rain = false;
+            for (int i = 0; i < p.Count; i++)
+            {
+                if (p[i].Kind != WellPartKind.Cone) continue;
+                rain = true;
+                Assert.Equal(0.385, p[i].TopInnerR, 3);
+            }
+            Assert.True(rain);
+        }
+
+        [Fact]
+        public void PlasticOldDnCodesStillMeanSeries1000()
+        {
+            var fill = new WellFill
+            {
+                Body = WellBodyKind.Plastic,
                 BaseCode = "DN1000",
                 ShaftCode = "DN1000",
                 NeckCode = "DN600"
             };
-            var p = WellCatalog.Place(fill, 1.0, 2.5);
-            Assert.Equal(0.0, p[2].AxisX, 6);
+            var p = WellCatalog.Place(fill, 1.0, 3.0);
+            Assert.Contains("DN1000", p[0].Code);
+            Assert.Equal("Тридэвелл DN1000", WellCatalog.PlasticSeriesUiOf("DN1000"));
+            Assert.Equal("Прямопроходная", WellCatalog.PlasticBaseUiOf("DN1000"));
+            Assert.Equal("Конус", WellCatalog.PlasticConeUiOf("DN600"));
+        }
+
+        [Fact]
+        public void ConcreteCatalogHasAllSeries()
+        {
+            var codes = WellCatalog.ConcreteCodes();
+            Assert.Contains("ПН-7", codes);
+            Assert.Contains("КС-7.3", codes);
+            Assert.Contains("КС-10.12", codes);
+            Assert.Contains("КС-15.3", codes);
+            Assert.Contains("КС-20.12", codes);
+            Assert.Contains("ПП-20", codes);
+            var p = WellCatalog.AutoParts(1.50, 3.0);
+            Assert.Equal("ПН-15", p[0].Code);
+            Assert.Equal(0.70, WellCatalog.SeriesDiamM(0), 2);
+            Assert.Equal(1.00, WellCatalog.SeriesDiamM(1), 2);
+            Assert.Equal(1.50, WellCatalog.SeriesDiamM(2), 2);
+            Assert.Equal(2.00, WellCatalog.SeriesDiamM(3), 2);
         }
     }
 }
