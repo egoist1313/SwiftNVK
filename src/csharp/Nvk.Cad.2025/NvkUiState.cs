@@ -142,6 +142,7 @@ namespace Nvk.Cad
         public static string FactProfileHandleL4 = "";
         public static string FactProfileHandleL5 = "";
         public static double WellTrenchGap = 0.50;
+        public static double WellSandGap = 0.20;
         public static double WellBedding = 0.10;
         public static double WellSlopeM = 0.20;
         public static bool WellCornerFan = true;
@@ -477,6 +478,7 @@ namespace Nvk.Cad
             Pair(rb, "FACT_PROF_L4", FactProfileHandleL4 ?? "");
             Pair(rb, "FACT_PROF_L5", FactProfileHandleL5 ?? "");
             Pair(rb, "MH_GAP", F(WellTrenchGap, 3));
+            Pair(rb, "MH_SAND", F(WellSandGap, 3));
             Pair(rb, "MH_BED", F(WellBedding, 3));
             Pair(rb, "MH_SLOPE", F(WellSlopeM, 4));
             Pair(rb, "MH_FAN", WellCornerFan ? "1" : "0");
@@ -737,6 +739,7 @@ namespace Nvk.Cad
             FactProfileHandleL1 = FactProfileHandleL2 = FactProfileHandleL3
                 = FactProfileHandleL4 = FactProfileHandleL5 = "";
             WellTrenchGap = 0.50;
+            WellSandGap = 0.20;
             WellBedding = 0.10;
             WellSlopeM = 0.20;
             WellCornerFan = true;
@@ -931,6 +934,7 @@ namespace Nvk.Cad
                 case "FACT_PROF_L4": FactProfileHandleL4 = v; break;
                 case "FACT_PROF_L5": FactProfileHandleL5 = v; break;
                 case "MH_GAP": WellTrenchGap = D(v, WellTrenchGap); break;
+                case "MH_SAND": WellSandGap = D(v, WellSandGap); break;
                 case "MH_BED": WellBedding = D(v, WellBedding); break;
                 case "MH_SLOPE": WellSlopeM = D(v, WellSlopeM); break;
                 case "MH_FAN": WellCornerFan = v != "0"; break;

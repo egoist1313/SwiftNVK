@@ -37,6 +37,7 @@ namespace Nvk.Cad
             ("NVK-DATA",     8, true,  true),
             ("NVK-SHEET",    7, false, false),
             ("NVK-MH-PIT",   1, false, false),
+            ("NVK-MH-SAND",  2, false, false),
             ("NVK-MH-BERM",  3, false, false),
             ("NVK-MH-SLOPE", 4, false, false),
             ("NVK-MH-PIPE-C", 1, false, false),

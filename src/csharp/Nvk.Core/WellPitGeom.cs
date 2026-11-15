@@ -8,6 +8,8 @@ namespace Nvk.Core
     {
         /// <summary>Отступ от стенки колодца, м. Полусторона дна = R + отступ.</summary>
         public double TrenchGap = 0.50;
+        /// <summary>Выступ песка за стенку колодца, м. Полусторона прямоугольника = R + выступ, не шире дна.</summary>
+        public double SandGap = 0.20;
         /// <summary>Откос m = горизонталь/вертикаль. 0 = вертикальные стенки.</summary>
         public double SlopeM = 0.20;
         /// <summary>Толщина подсыпки под подошвой, м. Квадрат дна = отстойник − подсыпка.</summary>
@@ -248,6 +250,32 @@ namespace Nvk.Core
             double r = Radius(w);
             double gap = c == null ? 0.0 : Math.Max(0.0, c.TrenchGap);
             return r + gap;
+        }
+
+        /// <summary>Полусторона песка: R + выступ, не шире дна котлована.</summary>
+        public static double SandHalf(WellPitInput w, WellPitCfg c)
+        {
+            double r = Radius(w);
+            double gap = c == null ? 0.0 : Math.Max(0.0, c.SandGap);
+            double sand = r + gap;
+            double pit = BottomHalf(w, c);
+            if (sand > pit) sand = pit;
+            return sand;
+        }
+
+        /// <summary>
+        /// Прямоугольник песка на плане: сторона = диаметр + 2×выступ, тот же поворот что у дна.
+        /// Z = отстойник (верх песка).
+        /// </summary>
+        public static List<WellPt> SandRect(WellPitInput w, WellPitCfg c)
+        {
+            if (w == null) w = new WellPitInput();
+            if (c == null) c = new WellPitCfg();
+            double ax, ay, px, py;
+            AxisUnit(w, out ax, out ay);
+            PerpOf(ax, ay, out px, out py);
+            double h = SandHalf(w, c);
+            return Rect(w.X, w.Y, w.Sump, ax, ay, px, py, h, h);
         }
 
         /// <summary>Полудлина дна вдоль оси = полусторона квадрата.</summary>

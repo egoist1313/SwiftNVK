@@ -555,6 +555,66 @@ namespace Nvk.Core.Tests
         }
 
         [Fact]
+        public void SandHalfIsRadiusPlusGap()
+        {
+            var w = new WellPitInput { Diam = 1.00 };
+            var c = new WellPitCfg { TrenchGap = 0.50, SandGap = 0.20 };
+            Assert.Equal(0.70, WellPitGeom.SandHalf(w, c), 6);
+        }
+
+        [Fact]
+        public void SandHalfClampedToPit()
+        {
+            var w = new WellPitInput { Diam = 1.00 };
+            var c = new WellPitCfg { TrenchGap = 0.15, SandGap = 0.40 };
+            Assert.Equal(0.65, WellPitGeom.SandHalf(w, c), 6);
+            Assert.Equal(WellPitGeom.BottomHalf(w, c), WellPitGeom.SandHalf(w, c), 6);
+        }
+
+        [Fact]
+        public void SandRectSideIsDiameterPlusTwiceGap()
+        {
+            var w = Well();
+            w.AxisX = 1;
+            w.AxisY = 0;
+            var c = new WellPitCfg { TrenchGap = 0.50, SandGap = 0.20 };
+            var r = WellPitGeom.SandRect(w, c);
+            Assert.Equal(4, r.Count);
+            double half = WellPitGeom.SandHalf(w, c);
+            Assert.Equal(w.Diam + 2.0 * c.SandGap, 2.0 * half, 6);
+            Assert.Equal(w.Sump, r[0].Z, 6);
+            double minX = r[0].X, maxX = r[0].X, minY = r[0].Y, maxY = r[0].Y;
+            for (int i = 1; i < r.Count; i++)
+            {
+                if (r[i].X < minX) minX = r[i].X;
+                if (r[i].X > maxX) maxX = r[i].X;
+                if (r[i].Y < minY) minY = r[i].Y;
+                if (r[i].Y > maxY) maxY = r[i].Y;
+            }
+            Assert.Equal(2.0 * half, maxX - minX, 6);
+            Assert.Equal(2.0 * half, maxY - minY, 6);
+            Assert.Equal(w.X, 0.5 * (minX + maxX), 6);
+            Assert.Equal(w.Y, 0.5 * (minY + maxY), 6);
+        }
+
+        [Fact]
+        public void SandRectFollowsPitAxis()
+        {
+            var w = Well();
+            w.AxisX = 0;
+            w.AxisY = 1;
+            var c = new WellPitCfg { TrenchGap = 0.50, SandGap = 0.20 };
+            var r = WellPitGeom.SandRect(w, c);
+            double half = WellPitGeom.SandHalf(w, c);
+            var pit = WellPitGeom.Build(w, c, (x, y) => w.Rim);
+            Assert.Equal(4, r.Count);
+            Assert.Equal(w.X - half, r[0].X, 6);
+            Assert.Equal(w.Y + half, r[0].Y, 6);
+            Assert.Equal(0.0, pit.Ax, 6);
+            Assert.Equal(1.0, pit.Ay, 6);
+        }
+
+        [Fact]
         public void AlongHalfIsRadiusPlusTrenchGap()
         {
             Assert.Equal(1.25, WellPitGeom.AlongHalf(Well(), Cfg()), 6);

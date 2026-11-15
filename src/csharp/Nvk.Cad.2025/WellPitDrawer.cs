@@ -23,11 +23,13 @@ namespace Nvk.Cad
         public string Handle;
         public double ShaftR;
         public double Slope;
+        public double SandHalf;
     }
 
     public sealed class WellPitDrawer
     {
         const string LayerPit = "NVK-MH-PIT";
+        const string LayerSand = "NVK-MH-SAND";
         const string LayerBerm = "NVK-MH-BERM";
         const string LayerSlope = "NVK-MH-SLOPE";
         const string LayerPipeC = "NVK-MH-PIPE-C";
@@ -159,7 +161,8 @@ namespace Nvk.Cad
                             Name = well.Name,
                             Handle = h,
                             ShaftR = WellPitGeom.Radius(well),
-                            Slope = cfg.SlopeM
+                            Slope = cfg.SlopeM,
+                            SandHalf = WellPitGeom.SandHalf(well, cfg)
                         });
                         double az = Math.Atan2(shape.Ay, shape.Ax) * 180.0 / Math.PI;
                         if (az < 0.0) az += 360.0;
@@ -184,7 +187,10 @@ namespace Nvk.Cad
                         var shape = ShapeOfGroup(grp, cfg, surfId, tr);
                         DrawPit(ms, tr, grp, shape);
                         for (int i = 0; i < grp.Count; i++)
+                        {
+                            DrawSand(ms, tr, grp[i].W, cfg);
                             DrawName(ms, tr, grp[i].W, grp[i].S != null ? grp[i].S : shape);
+                        }
                         var berm = shape != null && shape.Berm != null && shape.Berm.Count >= 3
                             ? shape.Berm
                             : (shape != null ? shape.Outer : null);
@@ -271,6 +277,7 @@ namespace Nvk.Cad
             return new WellPitCfg
             {
                 TrenchGap = Math.Max(0.0, NvkUiState.WellTrenchGap),
+                SandGap = Math.Max(0.0, NvkUiState.WellSandGap),
                 SlopeM = Math.Max(0.0, NvkUiState.WellSlopeM),
                 Bedding = Math.Max(0.0, NvkUiState.WellBedding),
                 CornerFan = NvkUiState.WellCornerFan,
@@ -497,6 +504,14 @@ namespace Nvk.Cad
                 for (int i = 0; i < s.SlopeTicks.Count; i++)
                     AddPline3(ms, tr, new List<WellPt>(s.SlopeTicks[i]), false, LayerSlope, 4, null);
             }
+        }
+
+        static void DrawSand(BlockTableRecord ms, Transaction tr, WellPitInput w, WellPitCfg cfg)
+        {
+            if (w == null) return;
+            var pts = WellPitGeom.SandRect(w, cfg);
+            if (pts == null || pts.Count < 4) return;
+            AddPline3(ms, tr, pts, true, LayerSand, 2, w.Handle);
         }
 
         static string HandlesInPoly(List<WellItem> grp, IList<WellPt> poly)
@@ -802,6 +817,7 @@ namespace Nvk.Cad
         static void EnsureLayers(Database db, Transaction tr)
         {
             Ensure(db, tr, LayerPit, 1);
+            Ensure(db, tr, LayerSand, 2);
             Ensure(db, tr, LayerBerm, 3);
             Ensure(db, tr, LayerSlope, 4);
             Ensure(db, tr, LayerPipeC, 1);

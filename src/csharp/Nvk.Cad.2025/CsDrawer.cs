@@ -217,8 +217,9 @@ namespace Nvk.Cad
         {
             var kind = WellCutStage.KindOf(stage);
             string title = WellCutStage.Title(stage, cut);
+            double sandH = it.SandHalf > 1e-6 ? it.SandHalf : 0.0;
             DrawLevel(btr, tr, it.Geom, kind, scale, m, m, stage - 1, 0, 0, hw, false,
-                title, !cut, false);
+                title, !cut, false, sandH);
             double osh = TrenchGeom.Osh(it.Geom.Elev);
             double zSeat = it.Geom.Elev.SandTop;
             var well = it.Well;
@@ -229,7 +230,7 @@ namespace Nvk.Cad
             for (int i = 0; i < parts.Count; i++)
                 if (parts[i].OuterR > wellR) wellR = parts[i].OuterR;
             if (WellCutStage.ShowsBackfill(stage))
-                DrawWellBackfill(btr, tr, it.Geom, wellR, zSeat, scale, osh, 0, 0, m);
+                DrawWellBackfill(btr, tr, it.Geom, wellR, zSeat, scale, osh, 0, 0, m, sandH);
             if (WellCutStage.ShowsWell(stage))
                 DrawWellBody(btr, tr, parts, zSeat, scale, osh, 0, 0);
             if (WellCutStage.ShowsPipes(stage))
@@ -333,41 +334,64 @@ namespace Nvk.Cad
         }
 
         static void DrawWellBackfill(BlockTableRecord btr, Transaction tr, SectionGeom g,
-            double wellR, double zSeat, double sc, double osh, double ox, double oy, double m)
+            double wellR, double zSeat, double sc, double osh, double ox, double oy, double m, double sandHalf)
         {
             if (g == null) return;
             double xTopL = TrenchGeom.XTopLeft(g, m);
             double xTopR = TrenchGeom.XTopRight(g, m);
-            double xSandL = TrenchGeom.XAtLeft(g, m, zSeat);
-            double xSandR = TrenchGeom.XAtRight(g, m, zSeat);
+            double bL = TrenchGeom.BottomLeft(g);
+            double bR = TrenchGeom.BottomRight(g);
+            double zBot = g.Elev.TrenchBottom;
             if (wellR < 0.1) wellR = 0.5;
+            double sL = sandHalf > 1e-6 ? sandHalf : TrenchGeom.XAtLeft(g, m, zSeat);
+            double sR = sandHalf > 1e-6 ? sandHalf : TrenchGeom.XAtRight(g, m, zSeat);
+            if (sL > bL) sL = bL;
+            if (sR > bR) sR = bR;
             var fill = HatchOf(ProfileKind.Zasypka, g);
-            if (xSandL > wellR + 0.02)
+            var left = WellBackfillPoly(-xTopL, TrenchGeom.SurfZAt(g, -xTopL),
+                -wellR, TrenchGeom.SurfZAt(g, -wellR), zSeat, -sL, zBot, -bL);
+            if (left != null)
             {
-                double zL = TrenchGeom.SurfZAt(g, -xTopL);
-                var left = ToDraw(new[]
-                {
-                    P(-xTopL, zL),
-                    P(-wellR, TrenchGeom.SurfZAt(g, -wellR)),
-                    P(-wellR, zSeat),
-                    P(-xSandL, zSeat)
-                }, sc, osh, ox, oy);
-                AddPline(btr, tr, left, Aci(5), true, 0);
-                ApplyHatch(btr, tr, left, fill);
+                var d = ToDraw(left, sc, osh, ox, oy);
+                AddPline(btr, tr, d, Aci(5), true, 0);
+                ApplyHatch(btr, tr, d, fill);
             }
-            if (xSandR > wellR + 0.02)
+            var right = WellBackfillPoly(xTopR, TrenchGeom.SurfZAt(g, xTopR),
+                wellR, TrenchGeom.SurfZAt(g, wellR), zSeat, sR, zBot, bR);
+            if (right != null)
             {
-                double zR = TrenchGeom.SurfZAt(g, xTopR);
-                var right = ToDraw(new[]
-                {
-                    P(xTopR, zR),
-                    P(wellR, TrenchGeom.SurfZAt(g, wellR)),
-                    P(wellR, zSeat),
-                    P(xSandR, zSeat)
-                }, sc, osh, ox, oy);
-                AddPline(btr, tr, right, Aci(5), true, 0);
-                ApplyHatch(btr, tr, right, fill);
+                var d = ToDraw(right, sc, osh, ox, oy);
+                AddPline(btr, tr, d, Aci(5), true, 0);
+                ApplyHatch(btr, tr, d, fill);
             }
+        }
+
+        static Point2d[] WellBackfillPoly(double xBerm, double zBerm, double xWell, double zWellSurf,
+            double zSeat, double xSand, double zBot, double xPit)
+        {
+            double wellAbs = Math.Abs(xWell);
+            double sandAbs = Math.Abs(xSand);
+            double pitAbs = Math.Abs(xPit);
+            if (pitAbs < wellAbs + 0.02) return null;
+            var pts = new List<Point2d>();
+            pts.Add(P(xBerm, zBerm));
+            pts.Add(P(xWell, zWellSurf));
+            if (sandAbs > wellAbs + 0.02 && sandAbs + 0.02 < pitAbs)
+            {
+                pts.Add(P(xWell, zSeat));
+                pts.Add(P(xSand, zSeat));
+                pts.Add(P(xSand, zBot));
+            }
+            else if (sandAbs + 0.02 >= pitAbs)
+            {
+                pts.Add(P(xWell, zSeat));
+                pts.Add(P(xPit, zSeat));
+                return pts.ToArray();
+            }
+            else
+                pts.Add(P(xWell, zBot));
+            pts.Add(P(xPit, zBot));
+            return pts.ToArray();
         }
 
         static void EraseWellCs(Database db, Transaction tr)
@@ -430,7 +454,7 @@ namespace Nvk.Cad
             DrawLevel(btr, tr, g, kind, sc, mL, mR, idx, ox, oy, hw, withDims, null, true, true);
         }
 
-        static void DrawLevel(BlockTableRecord btr, Transaction tr, SectionGeom g, ProfileKind kind, double sc, double mL, double mR, int idx, double ox, double oy, double hw, bool withDims, string title, bool withTable, bool withPipe)
+        static void DrawLevel(BlockTableRecord btr, Transaction tr, SectionGeom g, ProfileKind kind, double sc, double mL, double mR, int idx, double ox, double oy, double hw, bool withDims, string title, bool withTable, bool withPipe, double sandHalf = 0.0)
         {
             var e = g.Elev;
             double osh = TrenchGeom.Osh(e);
@@ -439,6 +463,13 @@ namespace Nvk.Cad
             double bR = TrenchGeom.BottomRight(g);
             double xInvL = TrenchGeom.XAtLeft(g, mL, e.SandTop);
             double xInvR = TrenchGeom.XAtRight(g, mR, e.SandTop);
+            if (sandHalf > 1e-6)
+            {
+                xInvL = sandHalf;
+                xInvR = sandHalf;
+                if (xInvL > bL) xInvL = bL;
+                if (xInvR > bR) xInvR = bR;
+            }
             double zCtr = TrenchGeom.ZCenter(g);
             short cur = 5;
             short gray = 8;
@@ -476,7 +507,9 @@ namespace Nvk.Cad
 
             if (level >= 2)
             {
-                var sand = ToDraw(Trap(bL, bR, e.TrenchBottom, xInvL, xInvR, e.SandTop), sc, osh, ox, oy);
+                double sBotL = sandHalf > 1e-6 ? xInvL : bL;
+                double sBotR = sandHalf > 1e-6 ? xInvR : bR;
+                var sand = ToDraw(Trap(sBotL, sBotR, e.TrenchBottom, xInvL, xInvR, e.SandTop), sc, osh, ox, oy);
                 AddPline(btr, tr, sand, Aci(level == 2 ? cur : gray), closed: true, lw: level == 2 ? 30 : 0);
                 ApplyHatch(btr, tr, sand, HatchOf(ProfileKind.Pesok, g));
             }

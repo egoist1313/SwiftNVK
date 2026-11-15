@@ -42,7 +42,7 @@ namespace Nvk.Cad
         readonly CheckBox _useBe, _l1mh;
         readonly Button _btnRoad, _btnEarth, _btnBot, _btnHat, _btnPav, _btnCs;
         readonly ComboBox _cL0, _cL6;
-        readonly TextBox _mhGap, _mhSlope, _mhBed;
+        readonly TextBox _mhGap, _mhSand, _mhSlope, _mhBed;
         readonly ComboBox _mhSurf, _mhCorners, _mhScale;
         readonly ComboBox _mhCsMode, _mhBody, _mhNeckSide, _mhBase, _mhShaft, _mhNeck;
         readonly CheckBox _mhAuto;
@@ -332,10 +332,11 @@ namespace Nvk.Cad
                 MaximumSize = new Size(240, 0),
                 ForeColor = C_DIM,
                 BackColor = Color.Transparent,
-                Text = "Дно — квадрат: радиус + отступ, отстойник − подсыпка. Откос — бергштрихи ГОСТ от бровки к подошве, шаг 3 мм на бумаге в выбранном масштабе. Синяя — контур траншеи с вырезанным колодцем (дуга). Красная — сквозная до оси."
+                Text = "Дно — квадрат: радиус + отступ, отстойник − подсыпка. Песок на плане — прямоугольник сторона = диаметр + 2×выступ. Откос — бергштрихи ГОСТ от бровки к подошве, шаг 3 мм на бумаге в выбранном масштабе. Синяя — контур траншеи с вырезанным колодцем (дуга). Красная — сквозная до оси."
             };
             pMh.Controls.Add(_mhInfo);
             _mhGap   = Num(pMh, "Отступ от колодца, м", "0.50");
+            _mhSand  = Num(pMh, "Песок, выступ за колодец, м", "0.20");
             _mhBed   = Num(pMh, "Подсыпка, м", "0.10");
             _mhSlope = Num(pMh, "Откос m (0=вертикаль)", "0.20");
             _mhCorners = Combo(pMh, "Углы бровки", new[] { "Веером", "Прямоугольные" });
@@ -434,6 +435,7 @@ namespace Nvk.Cad
             PickSurf(_mhSurf, string.IsNullOrEmpty(NvkUiState.WellSurfHandle)
                 ? NvkUiState.DesignHandle : NvkUiState.WellSurfHandle);
             if (_mhGap != null) _mhGap.Text = NvkUiState.WellTrenchGap.ToString("0.###");
+            if (_mhSand != null) _mhSand.Text = NvkUiState.WellSandGap.ToString("0.###");
             if (_mhBed != null) _mhBed.Text = NvkUiState.WellBedding.ToString("0.###");
             if (_mhSlope != null) _mhSlope.Text = NvkUiState.WellSlopeM.ToString("0.###");
             if (_mhCorners != null)
@@ -631,6 +633,7 @@ namespace Nvk.Cad
                 NvkUiState.BlackEarthName   = SurfName(_cL6);
             }
             if (_mhGap != null) NvkUiState.WellTrenchGap = Math.Max(0.0, Parse(_mhGap, 0.50));
+            if (_mhSand != null) NvkUiState.WellSandGap = Math.Max(0.0, Parse(_mhSand, 0.20));
             if (_mhBed != null) NvkUiState.WellBedding = Math.Max(0.0, Parse(_mhBed, 0.10));
             if (_mhSlope != null) NvkUiState.WellSlopeM = Math.Max(0.0, Parse(_mhSlope, 0.20));
             if (_mhCorners != null) NvkUiState.WellCornerFan = _mhCorners.SelectedIndex != 1;
