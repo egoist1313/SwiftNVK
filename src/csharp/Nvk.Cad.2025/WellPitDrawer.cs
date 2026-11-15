@@ -271,7 +271,8 @@ namespace Nvk.Cad
                 TrenchGap = Math.Max(0.0, NvkUiState.WellTrenchGap),
                 SlopeM = Math.Max(0.0, NvkUiState.WellSlopeM),
                 Bedding = Math.Max(0.0, NvkUiState.WellBedding),
-                CornerFan = NvkUiState.WellCornerFan
+                CornerFan = NvkUiState.WellCornerFan,
+                SlopeScaleN = NvkUiState.WellSlopeScale > 0 ? NvkUiState.WellSlopeScale : 500
             };
         }
 
@@ -489,15 +490,10 @@ namespace Nvk.Cad
             }
             else
                 AddPline3(ms, tr, s.Berm, true, LayerBerm, 3, null);
-            if (s.SlopeRays != null)
+            if (s.SlopeTicks != null)
             {
-                for (int i = 0; i < s.SlopeRays.Count; i++)
-                    AddPline3(ms, tr, new List<WellPt>(s.SlopeRays[i]), false, LayerSlope, 4, null);
-            }
-            if (s.Faces != null)
-            {
-                for (int i = 0; i < s.Faces.Count; i++)
-                    AddFace(ms, tr, s.Faces[i], LayerSlope, 4);
+                for (int i = 0; i < s.SlopeTicks.Count; i++)
+                    AddPline3(ms, tr, new List<WellPt>(s.SlopeTicks[i]), false, LayerSlope, 4, null);
             }
         }
 

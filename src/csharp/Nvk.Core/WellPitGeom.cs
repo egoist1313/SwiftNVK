@@ -17,6 +17,10 @@ namespace Nvk.Core
         /// false — прямоугольный угол (биссектриса, стороны бровки параллельны дну).
         /// </summary>
         public bool CornerFan = true;
+        /// <summary>Масштаб чертежа 1:N для бергштрихов откоса. Шаг 3 мм на бумаге.</summary>
+        public int SlopeScaleN = 500;
+        /// <summary>Шаг бергштрихов на бумаге, мм. ГОСТ 21.204 / учебные ~2–4 мм.</summary>
+        public double SlopeTickPaperMm = 3.0;
     }
 
     /// <summary>Труба, подходящая к колодцу. Линии — в пределах траншеи до центра / радиуса.</summary>
@@ -82,6 +86,8 @@ namespace Nvk.Core
         public List<WellPt> Berm;
         public List<WellPt[]> Faces;
         public List<WellPt[]> SlopeRays;
+        /// <summary>Бергштрихи ГОСТ: длинный/короткий от бровки вниз к подошве.</summary>
+        public List<WellPt[]> SlopeTicks;
         public List<WellPt> Section;
         public List<WellPt> Shaft;
         public double AlongHalf;
@@ -348,6 +354,7 @@ namespace Nvk.Core
                 new WellPt(w.X - px * r, w.Y - py * r, zTop),
                 new WellPt(w.X + px * r, w.Y + py * r, zTop)
             };
+            FillSlopeTicks(shape, c);
             return shape;
         }
 
@@ -970,6 +977,261 @@ namespace Nvk.Core
             return inside;
         }
 
+        /// <summary>
+        /// Шаг бергштрихов в модели, м: paperMm/1000 × масштаб 1:N.
+        /// 3 мм при 1:500 = 1.5 м.
+        /// </summary>
+        public static double TickStepM(int scaleN, double paperMm)
+        {
+            if (scaleN < 1) scaleN = 500;
+            if (paperMm < 0.5) paperMm = 3.0;
+            return paperMm * 0.001 * scaleN;
+        }
+
+        static void FillSlopeTicks(WellPitShape s, WellPitCfg c)
+        {
+            if (s == null) return;
+            if (c != null && c.SlopeM < 1e-9)
+            {
+                s.SlopeTicks = new List<WellPt[]>();
+                return;
+            }
+            int scale = c != null && c.SlopeScaleN > 0 ? c.SlopeScaleN : 500;
+            double paper = c != null ? c.SlopeTickPaperMm : 3.0;
+            double step = TickStepM(scale, paper);
+            var floors = s.Bottoms;
+            if (floors == null || floors.Count == 0)
+            {
+                if (s.Outer != null && s.Outer.Count >= 3)
+                    floors = new List<List<WellPt>> { s.Outer };
+            }
+            var ticks = new List<WellPt[]>();
+            if (s.Berms != null && s.Berms.Count > 0)
+            {
+                for (int i = 0; i < s.Berms.Count; i++)
+                    AppendTicks(ticks, s.Berms[i], floors, step);
+            }
+            else
+                AppendTicks(ticks, s.Berm, floors, step);
+            s.SlopeTicks = ticks;
+        }
+
+        static void AppendTicks(List<WellPt[]> dst, IList<WellPt> berm,
+            IList<List<WellPt>> floors, double stepM)
+        {
+            var t = MakeSlopeTicks(berm, floors, stepM);
+            if (t == null) return;
+            for (int i = 0; i < t.Count; i++)
+                dst.Add(t[i]);
+        }
+
+        /// <summary>
+        /// Бергштрихи ГОСТ 21.204 / 21.508: от бровки вниз к подошве,
+        /// чередование длинный (3/4 ширины откоса) / короткий (1/4).
+        /// Бровка обходится как замкнутый контур; внутрь — внутрь полигона.
+        /// </summary>
+        public static List<WellPt[]> MakeSlopeTicks(
+            IList<WellPt> berm, IList<List<WellPt>> floors, double stepM)
+        {
+            return MakeSlopeTicks(berm, floors, stepM, 0.75, 0.25);
+        }
+
+        public static List<WellPt[]> MakeSlopeTicks(
+            IList<WellPt> berm, IList<List<WellPt>> floors, double stepM,
+            double longFrac, double shortFrac)
+        {
+            var ticks = new List<WellPt[]>();
+            if (berm == null || berm.Count < 3) return ticks;
+            if (floors == null || floors.Count == 0) return ticks;
+            if (stepM < 1e-6) stepM = 1.5;
+            if (longFrac < 0.05) longFrac = 0.75;
+            if (shortFrac < 0.05) shortFrac = 0.25;
+            double L = ClosedLen(berm);
+            if (L < stepM * 0.4) return ticks;
+            int n = (int)Math.Round(L / stepM);
+            if (n < 2) n = 2;
+            if ((n % 2) != 0) n++;
+            double ds = L / n;
+            for (int i = 0; i < n; i++)
+            {
+                WellPt a;
+                double inx, iny;
+                if (!PointOnClosed(berm, (i + 0.5) * ds, out a, out inx, out iny))
+                    continue;
+                if (NearAnyFloor(floors, a.X, a.Y, 0.05))
+                    continue;
+                double test = 0.05;
+                if (!PointInPoly(berm, a.X + inx * test, a.Y + iny * test))
+                {
+                    inx = -inx;
+                    iny = -iny;
+                    if (!PointInPoly(berm, a.X + inx * test, a.Y + iny * test))
+                        continue;
+                }
+                WellPt toe;
+                double dist;
+                if (!RayHitFloors(floors, a.X, a.Y, inx, iny, out dist, out toe))
+                    continue;
+                if (dist < 0.02 || dist > 200.0) continue;
+                double frac = (i % 2) == 0 ? longFrac : shortFrac;
+                if (frac > 0.98) frac = 0.98;
+                ticks.Add(new[]
+                {
+                    a,
+                    new WellPt(
+                        a.X + inx * dist * frac,
+                        a.Y + iny * dist * frac,
+                        a.Z + (toe.Z - a.Z) * frac)
+                });
+            }
+            return ticks;
+        }
+
+        static double ClosedLen(IList<WellPt> p)
+        {
+            double L = 0.0;
+            int n = p.Count;
+            for (int i = 0; i < n; i++)
+            {
+                var a = p[i];
+                var b = p[(i + 1) % n];
+                double dx = b.X - a.X, dy = b.Y - a.Y;
+                L += Math.Sqrt(dx * dx + dy * dy);
+            }
+            return L;
+        }
+
+        static bool PointOnClosed(IList<WellPt> p, double s,
+            out WellPt pt, out double inx, out double iny)
+        {
+            pt = p[0];
+            inx = 0.0;
+            iny = -1.0;
+            int n = p.Count;
+            double acc = 0.0;
+            double per = ClosedLen(p);
+            if (per < 1e-9) return false;
+            s = s % per;
+            if (s < 0.0) s += per;
+            for (int i = 0; i < n; i++)
+            {
+                var a = p[i];
+                var b = p[(i + 1) % n];
+                double dx = b.X - a.X, dy = b.Y - a.Y;
+                double elen = Math.Sqrt(dx * dx + dy * dy);
+                if (elen < 1e-9) continue;
+                if (acc + elen < s - 1e-12)
+                {
+                    acc += elen;
+                    continue;
+                }
+                double t = (s - acc) / elen;
+                if (t < 0.0) t = 0.0;
+                if (t > 1.0) t = 1.0;
+                pt = new WellPt(
+                    a.X + dx * t,
+                    a.Y + dy * t,
+                    a.Z + (b.Z - a.Z) * t);
+                // внутрь CW-контура = правая нормаль (dy, −dx)
+                inx = dy / elen;
+                iny = -dx / elen;
+                return true;
+            }
+            return false;
+        }
+
+        static bool NearAnyFloor(IList<List<WellPt>> floors, double x, double y, double eps)
+        {
+            if (floors == null) return false;
+            for (int i = 0; i < floors.Count; i++)
+            {
+                var p = floors[i];
+                if (p == null || p.Count < 2) continue;
+                int n = p.Count;
+                for (int k = 0; k < n; k++)
+                {
+                    var a = p[k];
+                    var b = p[(k + 1) % n];
+                    if (DistToSeg(x, y, a, b) <= eps) return true;
+                }
+            }
+            return false;
+        }
+
+        static double DistToSeg(double x, double y, WellPt a, WellPt b)
+        {
+            double dx = b.X - a.X, dy = b.Y - a.Y;
+            double len2 = dx * dx + dy * dy;
+            if (len2 < 1e-18)
+            {
+                dx = x - a.X;
+                dy = y - a.Y;
+                return Math.Sqrt(dx * dx + dy * dy);
+            }
+            double t = ((x - a.X) * dx + (y - a.Y) * dy) / len2;
+            if (t < 0.0) t = 0.0;
+            if (t > 1.0) t = 1.0;
+            dx = x - (a.X + t * dx);
+            dy = y - (a.Y + t * dy);
+            return Math.Sqrt(dx * dx + dy * dy);
+        }
+
+        static bool RayHitFloors(IList<List<WellPt>> floors,
+            double x, double y, double dx, double dy,
+            out double dist, out WellPt hit)
+        {
+            dist = double.MaxValue;
+            hit = default(WellPt);
+            bool ok = false;
+            if (floors == null) return false;
+            for (int i = 0; i < floors.Count; i++)
+            {
+                double d;
+                WellPt h;
+                if (!RayHitPoly(floors[i], x, y, dx, dy, out d, out h)) continue;
+                if (d < dist)
+                {
+                    dist = d;
+                    hit = h;
+                    ok = true;
+                }
+            }
+            return ok;
+        }
+
+        static bool RayHitPoly(IList<WellPt> poly,
+            double x, double y, double dx, double dy,
+            out double dist, out WellPt hit)
+        {
+            dist = double.MaxValue;
+            hit = default(WellPt);
+            if (poly == null || poly.Count < 3) return false;
+            const double maxT = 500.0;
+            bool ok = false;
+            int n = poly.Count;
+            for (int i = 0; i < n; i++)
+            {
+                var a = poly[i];
+                var b = poly[(i + 1) % n];
+                double t, u;
+                if (!SegSeg(x, y, x + dx * maxT, y + dy * maxT,
+                    a.X, a.Y, b.X, b.Y, out t, out u))
+                    continue;
+                if (t < 1e-6) continue;
+                double d = t * maxT;
+                if (d < dist)
+                {
+                    dist = d;
+                    hit = new WellPt(
+                        x + dx * d,
+                        y + dy * d,
+                        a.Z + u * (b.Z - a.Z));
+                    ok = true;
+                }
+            }
+            return ok;
+        }
+
         static bool SegSeg(double ax, double ay, double bx, double by,
             double cx, double cy, double dx, double dy, out double t, out double u)
         {
@@ -1345,7 +1607,7 @@ namespace Nvk.Core
                 double d = Math.Sqrt(dx * dx + dy * dy);
                 if (d > maxOff) maxOff = d;
             }
-            return new WellPitShape
+            var shape = new WellPitShape
             {
                 AlongHalf = along,
                 AcrossHalf = across,
@@ -1365,6 +1627,8 @@ namespace Nvk.Core
                 BermAlong = along + maxOff,
                 BermAcross = across + maxOff
             };
+            FillSlopeTicks(shape, c);
+            return shape;
         }
 
         static void CollectBermLoops(List<PolyLoop> loops, Func<double, double, double> tinZ,

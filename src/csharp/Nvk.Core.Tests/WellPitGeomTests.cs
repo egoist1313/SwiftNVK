@@ -951,5 +951,86 @@ namespace Nvk.Core.Tests
             Assert.True(flat[0].X > w.X);
             Assert.Equal(0.0, flat[0].Z, 6);
         }
+
+        [Fact]
+        public void TickStepAt500IsOneAndHalfMeters()
+        {
+            Assert.Equal(1.5, WellPitGeom.TickStepM(500, 3.0), 6);
+            Assert.Equal(0.6, WellPitGeom.TickStepM(200, 3.0), 6);
+            Assert.Equal(3.0, WellPitGeom.TickStepM(1000, 3.0), 6);
+        }
+
+        [Fact]
+        public void SlopeTicksStartOnBermGoInward()
+        {
+            var w = Well();
+            w.X = 0;
+            w.Y = 0;
+            var c = Cfg();
+            c.SlopeScaleN = 500;
+            var s = WellPitGeom.Build(w, c, (x, y) => 105.0);
+            Assert.True(s.SlopeTicks != null && s.SlopeTicks.Count >= 8);
+            for (int i = 0; i < s.SlopeTicks.Count; i++)
+            {
+                var t = s.SlopeTicks[i];
+                Assert.Equal(2, t.Length);
+                Assert.Equal(105.0, t[0].Z, 1);
+                Assert.True(t[1].Z < t[0].Z - 0.2);
+                double d0 = Math.Sqrt(t[0].X * t[0].X + t[0].Y * t[0].Y);
+                double d1 = Math.Sqrt(t[1].X * t[1].X + t[1].Y * t[1].Y);
+                Assert.True(d1 < d0 - 0.05);
+                Assert.False(WellPitGeom.PointInPoly(s.Outer, t[0].X, t[0].Y));
+                Assert.False(WellPitGeom.PointInPoly(s.Outer, t[1].X, t[1].Y));
+            }
+        }
+
+        [Fact]
+        public void SlopeTicksAlternateLongShort()
+        {
+            var w = Well();
+            w.X = 0;
+            w.Y = 0;
+            var c = Cfg();
+            c.SlopeScaleN = 500;
+            var s = WellPitGeom.Build(w, c, (x, y) => 105.0);
+            var t = s.SlopeTicks;
+            Assert.True(t != null && t.Count >= 4);
+            double longL = DistXy(t[0][0], t[0][1]);
+            double shortL = DistXy(t[1][0], t[1][1]);
+            Assert.True(longL > shortL * 2.0);
+            Assert.True(shortL > 0.2);
+            double long2 = DistXy(t[2][0], t[2][1]);
+            Assert.True(Math.Abs(long2 - longL) < longL * 0.35);
+        }
+
+        [Fact]
+        public void FinerScaleMakesDenserTicks()
+        {
+            var w = Well();
+            w.X = 0;
+            w.Y = 0;
+            var c200 = Cfg();
+            c200.SlopeScaleN = 200;
+            var c1000 = Cfg();
+            c1000.SlopeScaleN = 1000;
+            var a = WellPitGeom.Build(w, c200, (x, y) => 105.0);
+            var b = WellPitGeom.Build(w, c1000, (x, y) => 105.0);
+            Assert.True(a.SlopeTicks.Count > b.SlopeTicks.Count);
+        }
+
+        [Fact]
+        public void VerticalSlopeHasNoTicks()
+        {
+            var c = Cfg();
+            c.SlopeM = 0.0;
+            var s = WellPitGeom.Build(Well(), c, (x, y) => 105.0);
+            Assert.True(s.SlopeTicks == null || s.SlopeTicks.Count == 0);
+        }
+
+        static double DistXy(WellPt a, WellPt b)
+        {
+            double dx = a.X - b.X, dy = a.Y - b.Y;
+            return Math.Sqrt(dx * dx + dy * dy);
+        }
     }
 }

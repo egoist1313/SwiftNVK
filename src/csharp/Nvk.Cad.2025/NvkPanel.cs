@@ -43,7 +43,8 @@ namespace Nvk.Cad
         readonly Button _btnRoad, _btnEarth, _btnBot, _btnHat, _btnPav, _btnCs;
         readonly ComboBox _cL0, _cL6;
         readonly TextBox _mhGap, _mhSlope, _mhBed;
-        readonly ComboBox _mhSurf, _mhCorners;
+        readonly ComboBox _mhSurf, _mhCorners, _mhScale;
+        static readonly int[] MhScales = { 100, 200, 500, 1000, 2000 };
         readonly Label _mhInfo;
         readonly SheetUi _s2, _s3, _s4, _s5;
         readonly CheckBox _useWall;
@@ -327,13 +328,14 @@ namespace Nvk.Cad
                 MaximumSize = new Size(240, 0),
                 ForeColor = C_DIM,
                 BackColor = Color.Transparent,
-                Text = "Дно — квадрат: радиус + отступ, отстойник − подсыпка. Откос бровка→подошва. Синяя — контур траншеи с вырезанным колодцем (дуга). Красная — сквозная до оси."
+                Text = "Дно — квадрат: радиус + отступ, отстойник − подсыпка. Откос — бергштрихи ГОСТ от бровки к подошве, шаг 3 мм на бумаге в выбранном масштабе. Синяя — контур траншеи с вырезанным колодцем (дуга). Красная — сквозная до оси."
             };
             pMh.Controls.Add(_mhInfo);
             _mhGap   = Num(pMh, "Отступ от колодца, м", "0.50");
             _mhBed   = Num(pMh, "Подсыпка, м", "0.10");
             _mhSlope = Num(pMh, "Откос m (0=вертикаль)", "0.20");
             _mhCorners = Combo(pMh, "Углы бровки", new[] { "Веером", "Прямоугольные" });
+            _mhScale = Combo(pMh, "Масштаб откосов", new[] { "1:100", "1:200", "1:500", "1:1000", "1:2000" });
             pMh.Controls.Add(Head("Поверхность бровки"));
             _mhSurf = SurfCombo(pMh, "TIN бровки (пусто = L0)");
             pMh.Controls.Add(Btn("Обновить список TIN", RefreshSurfaces, 240));
@@ -416,6 +418,7 @@ namespace Nvk.Cad
             if (_mhSlope != null) _mhSlope.Text = NvkUiState.WellSlopeM.ToString("0.###");
             if (_mhCorners != null)
                 _mhCorners.SelectedIndex = NvkUiState.WellCornerFan ? 0 : 1;
+            SetMhScale(_mhScale, NvkUiState.WellSlopeScale);
             _l1mh.Checked    = NvkUiState.L1ShowMh;
             _tblOff.Text     = NvkUiState.TableOffsetM.ToString("0.##");
             _labRoad.Text    = string.IsNullOrEmpty(NvkUiState.LabelRoad)   ? "Проектно-планировочное покрытие, м"   : NvkUiState.LabelRoad;
@@ -594,6 +597,7 @@ namespace Nvk.Cad
             if (_mhBed != null) NvkUiState.WellBedding = Math.Max(0.0, Parse(_mhBed, 0.10));
             if (_mhSlope != null) NvkUiState.WellSlopeM = Math.Max(0.0, Parse(_mhSlope, 0.20));
             if (_mhCorners != null) NvkUiState.WellCornerFan = _mhCorners.SelectedIndex != 1;
+            NvkUiState.WellSlopeScale = MhScaleOf(_mhScale);
             if (_mhSurf != null && _mhSurf.Items.Count > 0)
             {
                 NvkUiState.WellSurfHandle = SurfHandle(_mhSurf);
@@ -918,6 +922,30 @@ namespace Nvk.Cad
             };
             parent.Controls.Add(c);
             return c;
+        }
+
+        static int MhScaleOf(ComboBox cb)
+        {
+            if (cb == null || cb.SelectedIndex < 0 || cb.SelectedIndex >= MhScales.Length)
+                return 500;
+            return MhScales[cb.SelectedIndex];
+        }
+
+        static void SetMhScale(ComboBox cb, int n)
+        {
+            if (cb == null) return;
+            int idx = 2;
+            int best = int.MaxValue;
+            for (int i = 0; i < MhScales.Length; i++)
+            {
+                int d = Math.Abs(MhScales[i] - n);
+                if (d < best)
+                {
+                    best = d;
+                    idx = i;
+                }
+            }
+            cb.SelectedIndex = idx;
         }
 
         static ComboBox Combo(Control parent, string cap, string[] items)

@@ -145,6 +145,8 @@ namespace Nvk.Cad
         public static double WellBedding = 0.10;
         public static double WellSlopeM = 0.20;
         public static bool WellCornerFan = true;
+        /// <summary>Масштаб бергштрихов откоса 1:N. По умолчанию 1:500.</summary>
+        public static int WellSlopeScale = 500;
         public static string WellSurfHandle = "";
         public static string WellSurfName = "";
         public static double? OshOverride = null;
@@ -452,6 +454,7 @@ namespace Nvk.Cad
             Pair(rb, "MH_BED", F(WellBedding, 3));
             Pair(rb, "MH_SLOPE", F(WellSlopeM, 4));
             Pair(rb, "MH_FAN", WellCornerFan ? "1" : "0");
+            Pair(rb, "MH_SCALE", WellSlopeScale.ToString());
             Pair(rb, "MH_SURF_H", WellSurfHandle ?? "");
             Pair(rb, "MH_SURF_N", WellSurfName ?? "");
             WriteStyles(rb);
@@ -703,6 +706,7 @@ namespace Nvk.Cad
             WellBedding = 0.10;
             WellSlopeM = 0.20;
             WellCornerFan = true;
+            WellSlopeScale = 500;
             WellSurfHandle = "";
             WellSurfName = "";
             OshOverride = null;
@@ -888,6 +892,10 @@ namespace Nvk.Cad
                 case "MH_BED": WellBedding = D(v, WellBedding); break;
                 case "MH_SLOPE": WellSlopeM = D(v, WellSlopeM); break;
                 case "MH_FAN": WellCornerFan = v != "0"; break;
+                case "MH_SCALE":
+                    WellSlopeScale = (int)Math.Round(D(v, WellSlopeScale));
+                    if (WellSlopeScale < 1) WellSlopeScale = 500;
+                    break;
                 case "MH_SURF_H": WellSurfHandle = v ?? ""; break;
                 case "MH_SURF_N": WellSurfName = v ?? ""; break;
             }
