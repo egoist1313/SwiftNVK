@@ -404,7 +404,7 @@ namespace Nvk.Core.Tests
                 new List<List<WellPt>> { corridor },
                 cfg, tin, null, 105);
             if (u == null || u.SlopeRays == null) return false;
-            bool hasReal = false;
+            bool hasOuter = false;
             for (int i = 0; i < u.SlopeRays.Count; i++)
             {
                 if (u.SlopeRays[i] == null || u.SlopeRays[i].Length < 2) continue;
@@ -413,12 +413,16 @@ namespace Nvk.Core.Tests
                 double dx = Math.Abs(g.X - p.X);
                 double dy = Math.Abs(g.Y - p.Y);
                 bool diag = dx > 1.0 && dy > 1.0;
-                if (diag && (IsShoulder(p.X, p.Y, 1.0, 0.80) || IsShoulder(p.X, p.Y, 3.0, 0.80)))
+                if (!diag) continue;
+                if (IsShoulder(p.X, p.Y, 1.0, 0.80) || IsShoulder(p.X, p.Y, 3.0, 0.80))
                     return false;
-                if (diag && Math.Abs(p.X - 1.0) < 0.08 && Math.Abs(p.Y - 1.0) < 0.08)
-                    hasReal = true;
+                if (IsShoulder(p.X, p.Y, 1.0, 1.0) || IsShoulder(p.X, p.Y, 3.0, 1.0))
+                    return false;
+                if (IsShoulder(p.X, p.Y, -1.0, 1.0) || IsShoulder(p.X, p.Y, 5.0, 1.0)
+                    || IsShoulder(p.X, p.Y, -1.0, -1.0) || IsShoulder(p.X, p.Y, 5.0, -1.0))
+                    hasOuter = true;
             }
-            return hasReal;
+            return hasOuter;
         }
 
         static bool IsShoulder(double x, double y, double sx, double sy)

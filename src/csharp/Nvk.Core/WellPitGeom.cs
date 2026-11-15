@@ -634,6 +634,7 @@ namespace Nvk.Core
         {
             int n = bot.Count;
             if (n < 3) return;
+            var hull = OuterHull(bot, 0.05);
             WellPt lastG = default(WellPt);
             bool hasLast = false;
             double firstNx = 0.0, firstNy = 1.0;
@@ -671,7 +672,7 @@ namespace Nvk.Core
                             n1x = -pdy / plen;
                             n1y = pdx / plen;
                         }
-                        if (ConvexCw(p, a, b) && IsPitCorner(pitCorners, a))
+                        if (ConvexCw(p, a, b) && ShouldEmitCorner(pitCorners, hull, a))
                             EmitCornerMode(fan, a, n1x, n1y, nx, ny, zEdge, m, zHint, tinZ, berm, faces, rays, ref lastG);
                         faces.Add(new[] { a, a, h.P, lastG });
                     }
@@ -693,27 +694,94 @@ namespace Nvk.Core
                 var a0 = bot[0];
                 var b0 = bot[1];
                 double z0 = a0.Z > 1.0 ? a0.Z : zBot;
-                if (ConvexCw(p, a0, b0) && IsPitCorner(pitCorners, a0))
+                if (ConvexCw(p, a0, b0) && ShouldEmitCorner(pitCorners, hull, a0))
                     EmitCornerMode(fan, a0, lastNx, lastNy, firstNx, firstNy, z0, m, zHint, tinZ, berm, faces, rays, ref lastG);
                 faces.Add(new[] { a0, a0, berm[0], lastG });
             }
         }
 
         /// <summary>
-        /// Веер/биссектриса только у исходных углов квадрата колодца.
-        /// Вершины коридора траншеи (плечи гантели) пропускаем.
+        /// Веер только у исходного угла квадрата, который остался внешней
+        /// вершиной оболочки общего котлована. Внутренние углы квадратов
+        /// на длинной стороне общей траншеи и плечи коридора пропускаем.
         /// </summary>
+        static bool ShouldEmitCorner(IList<WellPt> pitCorners, IList<WellPt> hull, WellPt a)
+        {
+            if (!IsPitCorner(pitCorners, a)) return false;
+            return NearPts(hull, a, 0.05);
+        }
+
         static bool IsPitCorner(IList<WellPt> pitCorners, WellPt a)
         {
             if (pitCorners == null || pitCorners.Count == 0) return true;
-            const double eps2 = 0.05 * 0.05;
-            for (int i = 0; i < pitCorners.Count; i++)
+            return NearPts(pitCorners, a, 0.05);
+        }
+
+        static bool NearPts(IList<WellPt> pts, WellPt a, double eps)
+        {
+            if (pts == null || pts.Count == 0) return false;
+            double eps2 = eps * eps;
+            for (int i = 0; i < pts.Count; i++)
             {
-                double dx = pitCorners[i].X - a.X;
-                double dy = pitCorners[i].Y - a.Y;
+                double dx = pts[i].X - a.X;
+                double dy = pts[i].Y - a.Y;
                 if (dx * dx + dy * dy <= eps2) return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// Вершины выпуклой оболочки; почти коллинеарные (сдвиг &lt; col м)
+        /// с длинной стороны не считаются углами.
+        /// </summary>
+        static List<WellPt> OuterHull(IList<WellPt> pts, double col)
+        {
+            var src = new List<WellPt>();
+            if (pts == null) return src;
+            for (int i = 0; i < pts.Count; i++)
+            {
+                bool dup = false;
+                for (int j = 0; j < src.Count; j++)
+                {
+                    double dx = src[j].X - pts[i].X, dy = src[j].Y - pts[i].Y;
+                    if (dx * dx + dy * dy < 1e-12) { dup = true; break; }
+                }
+                if (!dup) src.Add(pts[i]);
+            }
+            if (src.Count <= 3) return src;
+            src.Sort((a, b) =>
+            {
+                int c = a.X.CompareTo(b.X);
+                return c != 0 ? c : a.Y.CompareTo(b.Y);
+            });
+            if (col < 1e-6) col = 1e-6;
+            var lower = new List<WellPt>();
+            for (int i = 0; i < src.Count; i++)
+            {
+                while (lower.Count >= 2 && HullCollinear(lower[lower.Count - 2], lower[lower.Count - 1], src[i], col))
+                    lower.RemoveAt(lower.Count - 1);
+                lower.Add(src[i]);
+            }
+            var upper = new List<WellPt>();
+            for (int i = src.Count - 1; i >= 0; i--)
+            {
+                while (upper.Count >= 2 && HullCollinear(upper[upper.Count - 2], upper[upper.Count - 1], src[i], col))
+                    upper.RemoveAt(upper.Count - 1);
+                upper.Add(src[i]);
+            }
+            if (lower.Count > 0) lower.RemoveAt(lower.Count - 1);
+            if (upper.Count > 0) upper.RemoveAt(upper.Count - 1);
+            lower.AddRange(upper);
+            return lower;
+        }
+
+        static bool HullCollinear(WellPt o, WellPt a, WellPt b, double col)
+        {
+            double cr = Cross(o, a, b);
+            double dx = b.X - o.X, dy = b.Y - o.Y;
+            double len = Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-9) return true;
+            return cr <= col * len;
         }
 
         static bool ConvexCw(WellPt p, WellPt a, WellPt b)
