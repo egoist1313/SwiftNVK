@@ -156,6 +156,8 @@ namespace Nvk.Cad
         public static bool WellBodyPlastic;
         public static int WellNeckSide;
         public static bool WellFillAuto = true;
+        public static bool WellShowCover = true;
+        public static bool WellShowHatch = true;
         public static string WellParts = "";
         /// <summary>Шаблон шахт пластика, если авто снято: Шахта DN1000×1000:2;…</summary>
         public static string WellPlasParts = "";
@@ -182,6 +184,8 @@ namespace Nvk.Cad
                 Body = WellBodyPlastic ? WellBodyKind.Plastic : WellBodyKind.Concrete,
                 Neck = side,
                 Auto = WellFillAuto,
+                ShowCover = WellShowCover,
+                ShowHatch = WellShowHatch,
                 Parts = WellCatalog.ParseParts(WellBodyPlastic ? WellPlasParts : WellParts),
                 BaseCode = string.IsNullOrEmpty(WellBaseCode) ? "Прямопроходная" : WellBaseCode,
                 ShaftCode = string.IsNullOrEmpty(WellShaftCode) ? "Авто" : WellShaftCode,
@@ -502,6 +506,8 @@ namespace Nvk.Cad
             Pair(rb, "MH_BODY", WellBodyPlastic ? "1" : "0");
             Pair(rb, "MH_NECK", WellNeckSide.ToString());
             Pair(rb, "MH_AUTO", WellFillAuto ? "1" : "0");
+            Pair(rb, "MH_COVER", WellShowCover ? "1" : "0");
+            Pair(rb, "MH_HATCH", WellShowHatch ? "1" : "0");
             Pair(rb, "MH_PARTS", WellParts ?? "");
             Pair(rb, "MH_PLAS", WellPlasParts ?? "");
             Pair(rb, "MH_EACH", WellEach ?? "");
@@ -768,6 +774,8 @@ namespace Nvk.Cad
             WellBodyPlastic = false;
             WellNeckSide = 0;
             WellFillAuto = true;
+            WellShowCover = true;
+            WellShowHatch = true;
             WellParts = "";
             WellPlasParts = "";
             WellEach = "";
@@ -974,6 +982,8 @@ namespace Nvk.Cad
                     if (WellNeckSide > 2) WellNeckSide = 2;
                     break;
                 case "MH_AUTO": WellFillAuto = v != "0"; break;
+                case "MH_COVER": WellShowCover = v != "0"; break;
+                case "MH_HATCH": WellShowHatch = v != "0"; break;
                 case "MH_PARTS": WellParts = v ?? ""; break;
                 case "MH_PLAS": WellPlasParts = v ?? ""; break;
                 case "MH_EACH": WellEach = v ?? ""; break;

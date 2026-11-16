@@ -417,5 +417,71 @@ namespace Nvk.Core.Tests
             Assert.Equal(0.50, loops[1][2].Y, 3);
             Assert.Equal(-0.50, loops[1][0].X, 3);
         }
+
+        [Fact]
+        public void AutoStackCanOmitCoverAndHatch()
+        {
+            var fill = new WellFill { ShowCover = false, ShowHatch = false };
+            var p = WellCatalog.AutoStack(1.00, 3.00, fill);
+            Assert.True(p.Count >= 2);
+            Assert.Equal(WellPartKind.Bottom, p[0].Kind);
+            for (int i = 0; i < p.Count; i++)
+            {
+                Assert.NotEqual(WellPartKind.Cover, p[i].Kind);
+                Assert.NotEqual(WellPartKind.Hatch, p[i].Kind);
+                Assert.NotEqual(WellPartKind.Support, p[i].Kind);
+            }
+            Assert.Equal(WellPartKind.Ring, p[p.Count - 1].Kind);
+            Assert.True(p[p.Count - 1].Z1 >= 2.85);
+        }
+
+        [Fact]
+        public void PlaceExactHonorsCoverFlag()
+        {
+            var fill = new WellFill
+            {
+                Auto = false,
+                ShowCover = false,
+                ShowHatch = true,
+                Parts = WellCatalog.ParseParts("ПН-10:1;КС-10.9:1;ПП-10:1;Люк-Т:1")
+            };
+            var p = WellCatalog.Place(fill, 1.0, 5.0);
+            bool cover = false, hatch = false, ring = false;
+            for (int i = 0; i < p.Count; i++)
+            {
+                if (p[i].Kind == WellPartKind.Cover) cover = true;
+                if (p[i].Kind == WellPartKind.Hatch) hatch = true;
+                if (p[i].Kind == WellPartKind.Ring) ring = true;
+            }
+            Assert.False(cover);
+            Assert.True(hatch);
+            Assert.True(ring);
+        }
+
+        [Fact]
+        public void PlasticCanOmitHatchAndForm()
+        {
+            var fill = new WellFill
+            {
+                Body = WellBodyKind.Plastic,
+                ShowCover = false,
+                ShowHatch = false,
+                ShaftCode = "Тридэвелл DN1000",
+                NeckCode = "Конус"
+            };
+            var p = WellCatalog.Place(fill, 1.0, 3.0);
+            bool cone = false, form = false, hatch = false, shaft = false;
+            for (int i = 0; i < p.Count; i++)
+            {
+                if (p[i].Kind == WellPartKind.Cone) cone = true;
+                if (p[i].Kind == WellPartKind.Form) form = true;
+                if (p[i].Kind == WellPartKind.Hatch) hatch = true;
+                if (p[i].Kind == WellPartKind.Shaft) shaft = true;
+            }
+            Assert.True(cone);
+            Assert.True(shaft);
+            Assert.False(form);
+            Assert.False(hatch);
+        }
     }
 }

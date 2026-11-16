@@ -47,7 +47,7 @@ namespace Nvk.Cad
         readonly CheckBox _mhJoin;
         readonly Label _mhFenceLbl;
         readonly ComboBox _mhCsMode, _mhBody, _mhNeckSide, _mhBase, _mhShaft, _mhNeck, _mhSeries;
-        readonly CheckBox _mhAuto, _mhAutoPlas;
+        readonly CheckBox _mhAuto, _mhAutoPlas, _mhCover, _mhHatch;
         readonly DataGridView _mhParts, _mhPlasParts;
         readonly FlowLayoutPanel _mhConc, _mhPlas;
         static readonly int[] MhScales = { 100, 200, 500, 1000, 2000 };
@@ -360,6 +360,8 @@ namespace Nvk.Cad
             pMh.Controls.Add(Head("Наполнение колодца"));
             _mhBody = Combo(pMh, "Тип колодца", new[] { "Бетонный", "Пластиковый" });
             _mhBody.SelectedIndexChanged += (s, e) => UpdateMhFillUi();
+            _mhCover = Chk(pMh, "Плита перекрытия", true);
+            _mhHatch = Chk(pMh, "Люк", true);
             _mhConc = MhSub();
             _mhAuto = Chk(_mhConc, "Авто по высоте колодца", true);
             _mhSeries = Combo(_mhConc, "Серия ГОСТ (шаблон)", WellCatalog.ConcreteSeriesUi);
@@ -479,6 +481,8 @@ namespace Nvk.Cad
                 _mhBody.SelectedIndex = NvkUiState.WellBodyPlastic ? 1 : 0;
             if (_mhAuto != null) _mhAuto.Checked = NvkUiState.WellFillAuto;
             if (_mhAutoPlas != null) _mhAutoPlas.Checked = NvkUiState.WellFillAuto;
+            if (_mhCover != null) _mhCover.Checked = NvkUiState.WellShowCover;
+            if (_mhHatch != null) _mhHatch.Checked = NvkUiState.WellShowHatch;
             FillPlasParts(NvkUiState.WellPlasParts);
             if (_mhSeries != null && string.IsNullOrEmpty(NvkUiState.WellParts))
                 _mhSeries.SelectedIndex = 1;
@@ -681,6 +685,8 @@ namespace Nvk.Cad
                 NvkUiState.WellFillAuto = _mhAutoPlas.Checked;
             else if (_mhAuto != null)
                 NvkUiState.WellFillAuto = _mhAuto.Checked;
+            if (_mhCover != null) NvkUiState.WellShowCover = _mhCover.Checked;
+            if (_mhHatch != null) NvkUiState.WellShowHatch = _mhHatch.Checked;
             NvkUiState.WellParts = ReadMhParts();
             NvkUiState.WellPlasParts = ReadPlasParts();
             if (_mhBase != null && _mhBase.SelectedItem != null)
@@ -1128,7 +1134,7 @@ namespace Nvk.Cad
             if (_mhParts == null) return;
             _mhParts.Rows.Clear();
             var list = WellCatalog.ParseParts(s);
-            if (list.Count == 0) list = WellCatalog.AutoParts(MhSeriesDiam(), 3.0);
+            if (list.Count == 0) list = WellCatalog.AutoParts(MhSeriesDiam(), 3.0, NvkUiState.WellFillOf());
             else if (_mhSeries != null && list[0] != null)
                 _mhSeries.SelectedIndex = WellCatalog.SeriesUiIndex(list[0].InnerD);
             var col = _mhParts.Columns.Count > 0 ? _mhParts.Columns[0] as DataGridViewComboBoxColumn : null;
@@ -1187,9 +1193,16 @@ namespace Nvk.Cad
             SetMhFenceLbl();
         }
 
+        void PullMhCaps()
+        {
+            if (_mhCover != null) NvkUiState.WellShowCover = _mhCover.Checked;
+            if (_mhHatch != null) NvkUiState.WellShowHatch = _mhHatch.Checked;
+        }
+
         void AutoMhParts()
         {
-            FillMhParts(WellCatalog.FormatParts(WellCatalog.AutoParts(MhSeriesDiam(), 3.0)));
+            PullMhCaps();
+            FillMhParts(WellCatalog.FormatParts(WellCatalog.AutoParts(MhSeriesDiam(), 3.0, NvkUiState.WellFillOf())));
             if (_mhAuto != null) _mhAuto.Checked = true;
         }
 
@@ -1288,9 +1301,11 @@ namespace Nvk.Cad
 
         void AutoPlasParts()
         {
+            PullMhCaps();
             var parts = WellCatalog.PlasticShaftParts(PlasSeriesMm(), 3.0,
                 _mhBase != null && _mhBase.SelectedItem != null ? _mhBase.SelectedItem.ToString() : "Прямопроходная",
-                _mhNeck != null && _mhNeck.SelectedItem != null ? _mhNeck.SelectedItem.ToString() : "Конус");
+                _mhNeck != null && _mhNeck.SelectedItem != null ? _mhNeck.SelectedItem.ToString() : "Конус",
+                NvkUiState.WellFillOf());
             FillPlasParts(WellCatalog.FormatParts(parts));
             if (_mhAutoPlas != null) _mhAutoPlas.Checked = true;
         }

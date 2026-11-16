@@ -70,6 +70,10 @@ namespace Nvk.Core
         public string ShaftCode = "Авто";
         public string NeckCode = "Конус";
         public List<WellPart> Parts = new List<WellPart>();
+        /// <summary>false — без плиты перекрытия (ПП) и без формы пластика.</summary>
+        public bool ShowCover = true;
+        /// <summary>false — без люка и опорного кольца КО.</summary>
+        public bool ShowHatch = true;
     }
 
     /// <summary>Пять разрезов/сечений колодца по этапам работ.</summary>
@@ -244,6 +248,15 @@ namespace Nvk.Core
             return 20;
         }
 
+        public static bool Shows(WellPartKind kind, WellFill fill)
+        {
+            bool cover = fill == null || fill.ShowCover;
+            bool hatch = fill == null || fill.ShowHatch;
+            if (kind == WellPartKind.Cover || kind == WellPartKind.Form) return cover;
+            if (kind == WellPartKind.Hatch || kind == WellPartKind.Support) return hatch;
+            return true;
+        }
+
         public static List<WellPartInst> Place(WellFill fill, double innerD, double height)
         {
             if (fill == null) fill = new WellFill();
@@ -252,13 +265,18 @@ namespace Nvk.Core
             if (fill.Body == WellBodyKind.Plastic)
                 return PlacePlastic(fill, innerD, height);
             if (!fill.Auto && fill.Parts != null && fill.Parts.Count > 0)
-                return PlaceExact(fill.Parts);
-            return AutoStack(innerD, height);
+                return PlaceExact(fill.Parts, fill);
+            return AutoStack(innerD, height, fill);
         }
 
         public static List<WellPart> AutoParts(double innerD, double height)
         {
-            var inst = AutoStack(innerD, height);
+            return AutoParts(innerD, height, null);
+        }
+
+        public static List<WellPart> AutoParts(double innerD, double height, WellFill fill)
+        {
+            var inst = AutoStack(innerD, height, fill);
             var list = new List<WellPart>();
             for (int i = 0; i < inst.Count; i++)
             {
@@ -289,11 +307,16 @@ namespace Nvk.Core
 
         public static List<WellPartInst> AutoStack(double innerD, double height)
         {
+            return AutoStack(innerD, height, null);
+        }
+
+        public static List<WellPartInst> AutoStack(double innerD, double height, WellFill fill)
+        {
             int ser = SeriesMm(innerD);
             var bot = Find("ПН-" + ser);
-            var cover = Find("ПП-" + ser);
-            var sup = Find("КО-6");
-            var hatch = Find("Люк-Т");
+            var cover = Shows(WellPartKind.Cover, fill) ? Find("ПП-" + ser) : null;
+            var sup = Shows(WellPartKind.Support, fill) ? Find("КО-6") : null;
+            var hatch = Shows(WellPartKind.Hatch, fill) ? Find("Люк-Т") : null;
             var rings = RingsOf(ser);
             double cap = 0.0;
             if (bot != null) cap += bot.Height;
@@ -354,6 +377,11 @@ namespace Nvk.Core
 
         public static List<WellPartInst> PlaceExact(IList<WellPart> parts)
         {
+            return PlaceExact(parts, null);
+        }
+
+        public static List<WellPartInst> PlaceExact(IList<WellPart> parts, WellFill fill)
+        {
             var dst = new List<WellPartInst>();
             if (parts == null) return dst;
             double z = 0.0;
@@ -361,6 +389,7 @@ namespace Nvk.Core
             {
                 var p = parts[i];
                 if (p == null) continue;
+                if (!Shows(p.Kind, fill)) continue;
                 int n = p.Qty;
                 if (n < 1) continue;
                 double h = p.Height > 0.02 ? p.Height : 0.29;
@@ -444,7 +473,7 @@ namespace Nvk.Core
             string coneUi = PlasticConeUiOf(fill != null ? fill.NeckCode : null);
             var g = PlasOf(ser, baseUi, coneUi);
 
-            double need = height - g.Cap;
+            double need = height - CapOf(g, fill);
             if (need < 0.20) need = 0.20;
             var rings = TridevellRingHeights(ser);
             var qty = custom ?? GreedyRings(rings, need);
@@ -488,12 +517,23 @@ namespace Nvk.Core
                 dst.Add(Inst("Горловина DN" + ser, WellPartKind.Neck, topIr, topOr, z, z + g.NeckCylH, off));
                 z += g.NeckCylH;
             }
-            dst.Add(Inst("Форма DN" + ser, WellPartKind.Form, g.FormIn * 0.5, g.FormOut * 0.5, z, z + g.FormH, off));
-            z += g.FormH;
-            var hatch = Find("Люк-Т");
+            if (Shows(WellPartKind.Form, fill))
+            {
+                dst.Add(Inst("Форма DN" + ser, WellPartKind.Form, g.FormIn * 0.5, g.FormOut * 0.5, z, z + g.FormH, off));
+                z += g.FormH;
+            }
+            var hatch = Shows(WellPartKind.Hatch, fill) ? Find("Люк-Т") : null;
             if (hatch != null)
                 dst.Add(Inst(hatch.Code, WellPartKind.Hatch, hatch.InnerD * 0.5, hatch.OuterD * 0.5, z, z + g.HatchH, off));
             return dst;
+        }
+
+        static double CapOf(PlasGeom g, WellFill fill)
+        {
+            double cap = g.BaseH + g.ConeH;
+            if (Shows(WellPartKind.Form, fill)) cap += g.FormH;
+            if (Shows(WellPartKind.Hatch, fill)) cap += g.HatchH;
+            return cap;
         }
 
         struct PlasGeom
@@ -623,18 +663,28 @@ namespace Nvk.Core
         /// <summary>Число колец 1 / 0,5 / 0,25 м на остаток высоты после базы, конуса, формы и люка.</summary>
         public static int[] PlasticShaftQty(int ser, double wellHeight, string baseCode, string neckCode)
         {
+            return PlasticShaftQty(ser, wellHeight, baseCode, neckCode, null);
+        }
+
+        public static int[] PlasticShaftQty(int ser, double wellHeight, string baseCode, string neckCode, WellFill fill)
+        {
             if (ser != 1500) ser = 1000;
             var g = PlasOf(ser, PlasticBaseUiOf(baseCode), PlasticConeUiOf(neckCode));
-            double need = wellHeight - g.Cap;
+            double need = wellHeight - CapOf(g, fill);
             if (need < 0.20) need = 0.20;
             return GreedyRings(TridevellRingHeights(ser), need);
         }
 
         public static List<WellPart> PlasticShaftParts(int ser, double wellHeight, string baseCode, string neckCode)
         {
+            return PlasticShaftParts(ser, wellHeight, baseCode, neckCode, null);
+        }
+
+        public static List<WellPart> PlasticShaftParts(int ser, double wellHeight, string baseCode, string neckCode, WellFill fill)
+        {
             if (ser != 1500) ser = 1000;
             var rings = TridevellRingHeights(ser);
-            var qty = PlasticShaftQty(ser, wellHeight, baseCode, neckCode);
+            var qty = PlasticShaftQty(ser, wellHeight, baseCode, neckCode, fill);
             var list = new List<WellPart>();
             for (int i = 0; i < rings.Length; i++)
             {

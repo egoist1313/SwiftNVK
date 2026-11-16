@@ -41,6 +41,7 @@
 (defun nvk-dll-put ( / kandidaty p k)
   (setq kandidaty
     (list
+      (strcat *nvk-dir* "\\bin\\v282\\Nvk.Cad.dll")
       (strcat *nvk-dir* "\\bin\\v281\\Nvk.Cad.dll")
       (strcat *nvk-dir* "\\bin\\v280\\Nvk.Cad.dll")
       (strcat *nvk-dir* "\\bin\\v279\\Nvk.Cad.dll")
@@ -200,12 +201,12 @@
         (t (vl-princ-to-string r))))))
 
 (defun nvk-dll-svezhaya-p (s)
-  (and s (= (type s) 'STR) (vl-string-search "0.281" s)))
+  (and s (= (type s) 'STR) (vl-string-search "0.282" s)))
 
 (defun nvk-dll-staraa-preduprezhdenie (s)
   (princ (strcat "\n[НВК] в памяти: " (if (and s (> (strlen s) 0)) s "старая DLL")))
   (princ "\n[НВК] ================================================")
-  (princ "\n[НВК]  НУЖНА 0.281. Закрой Civil 3D ПОЛНОСТЬЮ")
+  (princ "\n[НВК]  НУЖНА 0.282. Закрой Civil 3D ПОЛНОСТЬЮ")
   (princ "\n[НВК]  (Файл → Выход), открой чертёж снова,")
   (princ "\n[НВК]  потом (load \"nvk-load.lsp\")")
   (princ "\n[НВК]  NETLOAD на уже загруженную DLL не подменяет.")

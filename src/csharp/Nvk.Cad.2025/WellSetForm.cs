@@ -480,9 +480,9 @@ namespace Nvk.Cad
             if (_plastic)
             {
                 int ser = WellCatalog.PlasticSeriesMm(_shaft, d);
-                return WellCatalog.FormatParts(WellCatalog.PlasticShaftParts(ser, h, _base, _neck));
+                return WellCatalog.FormatParts(WellCatalog.PlasticShaftParts(ser, h, _base, _neck, NvkUiState.WellFillOf()));
             }
-            return WellCatalog.FormatParts(WellCatalog.AutoParts(d, h));
+            return WellCatalog.FormatParts(WellCatalog.AutoParts(d, h, NvkUiState.WellFillOf()));
         }
 
         int SeriesOf(Row row)
