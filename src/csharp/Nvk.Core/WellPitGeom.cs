@@ -23,6 +23,15 @@ namespace Nvk.Core
         public int SlopeScaleN = 500;
         /// <summary>Шаг бергштрихов на бумаге, мм. ГОСТ 21.204 / учебные ~2–4 мм.</summary>
         public double SlopeTickPaperMm = 3.0;
+        /// <summary>
+        /// true — если бровки пересекаются, подошвы соединяются линиями
+        /// крайних точек (выпуклая оболочка) в один котлован.
+        /// false — как сейчас: две подошвы, общие откосы, тальвег.
+        /// </summary>
+        public bool JoinOnBermOverlap;
+        /// <summary>Полилиния ограничения: бровка и откосы не выходят за неё.</summary>
+        public List<WellPt> Fence;
+        public bool FenceClosed;
     }
 
     /// <summary>Труба, подходящая к колодцу. Линии — в пределах траншеи до центра / радиуса.</summary>
@@ -109,6 +118,15 @@ namespace Nvk.Core
     /// </summary>
     public static class WellPitGeom
     {
+        static IList<WellPt> FencePts;
+        static bool FenceIsClosed;
+
+        static void UseFence(WellPitCfg c)
+        {
+            FencePts = c != null ? c.Fence : null;
+            FenceIsClosed = c != null && c.FenceClosed && c.Fence != null && c.Fence.Count >= 3;
+        }
+
         public static double Radius(WellPitInput w)
         {
             if (w == null || w.Diam < 0.10) return 0.50;
@@ -324,6 +342,7 @@ namespace Nvk.Core
         {
             if (w == null) w = new WellPitInput();
             if (c == null) c = new WellPitCfg();
+            UseFence(c);
             double ax, ay, px, py;
             AxisUnit(w, out ax, out ay);
             PerpOf(ax, ay, out px, out py);
@@ -334,6 +353,11 @@ namespace Nvk.Core
             if (double.IsNaN(zMid) || zMid < 1.0) zMid = w.Rim;
 
             var bot = Rect(w.X, w.Y, zBot, ax, ay, px, py, along, across);
+            if (FenceIsClosed)
+            {
+                var clipped = ClipPolyToClosed(bot, FencePts);
+                if (clipped != null && clipped.Count >= 3) bot = clipped;
+            }
             var berm = new List<WellPt>();
             var faces = new List<WellPt[]>();
             var rays = new List<WellPt[]>();
@@ -489,11 +513,16 @@ namespace Nvk.Core
                 else hi = t;
             }
             double tHit = 0.5 * (lo + hi);
+            double tFence = 1e99;
+            if (RayFenceT(x, y, nx, ny, out tFence) && tFence < tHit)
+                tHit = tFence;
             double xh = x + tHit * nx;
             double yh = y + tHit * ny;
             double zsHit = zBot + tHit / (m * runScale);
             double zh = CapZ(xh, yh, zsHit, tinZ, pads, x, y);
             if (zh < zBot) zh = zBot;
+            if (tFence < tHit + 1e-6 && tFence < 1e98)
+                zh = zsHit;
             return new WellPt(xh, yh, zh);
         }
 
@@ -770,6 +799,7 @@ namespace Nvk.Core
                 double zEdge = a.Z > 1.0 ? a.Z : zBot;
                 var hits = HitsOnEdge(a, b, zEdge, m, zHint, tinZ, tris);
                 ClipHitsToPads(hits, nx, ny, m, tinZ, zHint, pads);
+                ClipHitsToFence(hits);
                 if (hits.Count == 0) continue;
                 for (int k = 0; k < hits.Count; k++)
                 {
@@ -908,6 +938,127 @@ namespace Nvk.Core
             double v1x = a.X - p.X, v1y = a.Y - p.Y;
             double v2x = b.X - a.X, v2y = b.Y - a.Y;
             return v1x * v2y - v1y * v2x < -1e-12;
+        }
+
+        static void ClipHitsToFence(List<BermHit> hits)
+        {
+            if (hits == null || FencePts == null || FencePts.Count < 2) return;
+            for (int i = 0; i < hits.Count; i++)
+            {
+                var h = hits[i];
+                h.P = ClampPointToFence(h.Bot, h.P);
+                hits[i] = h;
+            }
+        }
+
+        static WellPt ClampPointToFence(WellPt bot, WellPt p)
+        {
+            double dx = p.X - bot.X, dy = p.Y - bot.Y;
+            double len = Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-9) return p;
+            double tF;
+            if (!RayFenceT(bot.X, bot.Y, dx / len, dy / len, out tF) || tF >= len - 1e-6)
+                return p;
+            double t = tF / len;
+            return new WellPt(bot.X + t * dx, bot.Y + t * dy, bot.Z + t * (p.Z - bot.Z));
+        }
+
+        static bool RayFenceT(double x, double y, double nx, double ny, out double tMin)
+        {
+            tMin = 1e99;
+            if (FencePts == null || FencePts.Count < 2) return false;
+            int n = FencePts.Count;
+            bool closed = FenceIsClosed;
+            if (!closed && n >= 3)
+            {
+                double dx0 = FencePts[0].X - FencePts[n - 1].X;
+                double dy0 = FencePts[0].Y - FencePts[n - 1].Y;
+                if (dx0 * dx0 + dy0 * dy0 < 4e-4) closed = true;
+            }
+            int nSeg = closed ? n : n - 1;
+            const double reach = 80.0;
+            for (int i = 0; i < nSeg; i++)
+            {
+                var a = FencePts[i];
+                var b = FencePts[(i + 1) % n];
+                double t, u;
+                if (!SegSeg(x, y, x + reach * nx, y + reach * ny, a.X, a.Y, b.X, b.Y, out t, out u))
+                    continue;
+                double dist = t * reach;
+                if (dist > 1e-4 && dist < tMin) tMin = dist;
+            }
+            return tMin < 1e98;
+        }
+
+        /// <summary>Выпуклая оболочка подошв: линии между крайними точками.</summary>
+        public static List<WellPt> ConnectByExtremePoints(IList<List<WellPt>> polys)
+        {
+            var pts = new List<WellPt>();
+            if (polys == null) return pts;
+            for (int i = 0; i < polys.Count; i++)
+            {
+                var p = polys[i];
+                if (p == null) continue;
+                for (int k = 0; k < p.Count; k++) pts.Add(p[k]);
+            }
+            var hull = OuterHull(pts, 0.05);
+            if (hull != null && hull.Count >= 3 && SignedArea(hull) > 0.0) hull.Reverse();
+            return hull;
+        }
+
+        public static List<WellPt> ClipPolyToClosed(IList<WellPt> subj, IList<WellPt> clip)
+        {
+            if (subj == null || subj.Count < 3 || clip == null || clip.Count < 3)
+                return subj == null ? new List<WellPt>() : new List<WellPt>(subj);
+            var outPts = new List<WellPt>(subj);
+            bool clipCw = SignedArea(clip) < 0.0;
+            int nc = clip.Count;
+            for (int e = 0; e < nc; e++)
+            {
+                var a = clip[e];
+                var b = clip[(e + 1) % nc];
+                var inPts = outPts;
+                outPts = new List<WellPt>();
+                if (inPts.Count == 0) break;
+                var s = inPts[inPts.Count - 1];
+                for (int i = 0; i < inPts.Count; i++)
+                {
+                    var p = inPts[i];
+                    bool pIn = InsideClipEdge(a, b, p, clipCw);
+                    bool sIn = InsideClipEdge(a, b, s, clipCw);
+                    if (pIn)
+                    {
+                        if (!sIn)
+                        {
+                            WellPt hit;
+                            if (EdgeIntersect(s, p, a, b, out hit)) outPts.Add(hit);
+                        }
+                        outPts.Add(p);
+                    }
+                    else if (sIn)
+                    {
+                        WellPt hit;
+                        if (EdgeIntersect(s, p, a, b, out hit)) outPts.Add(hit);
+                    }
+                    s = p;
+                }
+            }
+            return outPts;
+        }
+
+        static bool InsideClipEdge(WellPt a, WellPt b, WellPt p, bool clipCw)
+        {
+            double cr = (b.X - a.X) * (p.Y - a.Y) - (b.Y - a.Y) * (p.X - a.X);
+            return clipCw ? cr <= 1e-12 : cr >= -1e-12;
+        }
+
+        static bool EdgeIntersect(WellPt s, WellPt p, WellPt a, WellPt b, out WellPt hit)
+        {
+            hit = s;
+            double t, u;
+            if (!SegSeg(s.X, s.Y, p.X, p.Y, a.X, a.Y, b.X, b.Y, out t, out u)) return false;
+            hit = new WellPt(s.X + t * (p.X - s.X), s.Y + t * (p.Y - s.Y), s.Z + t * (p.Z - s.Z));
+            return true;
         }
 
         static void ClipHitsToPads(List<BermHit> hits, double nx, double ny, double m,
@@ -1447,8 +1598,10 @@ namespace Nvk.Core
             WellPitCfg c, Func<double, double, double> tinZ, IList<TinTri> tris, double zHint)
         {
             if (shapes == null || shapes.Count == 0) return null;
-            if (shapes.Count == 1 && (extraPolys == null || extraPolys.Count == 0)) return shapes[0];
             if (c == null) c = new WellPitCfg();
+            UseFence(c);
+            if (shapes.Count == 1 && (extraPolys == null || extraPolys.Count == 0) && !c.JoinOnBermOverlap)
+                return shapes[0];
             var sites = new List<PitSite>();
             var outers = new List<List<WellPt>>();
             double ax = 1.0, ay = 0.0, px = 0.0, py = 1.0;
@@ -1489,10 +1642,47 @@ namespace Nvk.Core
                 }
             }
 
+            bool bermJoin = false;
+            if (c.JoinOnBermOverlap && shapes != null)
+            {
+                for (int i = 0; i < shapes.Count && !bermJoin; i++)
+                {
+                    if (shapes[i] == null || shapes[i].Berm == null) continue;
+                    for (int j = i + 1; j < shapes.Count; j++)
+                    {
+                        if (shapes[j] == null || shapes[j].Berm == null) continue;
+                        if (PolysOverlap(shapes[i].Berm, shapes[j].Berm))
+                        {
+                            bermJoin = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
             var bottoms = new List<List<WellPt>>();
             var steps = new List<List<WellPt>>();
             var stepFaces = new List<WellPt[]>();
-            if (!anyOv)
+            if (bermJoin && !anyOv)
+            {
+                var hull = ConnectByExtremePoints(outers);
+                if (hull != null && hull.Count >= 3)
+                {
+                    if (FenceIsClosed)
+                    {
+                        var clipped = ClipPolyToClosed(hull, FencePts);
+                        if (clipped != null && clipped.Count >= 3) hull = clipped;
+                    }
+                    bottoms.Add(StampZWithSteps(hull, sites, steps, stepFaces));
+                }
+                else
+                {
+                    for (int i = 0; i < ns; i++)
+                        bottoms.Add(new List<WellPt>(sites[i].Outer));
+                    bermJoin = false;
+                }
+            }
+            else if (!anyOv)
             {
                 for (int i = 0; i < ns; i++)
                     bottoms.Add(new List<WellPt>(sites[i].Outer));
@@ -1564,7 +1754,7 @@ namespace Nvk.Core
             double zMid = zHint;
             if (double.IsNaN(zMid) || zMid < 1.0) zMid = zMin + 2.0;
 
-            if (!anyOv && ns >= 2)
+            if (!anyOv && !bermJoin && ns >= 2)
             {
                 var pads = new List<GradePad>(ns);
                 for (int i = 0; i < ns; i++)
@@ -1596,13 +1786,21 @@ namespace Nvk.Core
             else
             {
                 var gradeSrc = new List<List<WellPt>>();
-                for (int i = 0; i < outers.Count; i++)
-                    gradeSrc.Add(outers[i]);
-                if (extraPolys != null)
+                if (bermJoin && bottoms.Count > 0)
                 {
-                    for (int i = 0; i < extraPolys.Count; i++)
-                        if (extraPolys[i] != null && extraPolys[i].Count >= 3)
-                            gradeSrc.Add(extraPolys[i]);
+                    for (int i = 0; i < bottoms.Count; i++)
+                        gradeSrc.Add(bottoms[i]);
+                }
+                else
+                {
+                    for (int i = 0; i < outers.Count; i++)
+                        gradeSrc.Add(outers[i]);
+                    if (extraPolys != null)
+                    {
+                        for (int i = 0; i < extraPolys.Count; i++)
+                            if (extraPolys[i] != null && extraPolys[i].Count >= 3)
+                                gradeSrc.Add(extraPolys[i]);
+                    }
                 }
                 var gradeLoops = UnionPolygons(gradeSrc, zMin);
                 int nGrade = 0;

@@ -44,6 +44,8 @@ namespace Nvk.Cad
         readonly ComboBox _cL0, _cL6;
         readonly TextBox _mhGap, _mhSand, _mhSlope, _mhBed;
         readonly ComboBox _mhSurf, _mhCorners, _mhScale;
+        readonly CheckBox _mhJoin;
+        readonly Label _mhFenceLbl;
         readonly ComboBox _mhCsMode, _mhBody, _mhNeckSide, _mhBase, _mhShaft, _mhNeck, _mhSeries;
         readonly CheckBox _mhAuto;
         readonly DataGridView _mhParts;
@@ -341,6 +343,18 @@ namespace Nvk.Cad
             _mhSlope = Num(pMh, "Откос m (0=вертикаль)", "0.20");
             _mhCorners = Combo(pMh, "Углы бровки", new[] { "Веером", "Прямоугольные" });
             _mhScale = Combo(pMh, "Масштаб откосов", new[] { "1:100", "1:200", "1:500", "1:1000", "1:2000" });
+            _mhJoin = Chk(pMh, "Соединять дно при наложении бровок", false);
+            _mhFenceLbl = new Label
+            {
+                AutoSize = true,
+                MaximumSize = new Size(240, 0),
+                ForeColor = C_DIM,
+                BackColor = Color.Transparent,
+                Text = "Ограничение: нет"
+            };
+            pMh.Controls.Add(_mhFenceLbl);
+            pMh.Controls.Add(Btn("Полилиния ограничения…", PickMhFence, 240));
+            pMh.Controls.Add(Btn("Сбросить ограничение", ClearMhFence, 240));
             pMh.Controls.Add(Head("Разрез / сечение"));
             _mhCsMode = Combo(pMh, "Вывод", new[] { "Сечения", "Разрезы" });
             pMh.Controls.Add(Head("Наполнение колодца"));
@@ -442,6 +456,8 @@ namespace Nvk.Cad
             if (_mhCorners != null)
                 _mhCorners.SelectedIndex = NvkUiState.WellCornerFan ? 0 : 1;
             SetMhScale(_mhScale, NvkUiState.WellSlopeScale);
+            if (_mhJoin != null) _mhJoin.Checked = NvkUiState.WellJoinOnBerm;
+            SetMhFenceLbl();
             if (_mhCsMode != null)
                 _mhCsMode.SelectedIndex = NvkUiState.WellCsAsCut ? 1 : 0;
             if (_mhBody != null)
@@ -641,6 +657,7 @@ namespace Nvk.Cad
             if (_mhSlope != null) NvkUiState.WellSlopeM = Math.Max(0.0, Parse(_mhSlope, 0.20));
             if (_mhCorners != null) NvkUiState.WellCornerFan = _mhCorners.SelectedIndex != 1;
             NvkUiState.WellSlopeScale = MhScaleOf(_mhScale);
+            if (_mhJoin != null) NvkUiState.WellJoinOnBerm = _mhJoin.Checked;
             if (_mhCsMode != null) NvkUiState.WellCsAsCut = _mhCsMode.SelectedIndex == 1;
             if (_mhBody != null) NvkUiState.WellBodyPlastic = _mhBody.SelectedIndex == 1;
             if (_mhAuto != null) NvkUiState.WellFillAuto = _mhAuto.Checked;
@@ -1125,6 +1142,28 @@ namespace Nvk.Cad
                 list.Add(p);
             }
             return WellCatalog.FormatParts(list);
+        }
+
+        void SetMhFenceLbl()
+        {
+            if (_mhFenceLbl == null) return;
+            string h = NvkUiState.WellFenceHandle;
+            _mhFenceLbl.Text = string.IsNullOrEmpty(h)
+                ? "Ограничение: нет"
+                : "Ограничение: " + h;
+        }
+
+        void PickMhFence()
+        {
+            SaveToState();
+            Send("НВК-КОЛОДЦЫ-ЗАБОР ");
+        }
+
+        void ClearMhFence()
+        {
+            SaveToState();
+            NvkUiState.WellFenceHandle = "";
+            SetMhFenceLbl();
         }
 
         void AutoMhParts()

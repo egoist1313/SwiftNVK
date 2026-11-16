@@ -54,6 +54,12 @@ namespace Nvk.Cad
         [CommandMethod("NVKWELLSCLEAN")]
         public void CleanEn() { Clean(); }
 
+        [CommandMethod("НВК-КОЛОДЦЫ-ЗАБОР")]
+        public void PickFenceRu() { PickFence(); }
+
+        [CommandMethod("NVKWELLSFENCE")]
+        public void PickFenceEn() { PickFence(); }
+
         public static void Run()
         {
             Run(false);
@@ -66,6 +72,7 @@ namespace Nvk.Cad
             NvkPalette.Flush();
             var ed = doc.Editor;
             var cfg = CfgFromUi();
+            LoadFence(doc.Database, cfg);
             var csItems = new List<WellCsDraw>();
             int nOk = 0, nSkip = 0, nKept = 0;
             List<ObjectId> ids = null;
@@ -281,8 +288,75 @@ namespace Nvk.Cad
                 SlopeM = Math.Max(0.0, NvkUiState.WellSlopeM),
                 Bedding = Math.Max(0.0, NvkUiState.WellBedding),
                 CornerFan = NvkUiState.WellCornerFan,
-                SlopeScaleN = NvkUiState.WellSlopeScale > 0 ? NvkUiState.WellSlopeScale : 500
+                SlopeScaleN = NvkUiState.WellSlopeScale > 0 ? NvkUiState.WellSlopeScale : 500,
+                JoinOnBermOverlap = NvkUiState.WellJoinOnBerm
             };
+        }
+
+        static void LoadFence(Database db, WellPitCfg cfg)
+        {
+            if (cfg == null || db == null) return;
+            cfg.Fence = null;
+            cfg.FenceClosed = false;
+            string h = NvkUiState.WellFenceHandle;
+            if (string.IsNullOrEmpty(h)) return;
+            try
+            {
+                var handle = new Handle(Convert.ToInt64(h, 16));
+                ObjectId id;
+                if (!db.TryGetObjectId(handle, out id) || id.IsNull) return;
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var pl = tr.GetObject(id, OpenMode.ForRead) as Polyline;
+                    if (pl == null || pl.NumberOfVertices < 2)
+                    {
+                        tr.Commit();
+                        return;
+                    }
+                    var pts = new List<WellPt>(pl.NumberOfVertices);
+                    for (int i = 0; i < pl.NumberOfVertices; i++)
+                    {
+                        var p = pl.GetPoint3dAt(i);
+                        pts.Add(new WellPt(p.X, p.Y, p.Z));
+                    }
+                    cfg.Fence = pts;
+                    cfg.FenceClosed = pl.Closed;
+                    if (!cfg.FenceClosed && pts.Count >= 3)
+                    {
+                        double dx = pts[0].X - pts[pts.Count - 1].X;
+                        double dy = pts[0].Y - pts[pts.Count - 1].Y;
+                        if (dx * dx + dy * dy < 4e-4) cfg.FenceClosed = true;
+                    }
+                    tr.Commit();
+                }
+            }
+            catch { }
+        }
+
+        static void PickFence()
+        {
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            var ed = doc.Editor;
+            var opt = new PromptEntityOptions("\n[НВК] полилиния ограничения котлована <сброс>: ");
+            opt.SetRejectMessage("\nНужна полилиния.");
+            opt.AddAllowedClass(typeof(Polyline), true);
+            opt.AllowNone = true;
+            var res = ed.GetEntity(opt);
+            if (res.Status == PromptStatus.None || res.Status == PromptStatus.Cancel)
+            {
+                if (res.Status == PromptStatus.None)
+                {
+                    NvkUiState.WellFenceHandle = "";
+                    NvkPalette.Reload();
+                    ed.WriteMessage("\n[НВК] ограничение сброшено.");
+                }
+                return;
+            }
+            if (res.Status != PromptStatus.OK) return;
+            NvkUiState.WellFenceHandle = res.ObjectId.Handle.ToString();
+            NvkPalette.Reload();
+            ed.WriteMessage("\n[НВК] ограничение: " + NvkUiState.WellFenceHandle);
         }
 
         static SectionGeom MakeGeom(WellPitInput well, WellPitShape shape, WellPitCfg cfg,

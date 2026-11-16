@@ -148,6 +148,9 @@ namespace Nvk.Cad
         public static bool WellCornerFan = true;
         /// <summary>Масштаб бергштрихов откоса 1:N. По умолчанию 1:500.</summary>
         public static int WellSlopeScale = 500;
+        /// <summary>true — при наложении бровок соединять подошвы в один котлован.</summary>
+        public static bool WellJoinOnBerm;
+        public static string WellFenceHandle = "";
         /// <summary>true — разрезы (без таблицы), false — сечения как сейчас.</summary>
         public static bool WellCsAsCut;
         public static bool WellBodyPlastic;
@@ -483,6 +486,8 @@ namespace Nvk.Cad
             Pair(rb, "MH_SLOPE", F(WellSlopeM, 4));
             Pair(rb, "MH_FAN", WellCornerFan ? "1" : "0");
             Pair(rb, "MH_SCALE", WellSlopeScale.ToString());
+            Pair(rb, "MH_JOIN", WellJoinOnBerm ? "1" : "0");
+            Pair(rb, "MH_FENCE_H", WellFenceHandle ?? "");
             Pair(rb, "MH_CS_CUT", WellCsAsCut ? "1" : "0");
             Pair(rb, "MH_BODY", WellBodyPlastic ? "1" : "0");
             Pair(rb, "MH_NECK", WellNeckSide.ToString());
@@ -744,6 +749,8 @@ namespace Nvk.Cad
             WellSlopeM = 0.20;
             WellCornerFan = true;
             WellSlopeScale = 500;
+            WellJoinOnBerm = false;
+            WellFenceHandle = "";
             WellCsAsCut = false;
             WellBodyPlastic = false;
             WellNeckSide = 0;
@@ -942,6 +949,8 @@ namespace Nvk.Cad
                     WellSlopeScale = (int)Math.Round(D(v, WellSlopeScale));
                     if (WellSlopeScale < 1) WellSlopeScale = 500;
                     break;
+                case "MH_JOIN": WellJoinOnBerm = v == "1"; break;
+                case "MH_FENCE_H": WellFenceHandle = v ?? ""; break;
                 case "MH_CS_CUT": WellCsAsCut = v != "0"; break;
                 case "MH_BODY": WellBodyPlastic = v == "1"; break;
                 case "MH_NECK":

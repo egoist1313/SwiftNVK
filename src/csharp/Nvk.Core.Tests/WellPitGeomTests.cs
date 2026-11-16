@@ -1087,6 +1087,102 @@ namespace Nvk.Core.Tests
             Assert.True(s.SlopeTicks == null || s.SlopeTicks.Count == 0);
         }
 
+        [Fact]
+        public void JoinOnBermOverlapConnectsBottomsByExtremePoints()
+        {
+            var cfg = new WellPitCfg { TrenchGap = 0.50, SlopeM = 0.50, Bedding = 0.0, JoinOnBermOverlap = true };
+            var a = new WellPitInput { X = 0, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
+            var b = new WellPitInput { X = 2.5, Y = 0, Diam = 1.0, Sump = 100, Rim = 105, AxisX = 1, AxisY = 0 };
+            Func<double, double, double> tin = (x, y) => 105.0;
+            var sa = WellPitGeom.Build(a, cfg, tin);
+            var sb = WellPitGeom.Build(b, cfg, tin);
+            Assert.False(WellPitGeom.PolysOverlap(sa.Outer, sb.Outer));
+            Assert.True(WellPitGeom.PolysOverlap(sa.Berm, sb.Berm));
+            var u = WellPitGeom.UnionPits(new List<WellPitShape> { sa, sb }, cfg, tin, null, 105);
+            Assert.NotNull(u);
+            Assert.True(u.Bottoms != null && u.Bottoms.Count == 1);
+            double minX = 1e9, maxX = -1e9;
+            var bot = u.Bottoms[0];
+            for (int i = 0; i < bot.Count; i++)
+            {
+                if (bot[i].X < minX) minX = bot[i].X;
+                if (bot[i].X > maxX) maxX = bot[i].X;
+            }
+            Assert.True(maxX - minX > 3.0);
+        }
+
+        [Fact]
+        public void ConnectByExtremePointsIsHullOfTwoSquares()
+        {
+            var a = new List<WellPt>
+            {
+                new WellPt(-1, -1, 100), new WellPt(1, -1, 100),
+                new WellPt(1, 1, 100), new WellPt(-1, 1, 100)
+            };
+            var b = new List<WellPt>
+            {
+                new WellPt(1.5, -1, 100), new WellPt(3.5, -1, 100),
+                new WellPt(3.5, 1, 100), new WellPt(1.5, 1, 100)
+            };
+            var h = WellPitGeom.ConnectByExtremePoints(new List<List<WellPt>> { a, b });
+            Assert.True(h.Count >= 4);
+            double minX = 1e9, maxX = -1e9;
+            for (int i = 0; i < h.Count; i++)
+            {
+                if (h[i].X < minX) minX = h[i].X;
+                if (h[i].X > maxX) maxX = h[i].X;
+            }
+            Assert.True(minX < -0.9);
+            Assert.True(maxX > 3.4);
+        }
+
+        [Fact]
+        public void OpenFenceStopsBermAndSlope()
+        {
+            var cfg = Cfg();
+            cfg.SlopeM = 1.0;
+            cfg.Fence = new List<WellPt> { new WellPt(2.0, -20.0, 0), new WellPt(2.0, 20.0, 0) };
+            cfg.FenceClosed = false;
+            var w = Well();
+            w.X = 0;
+            w.Y = 0;
+            var s = WellPitGeom.Build(w, cfg, (x, y) => 105.0);
+            Assert.True(s.Berm != null && s.Berm.Count >= 4);
+            for (int i = 0; i < s.Berm.Count; i++)
+                Assert.True(s.Berm[i].X < 2.08, "berm crossed the fence");
+            if (s.SlopeRays != null)
+            {
+                for (int i = 0; i < s.SlopeRays.Count; i++)
+                {
+                    if (s.SlopeRays[i] == null || s.SlopeRays[i].Length < 2) continue;
+                    Assert.True(s.SlopeRays[i][1].X < 2.08, "slope crossed the fence");
+                }
+            }
+        }
+
+        [Fact]
+        public void ClosedFenceKeepsBermInside()
+        {
+            var cfg = Cfg();
+            cfg.SlopeM = 1.0;
+            cfg.Fence = new List<WellPt>
+            {
+                new WellPt(-3, -3, 0), new WellPt(3, -3, 0),
+                new WellPt(3, 3, 0), new WellPt(-3, 3, 0)
+            };
+            cfg.FenceClosed = true;
+            var w = Well();
+            w.X = 0;
+            w.Y = 0;
+            var s = WellPitGeom.Build(w, cfg, (x, y) => 105.0);
+            Assert.True(s.Berm != null && s.Berm.Count >= 4);
+            for (int i = 0; i < s.Berm.Count; i++)
+            {
+                Assert.True(s.Berm[i].X > -3.08 && s.Berm[i].X < 3.08);
+                Assert.True(s.Berm[i].Y > -3.08 && s.Berm[i].Y < 3.08);
+            }
+        }
+
         static double DistXy(WellPt a, WellPt b)
         {
             double dx = a.X - b.X, dy = a.Y - b.Y;
