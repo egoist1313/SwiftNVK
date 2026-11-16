@@ -152,7 +152,6 @@ namespace Nvk.Cad
             NvkAnno.CaptureDim(db, tr);
 
             bool cut = NvkUiState.WellCsAsCut;
-            var fill = NvkUiState.WellFillOf();
             int nSt = WellCutStage.Count;
             double hw = 3.0;
             foreach (var it in items)
@@ -193,6 +192,7 @@ namespace Nvk.Cad
                     var ins = new Point3d(origin.X + (s - 1) * colGap, origin.Y - i * rowGap, 0.0);
                     string bname = "NVK-MH-CS-" + (it.Handle ?? i.ToString()) + "-S" + s.ToString();
                     int stage = s;
+                    var fill = NvkUiState.WellFillFor(it.Handle);
                     ObjectId btrId = RecreateBlock(tr, bt, bname, btr =>
                     {
                         DrawWellStage(btr, tr, it, fill, stage, cut, scale, m, hw, th);

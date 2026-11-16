@@ -228,5 +228,95 @@ namespace Nvk.Core.Tests
             Assert.Equal(1.50, WellCatalog.SeriesDiamM(2), 2);
             Assert.Equal(2.00, WellCatalog.SeriesDiamM(3), 2);
         }
+
+        [Fact]
+        public void PlasticShaftCodeKeepsDnAndHeightApart()
+        {
+            var a = WellCatalog.Find("Шахта DN1000×250");
+            Assert.NotNull(a);
+            Assert.Equal(WellPartKind.Shaft, a.Kind);
+            Assert.Equal(1.00, a.InnerD, 3);
+            Assert.Equal(1.090, a.OuterD, 3);
+            Assert.Equal(0.25, a.Height, 3);
+            var b = WellCatalog.Find("Шахта DN1500×250");
+            Assert.Equal(1.50, b.InnerD, 3);
+            Assert.Equal(1.590, b.OuterD, 3);
+            Assert.Equal(0.25, b.Height, 3);
+            var zero = WellCatalog.ParseParts("Шахта DN1000×250:0");
+            Assert.Equal(1, zero.Count);
+            Assert.Equal(0, zero[0].Qty);
+        }
+
+        [Fact]
+        public void PlasticBothSeriesUseQuarterMeterRing()
+        {
+            var narrow = WellCatalog.PlasticShaftParts(1000, 2.04, "Прямопроходная", "Конус");
+            Assert.Equal(1, narrow.Count);
+            Assert.Contains("×250", narrow[0].Code);
+            var wide = WellCatalog.PlasticShaftParts(1500, 2.74, "Прямопроходная", "Конус");
+            Assert.Equal(1, wide.Count);
+            Assert.Contains("DN1500×250", wide[0].Code);
+            var full = WellCatalog.PlasticShaftParts(1500, 4.24, "Прямопроходная", "Конус");
+            Assert.Equal(3, full.Count);
+            Assert.Equal(1.00, full[0].Height, 2);
+            Assert.Equal(0.50, full[1].Height, 2);
+            Assert.Equal(0.25, full[2].Height, 2);
+        }
+
+        [Fact]
+        public void PlasticManualQuarterRingsReplaceAuto()
+        {
+            var fill = new WellFill
+            {
+                Body = WellBodyKind.Plastic,
+                Auto = false,
+                ShaftCode = "Тридэвелл DN1000",
+                Parts = WellCatalog.ParseParts("Шахта DN1000×250:3")
+            };
+            var p = WellCatalog.Place(fill, 1.0, 4.0);
+            int n = 0;
+            for (int i = 0; i < p.Count; i++)
+            {
+                if (p[i].Kind != WellPartKind.Shaft) continue;
+                Assert.Equal(0.25, p[i].Z1 - p[i].Z0, 3);
+                n++;
+            }
+            Assert.Equal(3, n);
+        }
+
+        [Fact]
+        public void OwnSetIsPerWellAndPerBody()
+        {
+            string packed = WellCatalog.FormatOwn(new[]
+            {
+                new WellOwnSet { Handle = "AB12", Plastic = false, Parts = "ПН-10:1;КС-10.9:2" },
+                new WellOwnSet { Handle = "AB12", Plastic = true, Parts = "Шахта DN1000×250:3" }
+            });
+            var plas = WellCatalog.WithOwn(new WellFill
+            {
+                Body = WellBodyKind.Plastic,
+                Auto = true
+            }, "AB12", packed);
+            Assert.False(plas.Auto);
+            var drawn = WellCatalog.Place(plas, 1.0, 5.0);
+            int n = 0;
+            for (int i = 0; i < drawn.Count; i++)
+                if (drawn[i].Kind == WellPartKind.Shaft) n++;
+            Assert.Equal(3, n);
+
+            var conc = WellCatalog.WithOwn(new WellFill { Auto = true }, "AB12", packed);
+            Assert.False(conc.Auto);
+            Assert.Equal("ПН-10", conc.Parts[0].Code);
+
+            var other = WellCatalog.WithOwn(new WellFill { Auto = true }, "ZZ", packed);
+            Assert.True(other.Auto);
+
+            string next = WellCatalog.ReplaceOwn(packed, true, new[] { "AB12" }, new[]
+            {
+                new WellOwnSet { Handle = "AB12", Parts = "Шахта DN1500×1000:1" }
+            });
+            Assert.Contains("ПН-10", WellCatalog.OwnOf(next, "AB12", false).Parts);
+            Assert.Contains("DN1500", WellCatalog.OwnOf(next, "AB12", true).Parts);
+        }
     }
 }

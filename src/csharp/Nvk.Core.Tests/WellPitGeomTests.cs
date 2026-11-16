@@ -1183,6 +1183,26 @@ namespace Nvk.Core.Tests
             }
         }
 
+        [Fact]
+        public void MeanDepthAveragesFloorAgainstTin()
+        {
+            var s = new WellPitShape
+            {
+                Bottoms = new List<List<WellPt>>
+                {
+                    new List<WellPt>
+                    {
+                        new WellPt(0, 0, 102),
+                        new WellPt(2, 0, 102),
+                        new WellPt(2, 2, 102),
+                        new WellPt(0, 2, 102)
+                    }
+                }
+            };
+            Assert.Equal(3.0, WellPitGeom.MeanDepth(s, (x, y) => 105.0), 3);
+            Assert.Equal("Hср=3,00", WellPitGeom.MeanDepthLabel(s, (x, y) => 105.0));
+        }
+
         static double DistXy(WellPt a, WellPt b)
         {
             double dx = a.X - b.X, dy = a.Y - b.Y;

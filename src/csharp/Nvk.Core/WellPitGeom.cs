@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace Nvk.Core
 {
@@ -1136,6 +1137,75 @@ namespace Nvk.Core
             if (IsDaylight(g2, tinZ, pads, corner.X, corner.Y)) berm.Add(g2);
             if (rays != null) rays.Add(new[] { corner, g2 });
             lastG = g2;
+        }
+
+        /// <summary>
+        /// Средняя глубина котлована: (TIN − Z дна) по вершинам подошвы и по центру.
+        /// </summary>
+        public static double MeanDepth(WellPitShape s, Func<double, double, double> tin)
+        {
+            if (s == null || tin == null) return double.NaN;
+            double sum = 0;
+            int n = 0;
+            bool any = false;
+            if (s.Bottoms != null)
+            {
+                for (int i = 0; i < s.Bottoms.Count; i++)
+                {
+                    if (AddPolyDepth(s.Bottoms[i], tin, ref sum, ref n))
+                        any = true;
+                }
+            }
+            if (!any)
+                AddPolyDepth(s.Inner, tin, ref sum, ref n);
+            if (n <= 0) return double.NaN;
+            return sum / n;
+        }
+
+        public static string MeanDepthLabel(WellPitShape s, Func<double, double, double> tin)
+        {
+            double h = MeanDepth(s, tin);
+            if (double.IsNaN(h)) return null;
+            return "Hср=" + h.ToString("0.00", CultureInfo.GetCultureInfo("ru-RU"));
+        }
+
+        static bool AddPolyDepth(IList<WellPt> poly, Func<double, double, double> tin, ref double sum, ref int n)
+        {
+            if (poly == null || poly.Count < 3) return false;
+            int m = poly.Count;
+            if (m >= 4)
+            {
+                var a = poly[0];
+                var b = poly[m - 1];
+                double dx = a.X - b.X, dy = a.Y - b.Y;
+                if (dx * dx + dy * dy < 1e-8) m--;
+            }
+            if (m < 3) return false;
+            double cx = 0, cy = 0, cz = 0;
+            int used = 0;
+            for (int i = 0; i < m; i++)
+            {
+                var p = poly[i];
+                double zs = tin(p.X, p.Y);
+                if (double.IsNaN(zs)) continue;
+                sum += zs - p.Z;
+                n++;
+                cx += p.X;
+                cy += p.Y;
+                cz += p.Z;
+                used++;
+            }
+            if (used <= 0) return false;
+            cx /= used;
+            cy /= used;
+            cz /= used;
+            double zc = tin(cx, cy);
+            if (!double.IsNaN(zc))
+            {
+                sum += zc - cz;
+                n++;
+            }
+            return true;
         }
 
         public static bool PointInPoly(IList<WellPt> poly, double x, double y)

@@ -157,6 +157,10 @@ namespace Nvk.Cad
         public static int WellNeckSide;
         public static bool WellFillAuto = true;
         public static string WellParts = "";
+        /// <summary>Шаблон шахт пластика, если авто снято: Шахта DN1000×1000:2;…</summary>
+        public static string WellPlasParts = "";
+        /// <summary>Свои наборы колодцев: HANDLE*C*…|HANDLE*P*… Ручки этого чертежа.</summary>
+        public static string WellEach = "";
         public static string WellBaseCode = "Прямопроходная";
         public static string WellShaftCode = "Авто";
         public static string WellNeckCode = "Конус";
@@ -178,11 +182,17 @@ namespace Nvk.Cad
                 Body = WellBodyPlastic ? WellBodyKind.Plastic : WellBodyKind.Concrete,
                 Neck = side,
                 Auto = WellFillAuto,
-                Parts = WellCatalog.ParseParts(WellParts),
+                Parts = WellCatalog.ParseParts(WellBodyPlastic ? WellPlasParts : WellParts),
                 BaseCode = string.IsNullOrEmpty(WellBaseCode) ? "Прямопроходная" : WellBaseCode,
                 ShaftCode = string.IsNullOrEmpty(WellShaftCode) ? "Авто" : WellShaftCode,
                 NeckCode = string.IsNullOrEmpty(WellNeckCode) ? "Конус" : WellNeckCode
             };
+        }
+
+        /// <summary>Набор этого колодца: свой, если задан для текущего типа, иначе общий.</summary>
+        public static WellFill WellFillFor(string handle)
+        {
+            return WellCatalog.WithOwn(WellFillOf(), handle, WellEach);
         }
 
         public static void ApplyTo(SectionConfig cfg, TableCfg tbl)
@@ -493,6 +503,8 @@ namespace Nvk.Cad
             Pair(rb, "MH_NECK", WellNeckSide.ToString());
             Pair(rb, "MH_AUTO", WellFillAuto ? "1" : "0");
             Pair(rb, "MH_PARTS", WellParts ?? "");
+            Pair(rb, "MH_PLAS", WellPlasParts ?? "");
+            Pair(rb, "MH_EACH", WellEach ?? "");
             Pair(rb, "MH_BASE", WellBaseCode ?? "");
             Pair(rb, "MH_SHAFT", WellShaftCode ?? "");
             Pair(rb, "MH_NECKC", WellNeckCode ?? "");
@@ -633,6 +645,7 @@ namespace Nvk.Cad
             d["FACT_PROF_L4"] = FactProfileHandleL4 ?? "";
             d["FACT_PROF_L5"] = FactProfileHandleL5 ?? "";
             d["L1_PRESET"] = L1Preset ?? "";
+            d["MH_EACH"] = WellEach ?? "";
             return d;
         }
 
@@ -756,6 +769,8 @@ namespace Nvk.Cad
             WellNeckSide = 0;
             WellFillAuto = true;
             WellParts = "";
+            WellPlasParts = "";
+            WellEach = "";
             WellBaseCode = "Прямопроходная";
             WellShaftCode = "Авто";
             WellNeckCode = "Конус";
@@ -960,6 +975,8 @@ namespace Nvk.Cad
                     break;
                 case "MH_AUTO": WellFillAuto = v != "0"; break;
                 case "MH_PARTS": WellParts = v ?? ""; break;
+                case "MH_PLAS": WellPlasParts = v ?? ""; break;
+                case "MH_EACH": WellEach = v ?? ""; break;
                 case "MH_BASE": WellBaseCode = string.IsNullOrEmpty(v) ? "Прямопроходная" : v; break;
                 case "MH_SHAFT": WellShaftCode = string.IsNullOrEmpty(v) ? "Авто" : v; break;
                 case "MH_NECKC": WellNeckCode = string.IsNullOrEmpty(v) ? "Конус" : v; break;

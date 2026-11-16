@@ -45,7 +45,7 @@ namespace Nvk.Core
         {
             "ZONES", "DESIGN_H", "DESIGN_N", "BE_H", "BE_N", "USE_BE",
             "FACT_PROF_L1", "FACT_PROF_L2", "FACT_PROF_L3", "FACT_PROF_L4", "FACT_PROF_L5",
-            "L1_PRESET", "PIPES", "SEG", "SITES", "SITE"
+            "L1_PRESET", "PIPES", "SEG", "SITES", "SITE", "MH_EACH"
         };
 
         public static bool HasKey(Dictionary<string, string> map, string key)

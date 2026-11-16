@@ -109,6 +109,14 @@ namespace Nvk.Core
         public static bool ShowsBackfill(int stage) { return stage >= 5; }
     }
 
+    /// <summary>Свой набор одного колодца. Handle — ручка структуры, без звёздочек.</summary>
+    public sealed class WellOwnSet
+    {
+        public string Handle;
+        public bool Plastic;
+        public string Parts;
+    }
+
     /// <summary>
     /// Каталог КС/ПН/ПП/КО (ГОСТ 8020) и пластиковых DN.
     /// Автоподбор колец по Ø и высоте колодца.
@@ -193,6 +201,8 @@ namespace Nvk.Core
             for (int i = 0; i < Concrete.Length; i++)
                 if (string.Equals(Concrete[i].Code, code, StringComparison.OrdinalIgnoreCase))
                     return Clone(Concrete[i]);
+            var shaft = ShaftFromCode(code);
+            if (shaft != null) return shaft;
             return PlasticOf(code, WellPartKind.Shaft);
         }
 
@@ -351,7 +361,8 @@ namespace Nvk.Core
             {
                 var p = parts[i];
                 if (p == null) continue;
-                int n = p.Qty < 1 ? 1 : p.Qty;
+                int n = p.Qty;
+                if (n < 1) continue;
                 double h = p.Height > 0.02 ? p.Height : 0.29;
                 double ir = p.InnerD * 0.5;
                 double orad = p.OuterD * 0.5;
@@ -428,30 +439,172 @@ namespace Nvk.Core
         static List<WellPartInst> PlacePlastic(WellFill fill, double innerD, double height)
         {
             int ser = PlasticSeriesMm(fill != null ? fill.ShaftCode : null, innerD);
+            int[] custom = CustomShaftQty(fill, ref ser);
             string baseUi = PlasticBaseUiOf(fill != null ? fill.BaseCode : null);
             string coneUi = PlasticConeUiOf(fill != null ? fill.NeckCode : null);
-            bool rain = ser == 1000 && Has(coneUi, "дожд");
-            bool steps = Has(coneUi, "ступ");
-            bool dbl = ser == 1500 && Has(baseUi, "двойн");
+            var g = PlasOf(ser, baseUi, coneUi);
 
-            double shaftIn = ser * 0.001;
-            double shaftOut = ser == 1000 ? 1.090 : 1.590;
-            double neckIn = 0.680;
-            double neckWall = 0.015;
-            double flangeIn = ser == 1000 ? 0.927 : 1.417;
-            double coneH = rain ? 0.720 : (ser == 1000 ? 0.750 : 1.000);
-            double neckCylH = rain ? 0.0 : (ser == 1000 ? 0.432 : 0.398);
-            double taperH = coneH - neckCylH;
-            if (taperH < 0.15) taperH = coneH;
-            double baseH = ser == 1000 ? 0.750 : 1.200;
-            double formH = 0.200;
-            var hatch = Find("Люк-Т");
-            double hatchH = hatch != null ? hatch.Height : 0.09;
-
-            double cap = baseH + coneH + formH + hatchH;
-            double need = height - cap;
+            double need = height - g.Cap;
             if (need < 0.20) need = 0.20;
             var rings = TridevellRingHeights(ser);
+            var qty = custom ?? GreedyRings(rings, need);
+
+            double room = g.ShaftIn * 0.5 - g.NeckIn * 0.5;
+            if (room < 0.0) room = 0.0;
+            double off = 0.0;
+            if (fill != null && fill.Neck == WellNeckSide.Left) off = -room;
+            else if (fill != null && fill.Neck == WellNeckSide.Right) off = room;
+
+            var dst = new List<WellPartInst>();
+            double z = 0.0;
+            string baseCode = g.Dbl ? "База DN1500 ДС" : ("База DN" + ser + " " + BaseShort(baseUi));
+            dst.Add(Inst(baseCode, WellPartKind.Base, g.ShaftIn * 0.5, g.ShaftOut * 0.5, z, z + g.BaseH, 0.0));
+            z += g.BaseH;
+            for (int i = 0; i < rings.Length && i < qty.Length; i++)
+            {
+                for (int k = 0; k < qty[i]; k++)
+                {
+                    var shaft = MakePlasticShaft(ser, rings[i]);
+                    dst.Add(Inst(shaft.Code, WellPartKind.Shaft, g.ShaftIn * 0.5, g.ShaftOut * 0.5, z, z + rings[i], 0.0));
+                    z += rings[i];
+                }
+            }
+
+            double botIr = g.FlangeIn * 0.5;
+            double botOr = g.ShaftOut * 0.5;
+            double topIr = g.Rain ? 0.385 : g.NeckIn * 0.5;
+            double topOr = g.Rain ? 0.400 : g.NeckIn * 0.5 + g.NeckWall;
+            string coneCode = g.Rain
+                ? "Конус-Д DN1000×720"
+                : (g.Steps ? "Конус DN" + ser + " ст." : "Конус DN" + ser);
+            var cone = Inst(coneCode, WellPartKind.Cone, botIr, botOr, z, z + g.TaperH, 0.0);
+            cone.TopInnerR = topIr;
+            cone.TopOuterR = topOr;
+            cone.TopAxisX = off;
+            dst.Add(cone);
+            z += g.TaperH;
+            if (g.NeckCylH > 0.02)
+            {
+                dst.Add(Inst("Горловина DN" + ser, WellPartKind.Neck, topIr, topOr, z, z + g.NeckCylH, off));
+                z += g.NeckCylH;
+            }
+            dst.Add(Inst("Форма DN" + ser, WellPartKind.Form, g.FormIn * 0.5, g.FormOut * 0.5, z, z + g.FormH, off));
+            z += g.FormH;
+            var hatch = Find("Люк-Т");
+            if (hatch != null)
+                dst.Add(Inst(hatch.Code, WellPartKind.Hatch, hatch.InnerD * 0.5, hatch.OuterD * 0.5, z, z + g.HatchH, off));
+            return dst;
+        }
+
+        struct PlasGeom
+        {
+            public bool Rain, Steps, Dbl;
+            public double ShaftIn, ShaftOut, NeckIn, NeckWall, FlangeIn;
+            public double BaseH, ConeH, NeckCylH, TaperH, FormH, HatchH, Cap;
+            public double FormIn, FormOut;
+        }
+
+        static PlasGeom PlasOf(int ser, string baseUi, string coneUi)
+        {
+            var g = new PlasGeom();
+            if (ser != 1500) ser = 1000;
+            g.Rain = ser == 1000 && Has(coneUi, "дожд");
+            g.Steps = Has(coneUi, "ступ");
+            g.Dbl = ser == 1500 && Has(baseUi, "двойн");
+            g.ShaftIn = ser * 0.001;
+            g.ShaftOut = ser == 1000 ? 1.090 : 1.590;
+            g.NeckIn = 0.680;
+            g.NeckWall = 0.015;
+            g.FlangeIn = ser == 1000 ? 0.927 : 1.417;
+            g.ConeH = g.Rain ? 0.720 : (ser == 1000 ? 0.750 : 1.000);
+            g.NeckCylH = g.Rain ? 0.0 : (ser == 1000 ? 0.432 : 0.398);
+            g.TaperH = g.ConeH - g.NeckCylH;
+            if (g.TaperH < 0.15) g.TaperH = g.ConeH;
+            g.BaseH = ser == 1000 ? 0.750 : 1.200;
+            g.FormH = 0.200;
+            var hatch = Find("Люк-Т");
+            g.HatchH = hatch != null ? hatch.Height : 0.09;
+            g.Cap = g.BaseH + g.ConeH + g.FormH + g.HatchH;
+            g.FormIn = 0.750;
+            g.FormOut = ser == 1000 ? 1.250 : 1.750;
+            return g;
+        }
+
+        /// <summary>Кольца шахты Тридэвелл, м: 1,00 / 0,50 / 0,25. Обе серии.</summary>
+        public static double[] PlasticShaftHeights()
+        {
+            return new[] { 1.00, 0.50, 0.25 };
+        }
+
+        static double[] TridevellRingHeights(int ser)
+        {
+            return PlasticShaftHeights();
+        }
+
+        public static WellPart MakePlasticShaft(int ser, double heightM)
+        {
+            if (ser != 1500) ser = 1000;
+            double h = 1.00;
+            if (heightM < 0.375) h = 0.25;
+            else if (heightM < 0.75) h = 0.50;
+            int mm = (int)Math.Round(h * 1000.0);
+            double id = ser * 0.001;
+            double od = ser == 1000 ? 1.090 : 1.590;
+            return new WellPart
+            {
+                Code = "Шахта DN" + ser.ToString(CultureInfo.InvariantCulture)
+                     + "×" + mm.ToString(CultureInfo.InvariantCulture),
+                Kind = WellPartKind.Shaft,
+                InnerD = id,
+                OuterD = od,
+                Height = h,
+                Qty = 1
+            };
+        }
+
+        public static bool TryPlasticShaft(string code, out int ser, out double height)
+        {
+            ser = 0;
+            height = 0;
+            if (!Has(code, "шахт")) return false;
+            int i = code.IndexOf("DN", StringComparison.OrdinalIgnoreCase);
+            if (i < 0) return false;
+            i += 2;
+            ser = ReadDigits(code, ref i);
+            if (ser != 1000 && ser != 1500) return false;
+            while (i < code.Length && (code[i] < '0' || code[i] > '9')) i++;
+            int mm = ReadDigits(code, ref i);
+            if (mm == 250) height = 0.25;
+            else if (mm == 500) height = 0.50;
+            else if (mm == 1000) height = 1.00;
+            else return false;
+            return true;
+        }
+
+        static WellPart ShaftFromCode(string code)
+        {
+            int ser;
+            double h;
+            if (!TryPlasticShaft(code, out ser, out h)) return null;
+            return MakePlasticShaft(ser, h);
+        }
+
+        static int ReadDigits(string s, ref int i)
+        {
+            int n = 0;
+            bool any = false;
+            while (i < s.Length && s[i] >= '0' && s[i] <= '9')
+            {
+                any = true;
+                n = n * 10 + (s[i] - '0');
+                i++;
+                if (n > 1000000) break;
+            }
+            return any ? n : 0;
+        }
+
+        static int[] GreedyRings(double[] rings, double need)
+        {
             var qty = new int[rings.Length];
             double left = need;
             for (int i = 0; i < rings.Length; i++)
@@ -464,59 +617,77 @@ namespace Nvk.Core
             }
             if (left > 0.04 && rings.Length > 0)
                 qty[qty.Length - 1]++;
-
-            double room = shaftIn * 0.5 - neckIn * 0.5;
-            if (room < 0.0) room = 0.0;
-            double off = 0.0;
-            if (fill != null && fill.Neck == WellNeckSide.Left) off = -room;
-            else if (fill != null && fill.Neck == WellNeckSide.Right) off = room;
-
-            var dst = new List<WellPartInst>();
-            double z = 0.0;
-            string baseCode = dbl ? "База DN1500 ДС" : ("База DN" + ser + " " + BaseShort(baseUi));
-            dst.Add(Inst(baseCode, WellPartKind.Base, shaftIn * 0.5, shaftOut * 0.5, z, z + baseH, 0.0));
-            z += baseH;
-            for (int i = 0; i < rings.Length; i++)
-            {
-                for (int k = 0; k < qty[i]; k++)
-                {
-                    string rc = "Шахта DN" + ser + "×" + ((int)Math.Round(rings[i] * 1000)).ToString(CultureInfo.InvariantCulture);
-                    dst.Add(Inst(rc, WellPartKind.Shaft, shaftIn * 0.5, shaftOut * 0.5, z, z + rings[i], 0.0));
-                    z += rings[i];
-                }
-            }
-
-            double botIr = flangeIn * 0.5;
-            double botOr = shaftOut * 0.5;
-            double topIr = rain ? 0.385 : neckIn * 0.5;
-            double topOr = rain ? 0.400 : neckIn * 0.5 + neckWall;
-            string coneCode = rain
-                ? "Конус-Д DN1000×720"
-                : (steps ? "Конус DN" + ser + " ст." : "Конус DN" + ser);
-            var cone = Inst(coneCode, WellPartKind.Cone, botIr, botOr, z, z + taperH, 0.0);
-            cone.TopInnerR = topIr;
-            cone.TopOuterR = topOr;
-            cone.TopAxisX = off;
-            dst.Add(cone);
-            z += taperH;
-            if (neckCylH > 0.02)
-            {
-                dst.Add(Inst("Горловина DN" + ser, WellPartKind.Neck, topIr, topOr, z, z + neckCylH, off));
-                z += neckCylH;
-            }
-            double formIn = 0.750;
-            double formOut = ser == 1000 ? 1.250 : 1.750;
-            dst.Add(Inst("Форма DN" + ser, WellPartKind.Form, formIn * 0.5, formOut * 0.5, z, z + formH, off));
-            z += formH;
-            if (hatch != null)
-                dst.Add(Inst(hatch.Code, WellPartKind.Hatch, hatch.InnerD * 0.5, hatch.OuterD * 0.5, z, z + hatchH, off));
-            return dst;
+            return qty;
         }
 
-        static double[] TridevellRingHeights(int ser)
+        /// <summary>Число колец 1 / 0,5 / 0,25 м на остаток высоты после базы, конуса, формы и люка.</summary>
+        public static int[] PlasticShaftQty(int ser, double wellHeight, string baseCode, string neckCode)
         {
-            if (ser == 1500) return new[] { 1.00, 0.50 };
-            return new[] { 1.00, 0.50, 0.25 };
+            if (ser != 1500) ser = 1000;
+            var g = PlasOf(ser, PlasticBaseUiOf(baseCode), PlasticConeUiOf(neckCode));
+            double need = wellHeight - g.Cap;
+            if (need < 0.20) need = 0.20;
+            return GreedyRings(TridevellRingHeights(ser), need);
+        }
+
+        public static List<WellPart> PlasticShaftParts(int ser, double wellHeight, string baseCode, string neckCode)
+        {
+            if (ser != 1500) ser = 1000;
+            var rings = TridevellRingHeights(ser);
+            var qty = PlasticShaftQty(ser, wellHeight, baseCode, neckCode);
+            var list = new List<WellPart>();
+            for (int i = 0; i < rings.Length; i++)
+            {
+                if (qty[i] <= 0) continue;
+                var p = MakePlasticShaft(ser, rings[i]);
+                p.Qty = qty[i];
+                list.Add(p);
+            }
+            return list;
+        }
+
+        /// <summary>
+        /// Ручные шахты из Parts, если авто выключено.
+        /// Ноль — кольца этой высоты нет. null — считать автоматом.
+        /// </summary>
+        static int[] CustomShaftQty(WellFill fill, ref int ser)
+        {
+            if (fill == null || fill.Auto || fill.Parts == null || fill.Parts.Count == 0)
+                return null;
+            int found = 0;
+            bool any = false;
+            for (int i = 0; i < fill.Parts.Count; i++)
+            {
+                var p = fill.Parts[i];
+                if (p == null) continue;
+                int ps;
+                double h;
+                if (!TryPlasticShaft(p.Code, out ps, out h)) continue;
+                if (!any) found = ps;
+                any = true;
+            }
+            if (!any) return null;
+            ser = found == 1500 ? 1500 : 1000;
+            var rings = TridevellRingHeights(ser);
+            var qty = new int[rings.Length];
+            for (int i = 0; i < fill.Parts.Count; i++)
+            {
+                var p = fill.Parts[i];
+                if (p == null) continue;
+                int ps;
+                double h;
+                if (!TryPlasticShaft(p.Code, out ps, out h) || ps != ser) continue;
+                int q = p.Qty < 0 ? 0 : p.Qty;
+                for (int r = 0; r < rings.Length; r++)
+                {
+                    if (Math.Abs(rings[r] - h) < 0.02)
+                    {
+                        qty[r] += q;
+                        break;
+                    }
+                }
+            }
+            return qty;
         }
 
         static string BaseShort(string ui)
@@ -593,7 +764,7 @@ namespace Nvk.Core
             {
                 if (parts[i] == null || string.IsNullOrEmpty(parts[i].Code)) continue;
                 if (sb.Length > 0) sb.Append(';');
-                int q = parts[i].Qty < 1 ? 1 : parts[i].Qty;
+                int q = parts[i].Qty < 0 ? 0 : parts[i].Qty;
                 sb.Append(parts[i].Code);
                 sb.Append(':');
                 sb.Append(q.ToString(CultureInfo.InvariantCulture));
@@ -621,10 +792,120 @@ namespace Nvk.Core
                 }
                 var p = Find(code);
                 if (p == null) continue;
-                p.Qty = q < 1 ? 1 : q;
+                if (q < 0) q = 0;
+                p.Qty = q;
                 list.Add(p);
             }
             return list;
+        }
+
+        /// <summary>HANDLE*C*коды или HANDLE*P*коды, колодцы через |.</summary>
+        public static string FormatOwn(IList<WellOwnSet> sets)
+        {
+            if (sets == null || sets.Count == 0) return "";
+            var sb = new StringBuilder();
+            for (int i = 0; i < sets.Count; i++)
+            {
+                var s = sets[i];
+                if (s == null || string.IsNullOrEmpty(s.Handle)) continue;
+                if (string.IsNullOrEmpty(s.Parts)) continue;
+                if (sb.Length > 0) sb.Append('|');
+                sb.Append(s.Handle.Trim());
+                sb.Append(s.Plastic ? "*P*" : "*C*");
+                sb.Append(s.Parts);
+            }
+            return sb.ToString();
+        }
+
+        public static List<WellOwnSet> ParseOwn(string packed)
+        {
+            var list = new List<WellOwnSet>();
+            if (string.IsNullOrEmpty(packed)) return list;
+            var chunks = packed.Split('|');
+            for (int i = 0; i < chunks.Length; i++)
+            {
+                string t = chunks[i].Trim();
+                if (t.Length == 0) continue;
+                int a = t.IndexOf('*');
+                if (a <= 0) continue;
+                int b = t.IndexOf('*', a + 1);
+                if (b <= a) continue;
+                string body = t.Substring(a + 1, b - a - 1);
+                list.Add(new WellOwnSet
+                {
+                    Handle = t.Substring(0, a).Trim(),
+                    Plastic = body.Equals("P", StringComparison.OrdinalIgnoreCase)
+                           || body.Equals("П", StringComparison.OrdinalIgnoreCase),
+                    Parts = t.Substring(b + 1)
+                });
+            }
+            return list;
+        }
+
+        public static WellOwnSet OwnOf(string packed, string handle, bool plastic)
+        {
+            if (string.IsNullOrEmpty(handle)) return null;
+            var all = ParseOwn(packed);
+            WellOwnSet found = null;
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (all[i].Plastic != plastic) continue;
+                if (string.Equals(all[i].Handle, handle, StringComparison.OrdinalIgnoreCase))
+                    found = all[i];
+            }
+            return found;
+        }
+
+        /// <summary>
+        /// Заменить свои наборы этого типа у перечисленных колодцев.
+        /// Чужой тип и ручки не из списка остаются.
+        /// </summary>
+        public static string ReplaceOwn(string packed, bool plastic, IList<string> handles, IList<WellOwnSet> own)
+        {
+            var keep = new List<WellOwnSet>();
+            var all = ParseOwn(packed);
+            for (int i = 0; i < all.Count; i++)
+            {
+                var s = all[i];
+                if (s.Plastic == plastic && Listed(handles, s.Handle)) continue;
+                keep.Add(s);
+            }
+            if (own != null)
+            {
+                for (int i = 0; i < own.Count; i++)
+                {
+                    var s = own[i];
+                    if (s == null || string.IsNullOrEmpty(s.Handle) || string.IsNullOrEmpty(s.Parts))
+                        continue;
+                    s.Plastic = plastic;
+                    keep.Add(s);
+                }
+            }
+            return FormatOwn(keep);
+        }
+
+        static bool Listed(IList<string> handles, string handle)
+        {
+            if (handles == null || string.IsNullOrEmpty(handle)) return false;
+            for (int i = 0; i < handles.Count; i++)
+                if (string.Equals(handles[i], handle, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            return false;
+        }
+
+        /// <summary>Свой набор этой ручки и этого типа тела выключает авто и подставляет части.</summary>
+        public static WellFill WithOwn(WellFill fill, string handle, string packed)
+        {
+            if (fill == null) fill = new WellFill();
+            var own = OwnOf(packed, handle, fill.Body == WellBodyKind.Plastic);
+            if (own == null || string.IsNullOrEmpty(own.Parts)) return fill;
+            bool plas = fill.Body == WellBodyKind.Plastic;
+            if (own.Plastic != plas) return fill;
+            var parts = ParseParts(own.Parts);
+            if (parts.Count == 0) return fill;
+            fill.Auto = false;
+            fill.Parts = parts;
+            return fill;
         }
     }
 }

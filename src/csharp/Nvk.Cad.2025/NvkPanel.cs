@@ -47,8 +47,8 @@ namespace Nvk.Cad
         readonly CheckBox _mhJoin;
         readonly Label _mhFenceLbl;
         readonly ComboBox _mhCsMode, _mhBody, _mhNeckSide, _mhBase, _mhShaft, _mhNeck, _mhSeries;
-        readonly CheckBox _mhAuto;
-        readonly DataGridView _mhParts;
+        readonly CheckBox _mhAuto, _mhAutoPlas;
+        readonly DataGridView _mhParts, _mhPlasParts;
         readonly FlowLayoutPanel _mhConc, _mhPlas;
         static readonly int[] MhScales = { 100, 200, 500, 1000, 2000 };
         readonly Label _mhInfo;
@@ -371,7 +371,21 @@ namespace Nvk.Cad
             _mhBase = Combo(_mhPlas, "База", WellCatalog.PlasticBaseUi);
             _mhNeck = Combo(_mhPlas, "Конус", WellCatalog.PlasticConeUi);
             _mhNeckSide = Combo(_mhPlas, "Смещение горловины", new[] { "По центру", "Влево", "Вправо" });
+            _mhAutoPlas = Chk(_mhPlas, "Авто по высоте колодца", true);
+            _mhPlas.Controls.Add(new Label
+            {
+                AutoSize = true,
+                MaximumSize = new Size(240, 0),
+                ForeColor = C_DIM,
+                BackColor = Color.Transparent,
+                Text = "Шахты 1,00 / 0,50 / 0,25 м. Авто — по высоте каждого колодца. Числа ниже — шаблон, если авто снято."
+            });
+            _mhPlasParts = MakePlasShaftGrid(_mhPlas);
+            _mhPlas.Controls.Add(Btn("Подобрать шахты (H=3 м)", AutoPlasParts, 240));
             pMh.Controls.Add(_mhPlas);
+            _mhAuto.CheckedChanged += (s, e) => SyncMhAuto(_mhAuto, _mhAutoPlas);
+            _mhAutoPlas.CheckedChanged += (s, e) => SyncMhAuto(_mhAutoPlas, _mhAuto);
+            pMh.Controls.Add(Btn("Наборы по колодцам…", OpenWellSets, 240));
             pMh.Controls.Add(Head("Поверхность бровки"));
             _mhSurf = SurfCombo(pMh, "TIN бровки (пусто = L0)");
             pMh.Controls.Add(Btn("Обновить список TIN", RefreshSurfaces, 240));
@@ -463,6 +477,8 @@ namespace Nvk.Cad
             if (_mhBody != null)
                 _mhBody.SelectedIndex = NvkUiState.WellBodyPlastic ? 1 : 0;
             if (_mhAuto != null) _mhAuto.Checked = NvkUiState.WellFillAuto;
+            if (_mhAutoPlas != null) _mhAutoPlas.Checked = NvkUiState.WellFillAuto;
+            FillPlasParts(NvkUiState.WellPlasParts);
             if (_mhSeries != null && string.IsNullOrEmpty(NvkUiState.WellParts))
                 _mhSeries.SelectedIndex = 1;
             FillMhParts(NvkUiState.WellParts);
@@ -660,8 +676,12 @@ namespace Nvk.Cad
             if (_mhJoin != null) NvkUiState.WellJoinOnBerm = _mhJoin.Checked;
             if (_mhCsMode != null) NvkUiState.WellCsAsCut = _mhCsMode.SelectedIndex == 1;
             if (_mhBody != null) NvkUiState.WellBodyPlastic = _mhBody.SelectedIndex == 1;
-            if (_mhAuto != null) NvkUiState.WellFillAuto = _mhAuto.Checked;
+            if (_mhBody != null && _mhBody.SelectedIndex == 1 && _mhAutoPlas != null)
+                NvkUiState.WellFillAuto = _mhAutoPlas.Checked;
+            else if (_mhAuto != null)
+                NvkUiState.WellFillAuto = _mhAuto.Checked;
             NvkUiState.WellParts = ReadMhParts();
+            NvkUiState.WellPlasParts = ReadPlasParts();
             if (_mhBase != null && _mhBase.SelectedItem != null)
                 NvkUiState.WellBaseCode = _mhBase.SelectedItem.ToString();
             if (_mhShaft != null && _mhShaft.SelectedItem != null)
@@ -1170,6 +1190,118 @@ namespace Nvk.Cad
         {
             FillMhParts(WellCatalog.FormatParts(WellCatalog.AutoParts(MhSeriesDiam(), 3.0)));
             if (_mhAuto != null) _mhAuto.Checked = true;
+        }
+
+        static void SyncMhAuto(CheckBox src, CheckBox dst)
+        {
+            if (src == null || dst == null) return;
+            if (dst.Checked == src.Checked) return;
+            dst.Checked = src.Checked;
+        }
+
+        int PlasSeriesMm()
+        {
+            string code = _mhShaft != null && _mhShaft.SelectedItem != null
+                ? _mhShaft.SelectedItem.ToString() : "Авто";
+            return WellCatalog.PlasticSeriesMm(code, 1.0);
+        }
+
+        DataGridView MakePlasShaftGrid(Control parent)
+        {
+            var g = new DataGridView
+            {
+                Width = 244,
+                Height = 110,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                RowHeadersVisible = false,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                BackgroundColor = C_INPUT,
+                GridColor = C_BORDER,
+                BorderStyle = BorderStyle.None,
+                EnableHeadersVisualStyles = false,
+                DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    BackColor = C_INPUT,
+                    ForeColor = C_TEXT,
+                    SelectionBackColor = C_SEL,
+                    SelectionForeColor = Color.White
+                },
+                ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+                {
+                    BackColor = C_STRIP,
+                    ForeColor = C_DIM,
+                    SelectionBackColor = C_STRIP
+                }
+            };
+            g.Columns.Add("h", "Шахта");
+            g.Columns.Add("qty", "шт");
+            g.Columns[0].ReadOnly = true;
+            g.Columns[1].FillWeight = 40;
+            g.Rows.Add("1,00 м", "0");
+            g.Rows.Add("0,50 м", "0");
+            g.Rows.Add("0,25 м", "0");
+            parent.Controls.Add(g);
+            return g;
+        }
+
+        void FillPlasParts(string s)
+        {
+            if (_mhPlasParts == null || _mhPlasParts.Rows.Count < 3) return;
+            var list = WellCatalog.ParseParts(s);
+            double[] hs = WellCatalog.PlasticShaftHeights();
+            for (int i = 0; i < 3; i++)
+            {
+                int q = 0;
+                for (int k = 0; k < list.Count; k++)
+                {
+                    if (list[k] == null) continue;
+                    if (Math.Abs(list[k].Height - hs[i]) < 0.02) q += list[k].Qty;
+                }
+                _mhPlasParts.Rows[i].Cells[1].Value = q.ToString();
+            }
+        }
+
+        string ReadPlasParts()
+        {
+            if (_mhPlasParts == null || _mhPlasParts.Rows.Count < 3)
+                return NvkUiState.WellPlasParts ?? "";
+            int ser = PlasSeriesMm();
+            double[] hs = WellCatalog.PlasticShaftHeights();
+            var list = new List<WellPart>();
+            bool any = false;
+            for (int i = 0; i < 3; i++)
+            {
+                int q = 0;
+                var cell = _mhPlasParts.Rows[i].Cells[1].Value;
+                if (cell != null) int.TryParse(cell.ToString(), out q);
+                if (q < 0) q = 0;
+                if (q > 0) any = true;
+                var p = WellCatalog.MakePlasticShaft(ser, hs[i]);
+                p.Qty = q;
+                list.Add(p);
+            }
+            if (!any) return "";
+            return WellCatalog.FormatParts(list);
+        }
+
+        void AutoPlasParts()
+        {
+            var parts = WellCatalog.PlasticShaftParts(PlasSeriesMm(), 3.0,
+                _mhBase != null && _mhBase.SelectedItem != null ? _mhBase.SelectedItem.ToString() : "Прямопроходная",
+                _mhNeck != null && _mhNeck.SelectedItem != null ? _mhNeck.SelectedItem.ToString() : "Конус");
+            FillPlasParts(WellCatalog.FormatParts(parts));
+            if (_mhAutoPlas != null) _mhAutoPlas.Checked = true;
+        }
+
+        void OpenWellSets()
+        {
+            SaveToState();
+            using (var f = new WellSetForm())
+            {
+                if (f.ShowDialog(this) == DialogResult.OK)
+                    NvkUiState.WellEach = f.Packed ?? "";
+            }
         }
 
         static ComboBox Combo(Control parent, string cap, string[] items)

@@ -196,7 +196,7 @@ namespace Nvk.Cad
                         for (int i = 0; i < grp.Count; i++)
                         {
                             DrawSand(ms, tr, grp[i].W, cfg);
-                            DrawName(ms, tr, grp[i].W, grp[i].S != null ? grp[i].S : shape);
+                            DrawName(ms, tr, grp[i].W, grp[i].S != null ? grp[i].S : shape, grp[i].Tin);
                         }
                         var berm = shape != null && shape.Berm != null && shape.Berm.Count >= 3
                             ? shape.Berm
@@ -606,7 +606,8 @@ namespace Nvk.Cad
             return sb.Length > 0 ? sb.ToString() : null;
         }
 
-        static void DrawName(BlockTableRecord ms, Transaction tr, WellPitInput w, WellPitShape s)
+        static void DrawName(BlockTableRecord ms, Transaction tr, WellPitInput w, WellPitShape s,
+            Func<double, double, double> tin)
         {
             if (w == null || s == null) return;
             string name = string.IsNullOrWhiteSpace(w.Name) ? "колодец" : w.Name;
@@ -614,6 +615,10 @@ namespace Nvk.Cad
             double ly = w.Y + s.Py * (s.BermAcross + 0.4);
             NvkText.Make(ms, tr, LayerTxt, lx, ly, name, 0.35,
                 AttachmentPoint.BottomLeft, 0.0, 8.0, true);
+            string depth = WellPitGeom.MeanDepthLabel(s, tin);
+            if (!string.IsNullOrEmpty(depth))
+                NvkText.Make(ms, tr, LayerTxt, lx, ly - 0.45, depth, 0.30,
+                    AttachmentPoint.BottomLeft, 0.0, 8.0, true);
         }
 
         static List<List<WellItem>> ClusterItems(List<WellItem> items)

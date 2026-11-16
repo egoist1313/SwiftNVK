@@ -58,6 +58,73 @@ namespace Nvk.Cad
             return well;
         }
 
+        /// <summary>Все колодцы сетей и модели. Повтор ручки пропускается.</summary>
+        public static List<WellPitInput> AllIn(Transaction tr, Database db)
+        {
+            var list = new List<WellPitInput>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (tr == null) return list;
+            try
+            {
+                var civil = CivilApplication.ActiveDocument;
+                if (civil != null)
+                {
+                    var nets = civil.GetPipeNetworkIds();
+                    if (nets != null)
+                    {
+                        foreach (ObjectId nid in nets)
+                        {
+                            var net = tr.GetObject(nid, OpenMode.ForRead) as CivilDb.Network;
+                            if (net == null) continue;
+                            ObjectIdCollection sts = null;
+                            try { sts = net.GetStructureIds(); }
+                            catch (Exc) { }
+                            if (sts == null) continue;
+                            foreach (ObjectId id in sts)
+                                AddRead(tr, id, list, seen);
+                        }
+                    }
+                }
+            }
+            catch (Exc) { }
+            if (db != null)
+            {
+                try
+                {
+                    var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+                    foreach (ObjectId id in ms)
+                    {
+                        string dxf = null;
+                        try { dxf = id.ObjectClass.DxfName; }
+                        catch (Exc) { }
+                        if (!string.Equals(dxf, "AECC_STRUCTURE", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        AddRead(tr, id, list, seen);
+                    }
+                }
+                catch (Exc) { }
+            }
+            list.Sort((a, b) => string.Compare(
+                a != null ? a.Name : "", b != null ? b.Name : "",
+                StringComparison.CurrentCultureIgnoreCase));
+            return list;
+        }
+
+        static void AddRead(Transaction tr, ObjectId id, List<WellPitInput> list, HashSet<string> seen)
+        {
+            if (id.IsNull) return;
+            CivilDb.Structure st;
+            try { st = tr.GetObject(id, OpenMode.ForRead) as CivilDb.Structure; }
+            catch (Exc) { return; }
+            if (st == null) return;
+            var w = Read(tr, st);
+            if (w == null) return;
+            string h = w.Handle ?? "";
+            if (h.Length > 0 && !seen.Add(h)) return;
+            list.Add(w);
+        }
+
         static void FillAxis(Transaction tr, CivilDb.Structure st, WellPitInput well)
         {
             well.AxisX = 1.0;
