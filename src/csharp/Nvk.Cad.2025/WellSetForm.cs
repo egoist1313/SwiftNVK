@@ -38,6 +38,7 @@ namespace Nvk.Cad
         readonly string _shaft;
         readonly string _base;
         readonly string _neck;
+        readonly HashSet<string> _only;
         readonly List<Row> _rows = new List<Row>();
         readonly ListBox _list;
         readonly CheckBox _own;
@@ -47,23 +48,29 @@ namespace Nvk.Cad
         int _cur = -1;
         bool _loading;
 
-        public WellSetForm()
+        public WellSetForm() : this(null) { }
+
+        public WellSetForm(IList<string> onlyHandles)
         {
             _plastic = NvkUiState.WellBodyPlastic;
             _shaft = string.IsNullOrEmpty(NvkUiState.WellShaftCode) ? "Авто" : NvkUiState.WellShaftCode;
             _base = string.IsNullOrEmpty(NvkUiState.WellBaseCode) ? "Прямопроходная" : NvkUiState.WellBaseCode;
             _neck = string.IsNullOrEmpty(NvkUiState.WellNeckCode) ? "Конус" : NvkUiState.WellNeckCode;
+            if (onlyHandles != null && onlyHandles.Count > 0)
+                _only = new HashSet<string>(onlyHandles, StringComparer.OrdinalIgnoreCase);
 
-            Text = _plastic ? "Шахты по колодцам" : "Кольца по колодцам";
+            Text = _only != null
+                ? (_plastic ? "Шахты выбранных колодцев" : "Кольца выбранных колодцев")
+                : (_plastic ? "Шахты по колодцам" : "Кольца по колодцам");
             Font = new System.Drawing.Font("Segoe UI", 9f);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new System.Drawing.Size(760, 460);
+            ClientSize = new System.Drawing.Size(760, 500);
             ShowInTaskbar = false;
 
-            _list = new ListBox { Left = 8, Top = 8, Width = 280, Height = 400 };
+            _list = new ListBox { Left = 8, Top = 8, Width = 280, Height = 420 };
             _list.SelectedIndexChanged += OnSelect;
             _own = new CheckBox
             {
@@ -99,10 +106,12 @@ namespace Nvk.Cad
 
             var pick = new Button { Left = 300, Top = 372, Width = 140, Height = 28, Text = "Подобрать" };
             pick.Click += (s, e) => Pick();
+            var pickPlan = new Button { Left = 448, Top = 372, Width = 196, Height = 28, Text = "Указать на плане…" };
+            pickPlan.Click += (s, e) => PickOnPlan();
             var ok = new Button
             {
                 Left = 548,
-                Top = 420,
+                Top = 460,
                 Width = 96,
                 Height = 28,
                 Text = "ОК",
@@ -111,7 +120,7 @@ namespace Nvk.Cad
             var cancel = new Button
             {
                 Left = 652,
-                Top = 420,
+                Top = 460,
                 Width = 96,
                 Height = 28,
                 Text = "Отмена",
@@ -124,6 +133,7 @@ namespace Nvk.Cad
             Controls.Add(_hint);
             Controls.Add(_grid);
             Controls.Add(pick);
+            Controls.Add(pickPlan);
             Controls.Add(ok);
             Controls.Add(cancel);
             FormClosing += OnClose;
@@ -188,6 +198,7 @@ namespace Nvk.Cad
                         Diam = w.Diam,
                         Height = w.Height
                     };
+                    if (_only != null && !_only.Contains(w.Handle)) continue;
                     var own = WellCatalog.OwnOf(packed, w.Handle, _plastic);
                     if (own != null && !string.IsNullOrEmpty(own.Parts))
                     {
@@ -198,7 +209,9 @@ namespace Nvk.Cad
                     _list.Items.Add(row);
                 }
                 if (_rows.Count == 0)
-                    _hint.Text = "В чертеже нет колодцев. Набор по колодцам появится, когда в сети будут структуры.";
+                    _hint.Text = _only != null
+                        ? "Среди выбранных нет колодцев сети. Укажи AECC_STRUCTURE на плане."
+                        : "В чертеже нет колодцев. Набор по колодцам появится, когда в сети будут структуры.";
                 else
                     _list.SelectedIndex = 0;
             }
@@ -250,6 +263,112 @@ namespace Nvk.Cad
             if (row.Own)
                 FillFrom(row.Parts, row);
             TouchList();
+        }
+
+        void PickOnPlan()
+        {
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null)
+            {
+                _hint.Text = "Нет открытого чертежа.";
+                return;
+            }
+            SaveGrid(_cur);
+            Hide();
+            List<ObjectId> ids;
+            try
+            {
+                try { doc.Window.Focus(); }
+                catch (Exc) { }
+                ids = WellPitDrawer.PromptWells(doc.Editor);
+            }
+            finally
+            {
+                Show();
+                Activate();
+            }
+            if (ids == null || ids.Count == 0)
+            {
+                _hint.Text = "Колодцы не указаны — список без изменений.";
+                return;
+            }
+            var keep = new HashSet<string>(WellPitDrawer.HandlesOfIds(doc, ids),
+                StringComparer.OrdinalIgnoreCase);
+            if (keep.Count == 0)
+            {
+                _hint.Text = "Среди указанных нет колодцев сети.";
+                return;
+            }
+            ReloadPicked(doc, keep);
+        }
+
+        void ReloadPicked(Autodesk.AutoCAD.ApplicationServices.Document doc, HashSet<string> keep)
+        {
+            if (doc == null || keep == null || keep.Count == 0) return;
+            var prev = new Dictionary<string, Row>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < _rows.Count; i++)
+            {
+                if (_rows[i] != null && !string.IsNullOrEmpty(_rows[i].Handle))
+                    prev[_rows[i].Handle] = _rows[i];
+            }
+            List<WellPitInput> wells;
+            try
+            {
+                using (doc.LockDocument())
+                using (var tr = doc.TransactionManager.StartTransaction())
+                {
+                    wells = WellReader.AllIn(tr, doc.Database);
+                    tr.Commit();
+                }
+            }
+            catch (Exc ex)
+            {
+                _hint.Text = ex.Message;
+                return;
+            }
+            string packed = NvkUiState.WellEach ?? "";
+            var next = new List<Row>();
+            for (int i = 0; i < wells.Count; i++)
+            {
+                var w = wells[i];
+                if (w == null || string.IsNullOrEmpty(w.Handle) || !keep.Contains(w.Handle))
+                    continue;
+                Row row;
+                if (prev.TryGetValue(w.Handle, out row) && row != null)
+                {
+                    next.Add(row);
+                    continue;
+                }
+                row = new Row
+                {
+                    Handle = w.Handle,
+                    Name = w.Name,
+                    Diam = w.Diam,
+                    Height = w.Height
+                };
+                var own = WellCatalog.OwnOf(packed, w.Handle, _plastic);
+                if (own != null && !string.IsNullOrEmpty(own.Parts))
+                {
+                    row.Own = true;
+                    row.Parts = own.Parts;
+                }
+                next.Add(row);
+            }
+            if (next.Count == 0)
+            {
+                _hint.Text = "Среди указанных нет колодцев сети.";
+                return;
+            }
+            _rows.Clear();
+            _rows.AddRange(next);
+            _list.Items.Clear();
+            for (int i = 0; i < _rows.Count; i++)
+                _list.Items.Add(_rows[i]);
+            _cur = -1;
+            Text = _plastic ? "Шахты выбранных колодцев" : "Кольца выбранных колодцев";
+            _list.SelectedIndex = 0;
+            _hint.Text = "Показаны " + _rows.Count.ToString(CultureInfo.InvariantCulture)
+                + " выбранных. ОК запишет набор только им.";
         }
 
         void Pick()

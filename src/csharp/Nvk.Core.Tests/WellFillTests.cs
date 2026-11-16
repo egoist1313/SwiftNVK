@@ -318,5 +318,104 @@ namespace Nvk.Core.Tests
             Assert.Contains("ПН-10", WellCatalog.OwnOf(next, "AB12", false).Parts);
             Assert.Contains("DN1500", WellCatalog.OwnOf(next, "AB12", true).Parts);
         }
+
+        [Fact]
+        public void RingSectionHasSpanningJointLines()
+        {
+            var p = new WellPartInst
+            {
+                Kind = WellPartKind.Ring,
+                OuterR = 0.58,
+                InnerR = 0.50,
+                AxisX = 0
+            };
+            var loops = WellSection.LoopsOf(p, 0.0, 0.90);
+            Assert.Equal(2, loops.Count);
+            Assert.Equal(-0.58, loops[0][0].X, 3);
+            Assert.Equal(0.58, loops[0][1].X, 3);
+            Assert.Equal(0.0, loops[0][0].Y, 3);
+            Assert.Equal(0.90, loops[0][2].Y, 3);
+            Assert.Equal(-0.50, loops[1][0].X, 3);
+            Assert.Equal(0.50, loops[1][1].X, 3);
+        }
+
+        [Fact]
+        public void CoverAndShaftSectionsSpanDiameter()
+        {
+            var cover = new WellPartInst
+            {
+                Kind = WellPartKind.Cover,
+                OuterR = 0.80,
+                InnerR = 0.70,
+                HoleR = 0.35,
+                AxisX = 0
+            };
+            var c = WellSection.LoopsOf(cover, 2.0, 2.16);
+            Assert.Equal(2, c.Count);
+            Assert.Equal(-0.80, c[0][0].X, 3);
+            Assert.Equal(0.80, c[0][1].X, 3);
+            Assert.Equal(-0.35, c[1][0].X, 3);
+            Assert.Equal(0.35, c[1][1].X, 3);
+
+            var shaft = new WellPartInst
+            {
+                Kind = WellPartKind.Shaft,
+                OuterR = 0.60,
+                InnerR = 0.50,
+                AxisX = 0
+            };
+            var s = WellSection.LoopsOf(shaft, 0.5, 1.5);
+            Assert.Equal(2, s.Count);
+            Assert.Equal(-0.60, s[0][0].X, 3);
+            Assert.Equal(0.60, s[0][1].X, 3);
+        }
+
+        [Fact]
+        public void ConeSectionIsNestedTrapezoids()
+        {
+            var p = new WellPartInst
+            {
+                Kind = WellPartKind.Cone,
+                OuterR = 0.60,
+                InnerR = 0.50,
+                TopOuterR = 0.40,
+                TopInnerR = 0.30,
+                AxisX = 0,
+                TopAxisX = 0.10
+            };
+            var loops = WellSection.LoopsOf(p, 1.0, 1.6);
+            Assert.Equal(2, loops.Count);
+            Assert.Equal(-0.60, loops[0][0].X, 3);
+            Assert.Equal(0.60, loops[0][1].X, 3);
+            Assert.Equal(0.50, loops[0][2].X, 3);
+            Assert.Equal(-0.30, loops[0][3].X, 3);
+            Assert.Equal(-0.50, loops[1][0].X, 3);
+            Assert.Equal(0.40, loops[1][2].X, 3);
+        }
+
+        [Fact]
+        public void BottomSectionIsSolidAndBaseHasInnerFromFloor()
+        {
+            var bot = new WellPartInst { Kind = WellPartKind.Bottom, OuterR = 0.58, AxisX = 0 };
+            var b = WellSection.LoopsOf(bot, 0.0, 0.12);
+            Assert.Single(b);
+            Assert.Equal(-0.58, b[0][0].X, 3);
+            Assert.Equal(0.58, b[0][1].X, 3);
+
+            var bas = new WellPartInst
+            {
+                Kind = WellPartKind.Base,
+                OuterR = 0.60,
+                InnerR = 0.50,
+                AxisX = 0
+            };
+            var loops = WellSection.LoopsOf(bas, 0.0, 0.50);
+            Assert.Equal(2, loops.Count);
+            Assert.Equal(0.0, loops[0][0].Y, 3);
+            Assert.Equal(0.50, loops[0][2].Y, 3);
+            Assert.True(loops[1][0].Y > 0.05);
+            Assert.Equal(0.50, loops[1][2].Y, 3);
+            Assert.Equal(-0.50, loops[1][0].X, 3);
+        }
     }
 }

@@ -1169,6 +1169,146 @@ namespace Nvk.Core
             return "Hср=" + h.ToString("0.00", CultureInfo.GetCultureInfo("ru-RU"));
         }
 
+        public static double PolyArea(IList<WellPt> p)
+        {
+            if (p == null || p.Count < 3) return 0.0;
+            return Math.Abs(SignedArea(p));
+        }
+
+        public static double FloorArea(WellPitShape s)
+        {
+            if (s == null) return 0.0;
+            double a = 0.0;
+            if (s.Bottoms != null && s.Bottoms.Count > 0)
+            {
+                for (int i = 0; i < s.Bottoms.Count; i++)
+                    a += PolyArea(s.Bottoms[i]);
+                if (a > 1e-9) return a;
+            }
+            return PolyArea(s.Outer);
+        }
+
+        public static double BermArea(WellPitShape s)
+        {
+            if (s == null) return 0.0;
+            double a = 0.0;
+            if (s.Berms != null && s.Berms.Count > 0)
+            {
+                for (int i = 0; i < s.Berms.Count; i++)
+                    a += PolyArea(s.Berms[i]);
+                if (a > 1e-9) return a;
+            }
+            return PolyArea(s.Berm);
+        }
+
+        public static bool PolyCentroid(IList<WellPt> p, out double x, out double y)
+        {
+            x = 0.0;
+            y = 0.0;
+            if (p == null || p.Count < 3) return false;
+            int n = p.Count;
+            if (n >= 4)
+            {
+                var a0 = p[0];
+                var b0 = p[n - 1];
+                double dx = a0.X - b0.X, dy = a0.Y - b0.Y;
+                if (dx * dx + dy * dy < 1e-8) n--;
+            }
+            if (n < 3) return false;
+            double sumCross = 0.0, cx = 0.0, cy = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                var a = p[i];
+                var b = p[(i + 1) % n];
+                double cross = a.X * b.Y - b.X * a.Y;
+                sumCross += cross;
+                cx += (a.X + b.X) * cross;
+                cy += (a.Y + b.Y) * cross;
+            }
+            if (Math.Abs(sumCross) < 1e-12)
+            {
+                double sx = 0.0, sy = 0.0;
+                for (int i = 0; i < n; i++)
+                {
+                    sx += p[i].X;
+                    sy += p[i].Y;
+                }
+                x = sx / n;
+                y = sy / n;
+                return true;
+            }
+            x = cx / (3.0 * sumCross);
+            y = cy / (3.0 * sumCross);
+            return true;
+        }
+
+        public static bool PitCentroid(WellPitShape s, out double x, out double y)
+        {
+            x = 0.0;
+            y = 0.0;
+            if (s == null) return false;
+            if (s.Berm != null && PolyCentroid(s.Berm, out x, out y)) return true;
+            if (s.Berms != null)
+            {
+                double best = 0.0;
+                bool any = false;
+                for (int i = 0; i < s.Berms.Count; i++)
+                {
+                    double a = PolyArea(s.Berms[i]);
+                    double cx, cy;
+                    if (a <= best || !PolyCentroid(s.Berms[i], out cx, out cy)) continue;
+                    best = a;
+                    x = cx;
+                    y = cy;
+                    any = true;
+                }
+                if (any) return true;
+            }
+            if (s.Bottoms != null)
+            {
+                double wsum = 0.0, sx = 0.0, sy = 0.0;
+                for (int i = 0; i < s.Bottoms.Count; i++)
+                {
+                    double a = PolyArea(s.Bottoms[i]);
+                    double cx, cy;
+                    if (a < 1e-9 || !PolyCentroid(s.Bottoms[i], out cx, out cy)) continue;
+                    sx += cx * a;
+                    sy += cy * a;
+                    wsum += a;
+                }
+                if (wsum > 1e-9)
+                {
+                    x = sx / wsum;
+                    y = sy / wsum;
+                    return true;
+                }
+            }
+            return PolyCentroid(s.Outer, out x, out y);
+        }
+
+        /// <summary>
+        /// Подпись одного котлована: средняя высота и площади дна / бровки.
+        /// </summary>
+        public static string PitStatsLabel(WellPitShape s, Func<double, double, double> tin)
+        {
+            var ru = CultureInfo.GetCultureInfo("ru-RU");
+            string h = MeanDepthLabel(s, tin);
+            double floor = FloorArea(s);
+            double berm = BermArea(s);
+            string t = h ?? "";
+            if (floor > 1e-4)
+            {
+                if (t.Length > 0) t += "\n";
+                t += "Sдна=" + floor.ToString("0.00", ru);
+            }
+            if (berm > 1e-4)
+            {
+                if (t.Length > 0) t += "\n";
+                t += "Sбр=" + berm.ToString("0.00", ru);
+            }
+            return t.Length > 0 ? t : null;
+        }
+
         static bool AddPolyDepth(IList<WellPt> poly, Func<double, double, double> tin, ref double sum, ref int n)
         {
             if (poly == null || poly.Count < 3) return false;

@@ -1203,6 +1203,71 @@ namespace Nvk.Core.Tests
             Assert.Equal("Hср=3,00", WellPitGeom.MeanDepthLabel(s, (x, y) => 105.0));
         }
 
+        [Fact]
+        public void PitStatsLabelHasMeanDepthAndAreas()
+        {
+            var floor = new List<WellPt>
+            {
+                new WellPt(0, 0, 102),
+                new WellPt(2, 0, 102),
+                new WellPt(2, 2, 102),
+                new WellPt(0, 2, 102)
+            };
+            var berm = new List<WellPt>
+            {
+                new WellPt(-1, -1, 105),
+                new WellPt(3, -1, 105),
+                new WellPt(3, 3, 105),
+                new WellPt(-1, 3, 105)
+            };
+            var s = new WellPitShape
+            {
+                Bottoms = new List<List<WellPt>> { floor },
+                Berm = berm
+            };
+            Assert.Equal(4.0, WellPitGeom.FloorArea(s), 3);
+            Assert.Equal(16.0, WellPitGeom.BermArea(s), 3);
+            double cx, cy;
+            Assert.True(WellPitGeom.PitCentroid(s, out cx, out cy));
+            Assert.Equal(1.0, cx, 3);
+            Assert.Equal(1.0, cy, 3);
+            string t = WellPitGeom.PitStatsLabel(s, (x, y) => 105.0);
+            Assert.Contains("Hср=3,00", t);
+            Assert.Contains("Sдна=4,00", t);
+            Assert.Contains("Sбр=16,00", t);
+        }
+
+        [Fact]
+        public void TwoFloorsOnePitSumsFloorArea()
+        {
+            var a = new List<WellPt>
+            {
+                new WellPt(0, 0, 100), new WellPt(2, 0, 100),
+                new WellPt(2, 2, 100), new WellPt(0, 2, 100)
+            };
+            var b = new List<WellPt>
+            {
+                new WellPt(4, 0, 100), new WellPt(6, 0, 100),
+                new WellPt(6, 2, 100), new WellPt(4, 2, 100)
+            };
+            var berm = new List<WellPt>
+            {
+                new WellPt(-1, -1, 103), new WellPt(7, -1, 103),
+                new WellPt(7, 3, 103), new WellPt(-1, 3, 103)
+            };
+            var s = new WellPitShape
+            {
+                Bottoms = new List<List<WellPt>> { a, b },
+                Berm = berm
+            };
+            Assert.Equal(8.0, WellPitGeom.FloorArea(s), 3);
+            Assert.Equal(32.0, WellPitGeom.BermArea(s), 3);
+            string t = WellPitGeom.PitStatsLabel(s, (x, y) => 103.0);
+            Assert.Contains("Hср=3,00", t);
+            Assert.Contains("Sдна=8,00", t);
+            Assert.Contains("Sбр=32,00", t);
+        }
+
         static double DistXy(WellPt a, WellPt b)
         {
             double dx = a.X - b.X, dy = a.Y - b.Y;

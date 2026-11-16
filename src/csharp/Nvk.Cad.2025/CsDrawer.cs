@@ -265,61 +265,17 @@ namespace Nvk.Cad
         static void DrawPartSection(BlockTableRecord btr, Transaction tr, WellPartInst p,
             double z0, double z1, double sc, double osh, double ox, double oy)
         {
-            double ax0 = p.AxisX;
-            double ax1 = p.TopInnerR > 0.01 || Math.Abs(p.TopAxisX - p.AxisX) > 1e-6 ? p.TopAxisX : p.AxisX;
-            double o0 = p.OuterR;
-            double o1 = p.TopOuterR > 0.02 ? p.TopOuterR : p.OuterR;
-            double i0 = p.HoleR > 0.02 ? p.HoleR : p.InnerR;
-            double i1 = p.TopInnerR > 0.02 ? p.TopInnerR : i0;
-            bool taper = p.Kind == WellPartKind.Cone
-                || Math.Abs(o1 - o0) > 1e-4
-                || Math.Abs(i1 - i0) > 1e-4
-                || Math.Abs(ax1 - ax0) > 1e-4;
-            if (p.Kind == WellPartKind.Bottom)
+            var loops = WellSection.LoopsOf(p, z0, z1);
+            if (loops == null) return;
+            for (int i = 0; i < loops.Count; i++)
             {
-                AddPline(btr, tr, ToDraw(new[]
-                {
-                    P(ax0 - o0, z0), P(ax0 + o0, z0), P(ax0 + o0, z1), P(ax0 - o0, z1)
-                }, sc, osh, ox, oy), Aci(7), true, 30);
-                return;
+                var lp = loops[i];
+                if (lp == null || lp.Length < 3) continue;
+                var cs = new Point2d[lp.Length];
+                for (int k = 0; k < lp.Length; k++)
+                    cs[k] = P(lp[k].X, lp[k].Y);
+                AddPline(btr, tr, ToDraw(cs, sc, osh, ox, oy), Aci(7), true, 30);
             }
-            if (p.Kind == WellPartKind.Base)
-            {
-                double floor = Math.Min(0.08, 0.4 * (z1 - z0));
-                AddPline(btr, tr, ToDraw(new[]
-                {
-                    P(ax0 - o0, z0), P(ax0 + o0, z0), P(ax0 + o0, z0 + floor), P(ax0 - o0, z0 + floor)
-                }, sc, osh, ox, oy), Aci(7), true, 30);
-                AddPline(btr, tr, ToDraw(new[]
-                {
-                    P(ax0 - o0, z0 + floor), P(ax0 - i0, z0 + floor), P(ax0 - i0, z1), P(ax0 - o0, z1)
-                }, sc, osh, ox, oy), Aci(7), true, 30);
-                AddPline(btr, tr, ToDraw(new[]
-                {
-                    P(ax0 + i0, z0 + floor), P(ax0 + o0, z0 + floor), P(ax0 + o0, z1), P(ax0 + i0, z1)
-                }, sc, osh, ox, oy), Aci(7), true, 30);
-                return;
-            }
-            if (taper)
-            {
-                AddPline(btr, tr, ToDraw(new[]
-                {
-                    P(ax0 - o0, z0), P(ax0 - i0, z0), P(ax1 - i1, z1), P(ax1 - o1, z1)
-                }, sc, osh, ox, oy), Aci(7), true, 30);
-                AddPline(btr, tr, ToDraw(new[]
-                {
-                    P(ax0 + i0, z0), P(ax0 + o0, z0), P(ax1 + o1, z1), P(ax1 + i1, z1)
-                }, sc, osh, ox, oy), Aci(7), true, 30);
-                return;
-            }
-            AddPline(btr, tr, ToDraw(new[]
-            {
-                P(ax0 - o0, z0), P(ax0 - i0, z0), P(ax0 - i0, z1), P(ax0 - o0, z1)
-            }, sc, osh, ox, oy), Aci(7), true, 30);
-            AddPline(btr, tr, ToDraw(new[]
-            {
-                P(ax0 + i0, z0), P(ax0 + o0, z0), P(ax0 + o0, z1), P(ax0 + i0, z1)
-            }, sc, osh, ox, oy), Aci(7), true, 30);
         }
 
         static void DrawWellPipes(BlockTableRecord btr, Transaction tr, WellPitInput well,

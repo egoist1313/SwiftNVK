@@ -386,6 +386,7 @@ namespace Nvk.Cad
             _mhAuto.CheckedChanged += (s, e) => SyncMhAuto(_mhAuto, _mhAutoPlas);
             _mhAutoPlas.CheckedChanged += (s, e) => SyncMhAuto(_mhAutoPlas, _mhAuto);
             pMh.Controls.Add(Btn("Наборы по колодцам…", OpenWellSets, 240));
+            pMh.Controls.Add(Btn("Набор выбранным…", OpenWellSetsPicked, 240));
             pMh.Controls.Add(Head("Поверхность бровки"));
             _mhSurf = SurfCombo(pMh, "TIN бровки (пусто = L0)");
             pMh.Controls.Add(Btn("Обновить список TIN", RefreshSurfaces, 240));
@@ -1302,6 +1303,12 @@ namespace Nvk.Cad
                 if (f.ShowDialog(this) == DialogResult.OK)
                     NvkUiState.WellEach = f.Packed ?? "";
             }
+        }
+
+        void OpenWellSetsPicked()
+        {
+            SaveToState();
+            Send("НВК-КОЛОДЦЫ-НАБОР ");
         }
 
         static ComboBox Combo(Control parent, string cap, string[] items)

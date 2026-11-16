@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Windows.Forms;
 using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -59,6 +60,12 @@ namespace Nvk.Cad
 
         [CommandMethod("NVKWELLSFENCE")]
         public void PickFenceEn() { PickFence(); }
+
+        [CommandMethod("НВК-КОЛОДЦЫ-НАБОР", CommandFlags.UsePickSet)]
+        public void EditSetRu() { EditSelectedSets(); }
+
+        [CommandMethod("NVKWELLSET", CommandFlags.UsePickSet)]
+        public void EditSetEn() { EditSelectedSets(); }
 
         public static void Run()
         {
@@ -193,10 +200,11 @@ namespace Nvk.Cad
                         var grp = groups[g];
                         var shape = ShapeOfGroup(grp, cfg, surfId, tr);
                         DrawPit(ms, tr, grp, shape);
+                        DrawPitStats(ms, tr, grp, shape);
                         for (int i = 0; i < grp.Count; i++)
                         {
                             DrawSand(ms, tr, grp[i].W, cfg);
-                            DrawName(ms, tr, grp[i].W, grp[i].S != null ? grp[i].S : shape, grp[i].Tin);
+                            DrawName(ms, tr, grp[i].W, grp[i].S != null ? grp[i].S : shape);
                         }
                         var berm = shape != null && shape.Berm != null && shape.Berm.Count >= 3
                             ? shape.Berm
@@ -403,6 +411,60 @@ namespace Nvk.Cad
             return g;
         }
 
+        static void EditSelectedSets()
+        {
+            var doc = AcadApp.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            NvkPalette.Flush();
+            var ed = doc.Editor;
+            var ids = PickWells(ed);
+            if (ids == null || ids.Count == 0)
+            {
+                ed.WriteMessage("\n[НВК] колодцы не выбраны.");
+                return;
+            }
+            var handles = HandlesOfIds(doc, ids);
+            if (handles.Count == 0)
+            {
+                ed.WriteMessage("\n[НВК] колодцы не выбраны.");
+                return;
+            }
+            using (var f = new WellSetForm(handles))
+            {
+                if (f.ShowDialog() == DialogResult.OK)
+                    NvkUiState.WellEach = f.Packed ?? "";
+            }
+        }
+
+        internal static List<string> HandlesOfIds(Autodesk.AutoCAD.ApplicationServices.Document doc,
+            List<ObjectId> ids)
+        {
+            var handles = new List<string>();
+            if (doc == null || ids == null) return handles;
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (doc.LockDocument())
+            using (var tr = doc.TransactionManager.StartTransaction())
+            {
+                for (int i = 0; i < ids.Count; i++)
+                {
+                    CivilDb.Structure st = null;
+                    try { st = tr.GetObject(ids[i], OpenMode.ForRead) as CivilDb.Structure; }
+                    catch (Exc) { }
+                    if (st == null) continue;
+                    string h = st.Handle.ToString();
+                    if (string.IsNullOrEmpty(h) || !seen.Add(h)) continue;
+                    handles.Add(h);
+                }
+                tr.Commit();
+            }
+            return handles;
+        }
+
+        internal static List<ObjectId> PromptWells(Editor ed)
+        {
+            return PickWells(ed);
+        }
+
         static List<ObjectId> PickWells(Editor ed)
         {
             var ids = Collect(ed.SelectImplied());
@@ -580,6 +642,35 @@ namespace Nvk.Cad
             }
         }
 
+        static void DrawPitStats(BlockTableRecord ms, Transaction tr, List<WellItem> grp, WellPitShape s)
+        {
+            if (s == null) return;
+            Func<double, double, double> tin = null;
+            if (grp != null)
+            {
+                for (int i = 0; i < grp.Count; i++)
+                {
+                    if (grp[i] != null && grp[i].Tin != null)
+                    {
+                        tin = grp[i].Tin;
+                        break;
+                    }
+                }
+            }
+            string text = WellPitGeom.PitStatsLabel(s, tin);
+            if (string.IsNullOrEmpty(text)) return;
+            double x, y;
+            if (!WellPitGeom.PitCentroid(s, out x, out y))
+            {
+                if (grp == null || grp.Count == 0 || grp[0] == null || grp[0].W == null)
+                    return;
+                x = grp[0].W.X;
+                y = grp[0].W.Y;
+            }
+            NvkText.Make(ms, tr, LayerTxt, x, y, text.Replace("\n", "\\P"), 0.30,
+                AttachmentPoint.MiddleCenter, 0.0, 10.0, true);
+        }
+
         static void DrawSand(BlockTableRecord ms, Transaction tr, WellPitInput w, WellPitCfg cfg)
         {
             if (w == null) return;
@@ -606,8 +697,7 @@ namespace Nvk.Cad
             return sb.Length > 0 ? sb.ToString() : null;
         }
 
-        static void DrawName(BlockTableRecord ms, Transaction tr, WellPitInput w, WellPitShape s,
-            Func<double, double, double> tin)
+        static void DrawName(BlockTableRecord ms, Transaction tr, WellPitInput w, WellPitShape s)
         {
             if (w == null || s == null) return;
             string name = string.IsNullOrWhiteSpace(w.Name) ? "колодец" : w.Name;
@@ -615,10 +705,6 @@ namespace Nvk.Cad
             double ly = w.Y + s.Py * (s.BermAcross + 0.4);
             NvkText.Make(ms, tr, LayerTxt, lx, ly, name, 0.35,
                 AttachmentPoint.BottomLeft, 0.0, 8.0, true);
-            string depth = WellPitGeom.MeanDepthLabel(s, tin);
-            if (!string.IsNullOrEmpty(depth))
-                NvkText.Make(ms, tr, LayerTxt, lx, ly - 0.45, depth, 0.30,
-                    AttachmentPoint.BottomLeft, 0.0, 8.0, true);
         }
 
         static List<List<WellItem>> ClusterItems(List<WellItem> items)
